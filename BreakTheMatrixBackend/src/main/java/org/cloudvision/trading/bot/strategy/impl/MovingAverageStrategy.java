@@ -47,10 +47,29 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         // Golden Cross: Short MA crosses above Long MA = BUY signal
         if (shortMA.compareTo(longMA) > 0 && (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
             Order buyOrder = createBuyOrder(symbol, currentPrice);
+            
+            // SET STOP LOSS: Place stop loss below long MA (support level)
+            // Use 98% of long MA to give it a buffer
+            BigDecimal stopLoss = longMA.multiply(new BigDecimal("0.98"));
+            buyOrder.setSuggestedStopLoss(stopLoss);
+            
+            // SET TAKE PROFIT: Risk:Reward ratio of 1:2
+            BigDecimal riskDistance = currentPrice.subtract(stopLoss);
+            BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(new BigDecimal("2")));
+            buyOrder.setSuggestedTakeProfit(takeProfit);
+            
             orders.add(buyOrder);
             lastSignal.put(symbol, BigDecimal.ONE); // Bullish signal
             action = "BUY";
-            System.out.println("🟢 MA Strategy: BUY signal for " + symbol + " at " + currentPrice);
+            
+            // Enhanced logging with stop loss info
+            BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
+                .divide(currentPrice, 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"));
+            System.out.println(String.format(
+                "🟢 MA Strategy: BUY signal for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
+                symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
+            ));
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
         else if (shortMA.compareTo(longMA) < 0 && (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {

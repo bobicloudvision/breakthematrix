@@ -106,6 +106,98 @@ public class RiskManager {
     }
 
     /**
+     * Calculate stop loss price based on risk parameters
+     * This calculates a default stop loss based on risk percentage
+     * 
+     * @param entryPrice Entry price of the position
+     * @param side Position side (LONG/SHORT)
+     * @param riskPercentage Maximum risk percentage (e.g., 0.02 for 2%)
+     * @return Calculated stop loss price
+     */
+    public BigDecimal calculateStopLoss(BigDecimal entryPrice, OrderSide side, BigDecimal riskPercentage) {
+        if (side == OrderSide.BUY) {
+            // For LONG positions: stop loss below entry price
+            return entryPrice.multiply(BigDecimal.ONE.subtract(riskPercentage))
+                .setScale(8, BigDecimal.ROUND_HALF_UP);
+        } else {
+            // For SHORT positions: stop loss above entry price
+            return entryPrice.multiply(BigDecimal.ONE.add(riskPercentage))
+                .setScale(8, BigDecimal.ROUND_HALF_UP);
+        }
+    }
+
+    /**
+     * Validate and adjust stop loss to meet risk management requirements
+     * This ensures stop loss doesn't exceed maximum allowed risk
+     * 
+     * @param entryPrice Entry price of the position
+     * @param stopLoss Proposed stop loss price from strategy
+     * @param quantity Position quantity
+     * @param side Position side (LONG/SHORT)
+     * @return Validated and adjusted stop loss price
+     */
+    public BigDecimal validateStopLoss(BigDecimal entryPrice, BigDecimal stopLoss, 
+                                      BigDecimal quantity, OrderSide side) {
+        if (stopLoss == null) {
+            // If no stop loss provided, calculate default 2% risk
+            return calculateStopLoss(entryPrice, side, new BigDecimal("0.02"));
+        }
+        
+        // Calculate risk amount
+        BigDecimal priceDiff = side == OrderSide.BUY 
+            ? entryPrice.subtract(stopLoss)  // For LONG
+            : stopLoss.subtract(entryPrice);  // For SHORT
+            
+        BigDecimal riskAmount = priceDiff.multiply(quantity);
+        
+        // Check if risk exceeds position size limit
+        TradingAccount activeAccount = accountManager.getActiveAccount();
+        if (activeAccount != null) {
+            BigDecimal maxRiskPerPosition = activeAccount.getBalance()
+                .multiply(new BigDecimal("0.02")); // Max 2% risk per trade
+            
+            if (riskAmount.compareTo(maxRiskPerPosition) > 0) {
+                // Adjust stop loss to meet maximum risk
+                BigDecimal adjustedDiff = maxRiskPerPosition.divide(quantity, 8, BigDecimal.ROUND_HALF_UP);
+                
+                if (side == OrderSide.BUY) {
+                    stopLoss = entryPrice.subtract(adjustedDiff);
+                } else {
+                    stopLoss = entryPrice.add(adjustedDiff);
+                }
+                
+                System.out.println("⚠️ Stop loss adjusted to meet risk limits: " + stopLoss);
+            }
+        }
+        
+        return stopLoss;
+    }
+
+    /**
+     * Calculate position size based on stop loss distance
+     * This is the preferred method for position sizing
+     * 
+     * @param accountBalance Account balance
+     * @param entryPrice Entry price
+     * @param stopLoss Stop loss price
+     * @param riskPercentage Risk percentage of account (e.g., 0.01 for 1%)
+     * @return Position size
+     */
+    public BigDecimal calculatePositionSizeFromStopLoss(BigDecimal accountBalance, 
+                                                       BigDecimal entryPrice,
+                                                       BigDecimal stopLoss,
+                                                       BigDecimal riskPercentage) {
+        BigDecimal riskAmount = accountBalance.multiply(riskPercentage);
+        BigDecimal stopDistance = entryPrice.subtract(stopLoss).abs();
+        
+        if (stopDistance.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        
+        return riskAmount.divide(stopDistance, 8, BigDecimal.ROUND_HALF_UP);
+    }
+
+    /**
      * Check if we should apply emergency stop
      */
     public boolean shouldEmergencyStop() {
@@ -117,7 +209,7 @@ public class RiskManager {
         BigDecimal dailyPnL = activeAccount.getDailyPnL();
         BigDecimal totalBalance = activeAccount.getBalance();
         
-        // Emergency stop if daily loss exceeds 10% of account
+        // Emergency  if daily loss exceeds 10% of account
         BigDecimal emergencyThreshold = totalBalance.multiply(new BigDecimal("0.10"));
         
         return dailyPnL.compareTo(emergencyThreshold.negate()) < 0;

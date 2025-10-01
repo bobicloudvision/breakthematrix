@@ -53,10 +53,24 @@ public class RSIStrategy extends AbstractTradingStrategy {
             (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
             
             Order buyOrder = createBuyOrder(symbol, currentPrice);
+            
+            // SET STOP LOSS: For RSI oversold, use 3% stop loss
+            // RSI strategies typically need tighter stops since they trade reversals
+            BigDecimal stopLoss = currentPrice.multiply(new BigDecimal("0.97")); // 3% stop
+            buyOrder.setSuggestedStopLoss(stopLoss);
+            
+            // SET TAKE PROFIT: RSI target is the overbought level
+            // Estimate ~5% move from oversold to neutral (risk:reward ~1.7:1)
+            BigDecimal takeProfit = currentPrice.multiply(new BigDecimal("1.05")); // 5% target
+            buyOrder.setSuggestedTakeProfit(takeProfit);
+            
             orders.add(buyOrder);
             lastSignal.put(symbol, BigDecimal.ONE); // Bullish
-            System.out.println("🟢 RSI Strategy: BUY signal for " + symbol + 
-                             " at " + currentPrice + " (RSI: " + rsi + ")");
+            
+            System.out.println(String.format(
+                "🟢 RSI Strategy: BUY signal for %s at %s (RSI: %.2f) | Stop Loss: %s (-3%%) | Take Profit: %s (+5%%)",
+                symbol, currentPrice, rsi, stopLoss, takeProfit
+            ));
         }
         // Overbought - SELL signal
         else if (rsi.compareTo(new BigDecimal(overboughtThreshold)) > 0 && 

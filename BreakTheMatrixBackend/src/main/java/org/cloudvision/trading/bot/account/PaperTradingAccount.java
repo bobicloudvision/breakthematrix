@@ -116,8 +116,20 @@ public class PaperTradingAccount implements TradingAccount {
                         balances.getOrDefault(baseAsset, BigDecimal.ZERO).add(order.getQuantity()));
                     
                     // Open LONG position
-                    positionManager.openPosition(order.getSymbol(), PositionSide.LONG, 
+                    Position longPosition = positionManager.openPosition(order.getSymbol(), PositionSide.LONG, 
                         order.getPrice(), order.getQuantity());
+                    
+                    // Set stop loss and take profit if suggested by strategy
+                    if (order.getSuggestedStopLoss() != null) {
+                        longPosition.setStopLoss(order.getSuggestedStopLoss());
+                        System.out.println("🛡️ Stop loss set at: " + order.getSuggestedStopLoss());
+                    }
+                    if (order.getSuggestedTakeProfit() != null) {
+                        longPosition.setTakeProfit(order.getSuggestedTakeProfit());
+                        System.out.println("🎯 Take profit set at: " + order.getSuggestedTakeProfit());
+                    }
+                    
+                    longPosition.setStrategyId(order.getStrategyId());
                     break;
                     
                 case SELL:

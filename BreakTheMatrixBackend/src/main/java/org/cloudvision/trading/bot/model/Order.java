@@ -16,6 +16,10 @@ public class Order {
     private BigDecimal executedQuantity;
     private BigDecimal executedPrice;
     private String strategyId;
+    
+    // Risk management - optional stop loss and take profit suggested by strategy
+    private BigDecimal suggestedStopLoss;
+    private BigDecimal suggestedTakeProfit;
 
     public Order(String id, String symbol, OrderType type, OrderSide side, 
                 BigDecimal quantity, BigDecimal price, String strategyId) {
@@ -49,6 +53,12 @@ public class Order {
     public void setExecutedAt(Instant executedAt) { this.executedAt = executedAt; }
     public void setExecutedQuantity(BigDecimal executedQuantity) { this.executedQuantity = executedQuantity; }
     public void setExecutedPrice(BigDecimal executedPrice) { this.executedPrice = executedPrice; }
+    
+    public BigDecimal getSuggestedStopLoss() { return suggestedStopLoss; }
+    public void setSuggestedStopLoss(BigDecimal suggestedStopLoss) { this.suggestedStopLoss = suggestedStopLoss; }
+    
+    public BigDecimal getSuggestedTakeProfit() { return suggestedTakeProfit; }
+    public void setSuggestedTakeProfit(BigDecimal suggestedTakeProfit) { this.suggestedTakeProfit = suggestedTakeProfit; }
 
     @Override
     public String toString() {
