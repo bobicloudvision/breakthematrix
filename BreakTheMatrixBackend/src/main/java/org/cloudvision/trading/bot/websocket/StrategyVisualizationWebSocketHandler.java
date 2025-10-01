@@ -1,6 +1,8 @@
 package org.cloudvision.trading.bot.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.cloudvision.trading.bot.visualization.StrategyVisualizationData;
 import org.cloudvision.trading.bot.visualization.VisualizationManager;
 import org.springframework.stereotype.Component;
@@ -23,7 +25,11 @@ public class StrategyVisualizationWebSocketHandler extends TextWebSocketHandler 
 
     public StrategyVisualizationWebSocketHandler(VisualizationManager visualizationManager) {
         this.visualizationManager = visualizationManager;
+        
+        // Configure ObjectMapper for Java 8 time support
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         
         // Set up global data handler to broadcast to all connected clients
         this.visualizationManager.registerGlobalDataHandler(this::broadcastVisualizationData);

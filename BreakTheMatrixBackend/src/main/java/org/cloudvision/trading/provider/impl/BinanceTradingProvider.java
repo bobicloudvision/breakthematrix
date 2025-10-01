@@ -5,6 +5,8 @@ import org.cloudvision.trading.provider.TradingDataProvider;
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
@@ -38,10 +40,17 @@ public class BinanceTradingProvider implements TradingDataProvider {
     private final Set<String> activeStreams = ConcurrentHashMap.newKeySet();
     
     private WebSocketClient webSocketClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final AtomicInteger requestId = new AtomicInteger(1);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    
+    public BinanceTradingProvider() {
+        // Configure ObjectMapper for Java 8 time support
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
 
     @Override
     public void connect() {
