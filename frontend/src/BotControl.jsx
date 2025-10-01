@@ -158,12 +158,14 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         }
     };
 
-    // Poll dashboard, risk, and portfolio data every 5 seconds
+    // Poll dashboard, risk, portfolio, and bot status data every 5 seconds
     useEffect(() => {
+        fetchBotStatus(); // Initial bot status fetch
         fetchDashboardData(); // Initial fetch
         fetchRiskData(); // Initial risk fetch
         fetchPortfolioData(); // Initial portfolio fetch
         const interval = setInterval(() => {
+            fetchBotStatus();
             fetchDashboardData();
             fetchRiskData();
             fetchPortfolioData();
