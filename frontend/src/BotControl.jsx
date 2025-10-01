@@ -13,6 +13,29 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         strategies: 0,
         tradingStarted: false
     });
+    const [dashboardData, setDashboardData] = useState({
+        risk: {
+            dailyPnL: 0,
+            exposureUtilization: 0,
+            maxDailyLoss: 0
+        },
+        portfolio: {
+            unrealizedPnL: 0,
+            dailyPnL: 0,
+            totalValue: 0,
+            activePositions: 0
+        },
+        bot: {
+            strategies: 0,
+            enabled: false,
+            tradingStarted: false,
+            mode: 'IDLE'
+        },
+        orders: {
+            fillRate: 0,
+            totalOrders: 0
+        }
+    });
     const [expandedSections, setExpandedSections] = useState({
         status: true,
         settings: false,
@@ -41,10 +64,39 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         }
     };
 
-    // Poll bot status every 5 seconds
+    // Fetch comprehensive dashboard data
+    const fetchDashboardData = async () => {
+        try {
+            const response = await fetch('http://localhost:8080/api/bot/dashboard', {
+                method: 'GET',
+                headers: {
+                    'accept': '*/*',
+                },
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setDashboardData(data);
+                // Update bot status from dashboard data
+                setIsEnabled(data.bot.enabled);
+                setBotStatus(prev => ({
+                    ...prev,
+                    enabled: data.bot.enabled,
+                    mode: data.bot.mode,
+                    tradingStarted: data.bot.tradingStarted,
+                    strategies: data.bot.strategies
+                }));
+                console.log('Dashboard data fetched:', data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch dashboard data:', err);
+        }
+    };
+
+    // Poll dashboard data every 5 seconds
     useEffect(() => {
-        fetchBotStatus(); // Initial fetch
-        const interval = setInterval(fetchBotStatus, 5000);
+        fetchDashboardData(); // Initial fetch
+        const interval = setInterval(fetchDashboardData, 5000);
         return () => clearInterval(interval);
     }, []);
 
@@ -71,8 +123,8 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('enabled');
             console.log('Bot enabled successfully');
-            // Refresh status after enabling
-            setTimeout(fetchBotStatus, 1000);
+            // Refresh dashboard data after enabling
+            setTimeout(fetchDashboardData, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to enable bot:', err);
@@ -104,8 +156,8 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('disabled');
             console.log('Bot disabled successfully');
-            // Refresh status after disabling
-            setTimeout(fetchBotStatus, 1000);
+            // Refresh dashboard data after disabling
+            setTimeout(fetchDashboardData, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to disable bot:', err);
@@ -137,8 +189,8 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('trading started');
             console.log('Trading started successfully');
-            // Refresh status after starting trading
-            setTimeout(fetchBotStatus, 1000);
+            // Refresh dashboard data after starting trading
+            setTimeout(fetchDashboardData, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to start trading:', err);
@@ -170,8 +222,8 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('trading stopped');
             console.log('Trading stopped successfully');
-            // Refresh status after stopping trading
-            setTimeout(fetchBotStatus, 1000);
+            // Refresh dashboard data after stopping trading
+            setTimeout(fetchDashboardData, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to stop trading:', err);
@@ -415,14 +467,79 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                     }
                 />
                 {expandedSections.performance && (
-                    <div className="p-4 space-y-3">
-                        <div className="text-white/60 text-sm">
-                            Trading performance metrics will be displayed here.
+                    <div className="p-4 space-y-4">
+                        {/* Portfolio Metrics */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Portfolio</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Total Value</span>
+                                    <span className="text-white text-sm font-mono">${dashboardData.portfolio.totalValue.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Daily P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        dashboardData.portfolio.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${dashboardData.portfolio.dailyPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Unrealized P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        dashboardData.portfolio.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${dashboardData.portfolio.unrealizedPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Active Positions</span>
+                                    <span className="text-white text-sm">{dashboardData.portfolio.activePositions}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <div className="text-white/50 text-xs">• P&L Tracking</div>
-                            <div className="text-white/50 text-xs">• Win/Loss Ratio</div>
-                            <div className="text-white/50 text-xs">• Trade History</div>
+
+                        {/* Risk Metrics */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Risk Management</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Max Daily Loss</span>
+                                    <span className="text-white text-sm font-mono">${dashboardData.risk.maxDailyLoss.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Exposure Utilization</span>
+                                    <span className="text-white text-sm">{dashboardData.risk.exposureUtilization.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Daily Risk P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        dashboardData.risk.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${dashboardData.risk.dailyPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Order Metrics */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Orders</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Total Orders</span>
+                                    <span className="text-white text-sm">{dashboardData.orders.totalOrders}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Fill Rate</span>
+                                    <span className={`text-sm font-mono ${
+                                        dashboardData.orders.fillRate >= 90 ? 'text-green-400' : 
+                                        dashboardData.orders.fillRate >= 70 ? 'text-yellow-400' : 'text-red-400'
+                                    }`}>
+                                        {dashboardData.orders.fillRate.toFixed(1)}%
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
