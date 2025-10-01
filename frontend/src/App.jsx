@@ -4,6 +4,7 @@ import { TradingProviderDropdown } from "./TradingProviderDropdown";
 import { BotControl } from "./BotControl";
 import { OrdersTab } from "./OrdersTab";
 import { StrategiesTab } from "./StrategiesTab";
+import { AccountsTab } from "./AccountsTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -177,11 +178,22 @@ export default function App() {
                 >
                   Strategies
                 </button>
+                <button 
+                  onClick={() => setActiveTab('accounts')}
+                  className={`px-3 h-8 text-sm rounded-md transition-all ${
+                    activeTab === 'accounts' 
+                      ? 'bg-white/20 text-white border border-white/30' 
+                      : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  Accounts
+                </button>
                 {/* Future tabs: Positions, Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-2.5rem)]">
                 {activeTab === 'orders' && <OrdersTab />}
                 {activeTab === 'strategies' && <StrategiesTab />}
+                {activeTab === 'accounts' && <AccountsTab />}
               </div>
             </div>
           </main>

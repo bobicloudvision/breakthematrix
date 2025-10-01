@@ -11,7 +11,8 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         mode: 'IDLE',
         activeStrategies: 0,
         strategies: 0,
-        tradingStarted: false
+        tradingStarted: false,
+        activeAccount: null
     });
     const [dashboardData, setDashboardData] = useState({
         risk: {
@@ -45,14 +46,19 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         exposureUtilization: 0
     });
     const [portfolioData, setPortfolioData] = useState({
-        totalBalance: 0,
-        availableBalance: 0,
-        totalExposure: 0,
-        unrealizedPnL: 0,
-        realizedPnL: 0,
-        dailyPnL: 0,
-        activePositions: 0,
-        totalValue: 0
+        accountId: '',
+        accountName: '',
+        totalPnL: 0,
+        balances: {},
+        accountType: '',
+        stats: {
+            profitFactor: 0,
+            winRate: 0,
+            losingTrades: 0,
+            winningTrades: 0,
+            totalTrades: 0
+        },
+        balance: 0
     });
     const [expandedSections, setExpandedSections] = useState({
         status: true,
@@ -408,6 +414,35 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                             <span className="text-white text-sm">{historicalLimit}</span>
                         </div>
 
+                        {/* Active Account Information */}
+                        {botStatus.activeAccount && (
+                            <div className="mt-4 p-3 bg-black/30 rounded-lg border border-white/10">
+                                <div className="text-white/60 text-xs font-medium mb-2">Active Account</div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/70 text-xs">Account</span>
+                                        <span className="text-white text-sm font-medium">{botStatus.activeAccount.name}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/70 text-xs">Type</span>
+                                        <span className="text-white text-sm">{botStatus.activeAccount.type}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/70 text-xs">Balance</span>
+                                        <span className="text-white text-sm font-mono">${botStatus.activeAccount.balance.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/70 text-xs">Total P&L</span>
+                                        <span className={`text-sm font-mono ${
+                                            botStatus.activeAccount.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                        }`}>
+                                            ${botStatus.activeAccount.totalPnL.toFixed(2)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Bot Enable/Disable Button */}
                         <button
                             onClick={handleToggle}
@@ -523,22 +558,39 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                 />
                 {expandedSections.portfolio && (
                     <div className="p-4 space-y-4">
+                        {/* Account Information */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Account</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Account Name</span>
+                                    <span className="text-white text-sm font-medium">{portfolioData.accountName}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Account Type</span>
+                                    <span className="text-white text-sm">{portfolioData.accountType}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Account ID</span>
+                                    <span className="text-white text-sm font-mono">{portfolioData.accountId}</span>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Balance Information */}
                         <div className="space-y-3">
                             <div className="text-white/60 text-sm font-medium">Balance</div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <span className="text-white/70 text-xs">Total Balance</span>
-                                    <span className="text-white text-sm font-mono">${portfolioData.totalBalance.toLocaleString()}</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.balance.toLocaleString()}</span>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Available Balance</span>
-                                    <span className="text-white text-sm font-mono">${portfolioData.availableBalance.toLocaleString()}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Total Value</span>
-                                    <span className="text-white text-sm font-mono">${portfolioData.totalValue.toLocaleString()}</span>
-                                </div>
+                                {Object.entries(portfolioData.balances).map(([currency, amount]) => (
+                                    <div key={currency} className="flex items-center justify-between">
+                                        <span className="text-white/70 text-xs">{currency} Balance</span>
+                                        <span className="text-white text-sm font-mono">{amount.toLocaleString()}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
@@ -547,43 +599,47 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                             <div className="text-white/60 text-sm font-medium">Profit & Loss</div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Daily P&L</span>
+                                    <span className="text-white/70 text-xs">Total P&L</span>
                                     <span className={`text-sm font-mono ${
-                                        portfolioData.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                        portfolioData.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
                                     }`}>
-                                        ${portfolioData.dailyPnL.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Unrealized P&L</span>
-                                    <span className={`text-sm font-mono ${
-                                        portfolioData.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                                    }`}>
-                                        ${portfolioData.unrealizedPnL.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Realized P&L</span>
-                                    <span className={`text-sm font-mono ${
-                                        portfolioData.realizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                                    }`}>
-                                        ${portfolioData.realizedPnL.toFixed(2)}
+                                        ${portfolioData.totalPnL.toFixed(2)}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Position Information */}
+                        {/* Trading Statistics */}
                         <div className="space-y-3">
-                            <div className="text-white/60 text-sm font-medium">Positions</div>
+                            <div className="text-white/60 text-sm font-medium">Trading Statistics</div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Active Positions</span>
-                                    <span className="text-white text-sm">{portfolioData.activePositions}</span>
+                                    <span className="text-white/70 text-xs">Total Trades</span>
+                                    <span className="text-white text-sm">{portfolioData.stats.totalTrades}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Total Exposure</span>
-                                    <span className="text-white text-sm font-mono">${portfolioData.totalExposure.toLocaleString()}</span>
+                                    <span className="text-white/70 text-xs">Winning Trades</span>
+                                    <span className="text-green-400 text-sm">{portfolioData.stats.winningTrades}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Losing Trades</span>
+                                    <span className="text-red-400 text-sm">{portfolioData.stats.losingTrades}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Win Rate</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.stats.winRate >= 50 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        {(portfolioData.stats.winRate * 100).toFixed(1)}%
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Profit Factor</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.stats.profitFactor >= 1 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        {portfolioData.stats.profitFactor.toFixed(2)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -593,13 +649,13 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-white/70 text-xs">Portfolio Status</span>
                                 <div className={`w-2 h-2 rounded-full ${
-                                    portfolioData.activePositions > 0 ? 'bg-blue-500' : 'bg-gray-500'
+                                    portfolioData.stats.totalTrades > 0 ? 'bg-blue-500' : 'bg-gray-500'
                                 }`}></div>
                             </div>
                             <div className="text-xs text-white/60">
-                                {portfolioData.activePositions > 0 
-                                    ? `${portfolioData.activePositions} active position${portfolioData.activePositions > 1 ? 's' : ''}`
-                                    : 'No active positions'
+                                {portfolioData.stats.totalTrades > 0 
+                                    ? `${portfolioData.stats.totalTrades} trade${portfolioData.stats.totalTrades > 1 ? 's' : ''} executed`
+                                    : 'No trades executed'
                                 }
                             </div>
                         </div>

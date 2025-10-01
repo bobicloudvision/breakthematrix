@@ -1,5 +1,7 @@
 package org.cloudvision.trading.bot;
 
+import org.cloudvision.trading.bot.account.AccountManager;
+import org.cloudvision.trading.bot.account.TradingAccount;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.model.OrderSide;
 import org.springframework.stereotype.Service;
@@ -12,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RiskManager {
     
     private final Map<String, BigDecimal> symbolExposure = new ConcurrentHashMap<>();
-    private final PortfolioManager portfolioManager;
+    private final AccountManager accountManager;
     
     // Risk parameters
     private BigDecimal maxPositionSize = new BigDecimal("10000"); // $10,000 max per position
@@ -20,8 +22,8 @@ public class RiskManager {
     private BigDecimal maxSymbolExposure = new BigDecimal("20000"); // $20,000 max per symbol
     private BigDecimal maxDailyLoss = new BigDecimal("5000"); // $5,000 max daily loss
 
-    public RiskManager(PortfolioManager portfolioManager) {
-        this.portfolioManager = portfolioManager;
+    public RiskManager(AccountManager accountManager) {
+        this.accountManager = accountManager;
     }
 
     /**
@@ -29,6 +31,12 @@ public class RiskManager {
      */
     public boolean validateOrder(Order order) {
         try {
+            TradingAccount activeAccount = accountManager.getActiveAccount();
+            if (activeAccount == null) {
+                System.out.println("❌ Risk: No active account");
+                return false;
+            }
+            
             // Check position size limit
             BigDecimal orderValue = order.getQuantity().multiply(order.getPrice());
             if (orderValue.compareTo(maxPositionSize) > 0) {
@@ -48,21 +56,21 @@ public class RiskManager {
             }
 
             // Check total portfolio exposure
-            BigDecimal totalExposure = portfolioManager.getTotalExposure();
+            BigDecimal totalExposure = activeAccount.getTotalExposure();
             if (order.getSide() == OrderSide.BUY && totalExposure.add(orderValue).compareTo(maxTotalExposure) > 0) {
                 System.out.println("❌ Risk: Total exposure limit exceeded");
                 return false;
             }
 
             // Check daily loss limit
-            BigDecimal dailyPnL = portfolioManager.getDailyPnL();
+            BigDecimal dailyPnL = activeAccount.getDailyPnL();
             if (dailyPnL.compareTo(maxDailyLoss.negate()) < 0) {
                 System.out.println("❌ Risk: Daily loss limit reached");
                 return false;
             }
 
             // Check account balance
-            BigDecimal availableBalance = portfolioManager.getAvailableBalance();
+            BigDecimal availableBalance = activeAccount.getAvailableBalance();
             if (order.getSide() == OrderSide.BUY && orderValue.compareTo(availableBalance) > 0) {
                 System.out.println("❌ Risk: Insufficient balance for order");
                 return false;
@@ -83,7 +91,12 @@ public class RiskManager {
      * Calculate position size based on risk parameters
      */
     public BigDecimal calculatePositionSize(String symbol, BigDecimal price, BigDecimal riskPercentage) {
-        BigDecimal accountBalance = portfolioManager.getTotalBalance();
+        TradingAccount activeAccount = accountManager.getActiveAccount();
+        if (activeAccount == null) {
+            return BigDecimal.ZERO;
+        }
+        
+        BigDecimal accountBalance = activeAccount.getBalance();
         BigDecimal riskAmount = accountBalance.multiply(riskPercentage);
         
         // Don't exceed max position size
@@ -96,8 +109,13 @@ public class RiskManager {
      * Check if we should apply emergency stop
      */
     public boolean shouldEmergencyStop() {
-        BigDecimal dailyPnL = portfolioManager.getDailyPnL();
-        BigDecimal totalBalance = portfolioManager.getTotalBalance();
+        TradingAccount activeAccount = accountManager.getActiveAccount();
+        if (activeAccount == null) {
+            return false;
+        }
+        
+        BigDecimal dailyPnL = activeAccount.getDailyPnL();
+        BigDecimal totalBalance = activeAccount.getBalance();
         
         // Emergency stop if daily loss exceeds 10% of account
         BigDecimal emergencyThreshold = totalBalance.multiply(new BigDecimal("0.10"));
@@ -123,10 +141,15 @@ public class RiskManager {
     }
 
     public RiskMetrics getRiskMetrics() {
+        TradingAccount activeAccount = accountManager.getActiveAccount();
+        
+        BigDecimal totalExposure = activeAccount != null ? activeAccount.getTotalExposure() : BigDecimal.ZERO;
+        BigDecimal dailyPnL = activeAccount != null ? activeAccount.getDailyPnL() : BigDecimal.ZERO;
+        
         return new RiskMetrics(
-            portfolioManager.getTotalExposure(),
+            totalExposure,
             maxTotalExposure,
-            portfolioManager.getDailyPnL(),
+            dailyPnL,
             maxDailyLoss,
             symbolExposure.size()
         );

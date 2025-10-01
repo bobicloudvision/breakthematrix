@@ -6,9 +6,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cloudvision.trading.bot.OrderManager;
-import org.cloudvision.trading.bot.PortfolioManager;
 import org.cloudvision.trading.bot.RiskManager;
 import org.cloudvision.trading.bot.TradingBot;
+import org.cloudvision.trading.bot.account.AccountStats;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
@@ -127,10 +127,20 @@ public class TradingBotController {
     })
     @GetMapping("/status")
     public Map<String, Object> getBotStatus() {
+        org.cloudvision.trading.bot.account.TradingAccount activeAccount = 
+            tradingBot.getAccountManager().getActiveAccount();
+        
         return Map.of(
             "enabled", tradingBot.isBotEnabled(),
             "tradingStarted", tradingBot.isTradingStarted(),
             "mode", tradingBot.getBotMode(),
+            "activeAccount", activeAccount != null ? Map.of(
+                "id", activeAccount.getAccountId(),
+                "name", activeAccount.getAccountName(),
+                "type", activeAccount.getAccountType().getDisplayName(),
+                "balance", activeAccount.getBalance(),
+                "totalPnL", activeAccount.getTotalPnL()
+            ) : "None",
             "strategies", tradingBot.getStrategies().size(),
             "activeStrategies", tradingBot.getStrategyStatus().values().stream().mapToLong(b -> b ? 1 : 0).sum()
         );
@@ -186,13 +196,46 @@ public class TradingBotController {
 
     // Portfolio Management
     @GetMapping("/portfolio")
-    public PortfolioManager.PortfolioSummary getPortfolio() {
-        return tradingBot.getPortfolioManager().getPortfolioSummary();
+    public Map<String, Object> getPortfolio() {
+        org.cloudvision.trading.bot.account.TradingAccount activeAccount = 
+            tradingBot.getAccountManager().getActiveAccount();
+        
+        if (activeAccount == null) {
+            return Map.of(
+                "error", "No active account",
+                "message", "Please activate an account first"
+            );
+        }
+        
+        AccountStats stats = activeAccount.getAccountStats();
+        
+        return Map.of(
+            "accountId", activeAccount.getAccountId(),
+            "accountName", activeAccount.getAccountName(),
+            "accountType", activeAccount.getAccountType().getDisplayName(),
+            "balance", activeAccount.getBalance(),
+            "totalPnL", activeAccount.getTotalPnL(),
+            "stats", Map.of(
+                "totalTrades", stats.getTotalTrades(),
+                "winningTrades", stats.getWinningTrades(),
+                "losingTrades", stats.getLosingTrades(),
+                "winRate", stats.getWinRate(),
+                "profitFactor", stats.getProfitFactor()
+            ),
+            "balances", activeAccount.getAllBalances()
+        );
     }
 
     @GetMapping("/portfolio/positions")
-    public Map<String, PortfolioManager.Position> getPositions() {
-        return tradingBot.getPortfolioManager().getPositions();
+    public Map<String, BigDecimal> getPositions() {
+        org.cloudvision.trading.bot.account.TradingAccount activeAccount = 
+            tradingBot.getAccountManager().getActiveAccount();
+        
+        if (activeAccount == null) {
+            return Map.of();
+        }
+        
+        return activeAccount.getAllBalances();
     }
 
     // Risk Management
@@ -216,32 +259,47 @@ public class TradingBotController {
     // Dashboard Data
     @GetMapping("/dashboard")
     public Map<String, Object> getDashboard() {
-        PortfolioManager.PortfolioSummary portfolio = tradingBot.getPortfolioManager().getPortfolioSummary();
+        org.cloudvision.trading.bot.account.TradingAccount activeAccount = 
+            tradingBot.getAccountManager().getActiveAccount();
         RiskManager.RiskMetrics risk = tradingBot.getRiskManager().getRiskMetrics();
         OrderManager.OrderStats orders = tradingBot.getOrderManager().getOrderStats();
         
-        return Map.of(
-            "bot", Map.of(
-                "enabled", tradingBot.isBotEnabled(),
-                "tradingStarted", tradingBot.isTradingStarted(),
-                "mode", tradingBot.getBotMode(),
-                "strategies", tradingBot.getStrategies().size()
-            ),
-            "portfolio", Map.of(
-                "totalValue", portfolio.getTotalValue(),
-                "dailyPnL", portfolio.getDailyPnL(),
-                "unrealizedPnL", portfolio.getUnrealizedPnL(),
-                "activePositions", portfolio.getActivePositions()
-            ),
-            "risk", Map.of(
-                "exposureUtilization", risk.getExposureUtilization(),
-                "dailyPnL", risk.getDailyPnL(),
-                "maxDailyLoss", risk.getMaxDailyLoss()
-            ),
-            "orders", Map.of(
-                "totalOrders", orders.getTotalOrders(),
-                "fillRate", orders.getFillRate()
-            )
-        );
+        Map<String, Object> dashboard = new java.util.HashMap<>();
+        
+        dashboard.put("bot", Map.of(
+            "enabled", tradingBot.isBotEnabled(),
+            "tradingStarted", tradingBot.isTradingStarted(),
+            "mode", tradingBot.getBotMode(),
+            "strategies", tradingBot.getStrategies().size()
+        ));
+        
+        if (activeAccount != null) {
+            AccountStats stats = activeAccount.getAccountStats();
+            dashboard.put("portfolio", Map.of(
+                "balance", activeAccount.getBalance(),
+                "totalPnL", activeAccount.getTotalPnL(),
+                "totalTrades", stats.getTotalTrades(),
+                "winRate", stats.getWinRate(),
+                "accountName", activeAccount.getAccountName(),
+                "accountType", activeAccount.getAccountType().getDisplayName()
+            ));
+        } else {
+            dashboard.put("portfolio", Map.of(
+                "error", "No active account"
+            ));
+        }
+        
+        dashboard.put("risk", Map.of(
+            "exposureUtilization", risk.getExposureUtilization(),
+            "dailyPnL", risk.getDailyPnL(),
+            "maxDailyLoss", risk.getMaxDailyLoss()
+        ));
+        
+        dashboard.put("orders", Map.of(
+            "totalOrders", orders.getTotalOrders(),
+            "fillRate", orders.getFillRate()
+        ));
+        
+        return dashboard;
     }
 }

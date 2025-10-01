@@ -21,7 +21,7 @@ public class TradingBot {
     private final UniversalTradingDataService tradingDataService;
     private final OrderManager orderManager;
     private final RiskManager riskManager;
-    private final PortfolioManager portfolioManager;
+    private final org.cloudvision.trading.bot.account.AccountManager accountManager;
     
     private final List<TradingStrategy> strategies = new CopyOnWriteArrayList<>();
     private final Map<String, Boolean> strategyStatus = new ConcurrentHashMap<>();
@@ -34,11 +34,11 @@ public class TradingBot {
     public TradingBot(UniversalTradingDataService tradingDataService,
                      OrderManager orderManager,
                      RiskManager riskManager,
-                     PortfolioManager portfolioManager) {
+                     org.cloudvision.trading.bot.account.AccountManager accountManager) {
         this.tradingDataService = tradingDataService;
         this.orderManager = orderManager;
         this.riskManager = riskManager;
-        this.portfolioManager = portfolioManager;
+        this.accountManager = accountManager;
         
         // Set up data handler to process incoming market data
         this.tradingDataService.setGlobalDataHandler(this::processMarketData);
@@ -83,10 +83,20 @@ public class TradingBot {
                     // Always process orders for analysis, but only execute if trading is enabled
                     for (Order order : orders) {
                         if (tradingEnabled) {
-                            // Apply risk management and execute
+                            // Apply risk management and execute through active account
                             if (riskManager.validateOrder(order)) {
-                                orderManager.submitOrder(order);
-                                System.out.println("🤖 Bot executed order: " + order);
+                                // Execute order through AccountManager (uses active account)
+                                Order executedOrder = accountManager.executeOrder(order);
+                                
+                                if (executedOrder.getStatus() == org.cloudvision.trading.bot.model.OrderStatus.FILLED) {
+                                    // Also track in OrderManager for backward compatibility
+                                    orderManager.submitOrder(executedOrder);
+                                    
+                                    String accountName = accountManager.getActiveAccount().getAccountName();
+                                    System.out.println("🤖 Bot executed order on [" + accountName + "]: " + executedOrder);
+                                } else {
+                                    System.out.println("❌ Order execution failed: " + executedOrder.getStatus());
+                                }
                             } else {
                                 System.out.println("❌ Risk manager rejected order: " + order);
                             }
@@ -99,6 +109,7 @@ public class TradingBot {
                     }
                 } catch (Exception e) {
                     System.err.println("Error in strategy " + strategy.getStrategyId() + ": " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
         }
@@ -284,7 +295,7 @@ public class TradingBot {
     public Map<String, Boolean> getStrategyStatus() { return Map.copyOf(strategyStatus); }
     public OrderManager getOrderManager() { return orderManager; }
     public RiskManager getRiskManager() { return riskManager; }
-    public PortfolioManager getPortfolioManager() { return portfolioManager; }
+    public org.cloudvision.trading.bot.account.AccountManager getAccountManager() { return accountManager; }
     
     /**
      * Get bot mode description
@@ -297,5 +308,19 @@ public class TradingBot {
         } else {
             return "ANALYSIS_ONLY";
         }
+    }
+    
+    /**
+     * Get active trading account info
+     */
+    public String getActiveAccountInfo() {
+        org.cloudvision.trading.bot.account.TradingAccount account = accountManager.getActiveAccount();
+        if (account == null) {
+            return "No active account";
+        }
+        return String.format("%s (%s) - Balance: $%.2f", 
+            account.getAccountName(), 
+            account.getAccountType().getDisplayName(),
+            account.getBalance());
     }
 }
