@@ -147,9 +147,25 @@ public class TradingBotController {
     }
 
     // Strategy Management
+    @Operation(summary = "Get All Strategies", description = "Get all registered strategies with their status and statistics")
     @GetMapping("/strategies")
     public List<Map<String, Object>> getStrategies() {
         return tradingBot.getStrategies().stream()
+                .map(strategy -> Map.of(
+                    "id", strategy.getStrategyId(),
+                    "name", strategy.getStrategyName(),
+                    "enabled", strategy.isEnabled(),
+                    "symbols", strategy.getSymbols(),
+                    "stats", strategy.getStats()
+                ))
+                .toList();
+    }
+
+    @Operation(summary = "Get Active Strategies", description = "Get only enabled/active strategies")
+    @GetMapping("/strategies/active")
+    public List<Map<String, Object>> getActiveStrategies() {
+        return tradingBot.getStrategies().stream()
+                .filter(strategy -> strategy.isEnabled())
                 .map(strategy -> Map.of(
                     "id", strategy.getStrategyId(),
                     "name", strategy.getStrategyName(),

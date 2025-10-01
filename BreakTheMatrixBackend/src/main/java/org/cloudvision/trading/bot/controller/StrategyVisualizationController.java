@@ -128,4 +128,90 @@ public class StrategyVisualizationController {
             "lastUpdate", latest.getTimestamp()
         );
     }
+
+    /**
+     * Get data formatted for TradingView Lightweight Charts
+     * Returns price series, indicator series, and markers in the format expected by Lightweight Charts
+     */
+    @Operation(summary = "Get TradingView Chart Data", 
+               description = "Get strategy data formatted for TradingView Lightweight Charts")
+    @GetMapping("/strategies/{strategyId}/symbols/{symbol}/tradingview")
+    public Map<String, Object> getTradingViewData(
+            @PathVariable String strategyId,
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "200") int limit) {
+        
+        List<StrategyVisualizationData> data = visualizationManager.getVisualizationData(strategyId, symbol);
+        
+        if (data.isEmpty()) {
+            return Map.of("error", "No data available");
+        }
+        
+        // Limit data points
+        if (data.size() > limit) {
+            data = data.subList(data.size() - limit, data.size());
+        }
+        
+        // Main price series (line chart format)
+        List<Map<String, Object>> priceSeries = data.stream()
+            .map(d -> {
+                Map<String, Object> point = new java.util.HashMap<>();
+                point.put("time", d.getTimestamp().getEpochSecond());
+                point.put("value", d.getPrice());
+                return point;
+            })
+            .toList();
+        
+        // Extract all unique indicator names
+        var indicatorNames = data.stream()
+            .flatMap(d -> d.getIndicators().keySet().stream())
+            .distinct()
+            .toList();
+        
+        // Create series for each indicator
+        Map<String, List<Map<String, Object>>> indicatorSeries = new java.util.HashMap<>();
+        for (String indicatorName : indicatorNames) {
+            List<Map<String, Object>> series = data.stream()
+                .filter(d -> d.getIndicators().containsKey(indicatorName))
+                .map(d -> {
+                    Map<String, Object> point = new java.util.HashMap<>();
+                    point.put("time", d.getTimestamp().getEpochSecond());
+                    point.put("value", d.getIndicators().get(indicatorName));
+                    return point;
+                })
+                .toList();
+            indicatorSeries.put(indicatorName, series);
+        }
+        
+        // Create markers for buy/sell signals
+        List<Map<String, Object>> markers = data.stream()
+            .filter(d -> !d.getAction().equals("HOLD"))
+            .map(d -> {
+                boolean isBuy = d.getAction().equals("BUY");
+                Map<String, Object> marker = new java.util.HashMap<>();
+                marker.put("time", d.getTimestamp().getEpochSecond());
+                marker.put("position", isBuy ? "belowBar" : "aboveBar");
+                marker.put("color", isBuy ? "#2196F3" : "#e91e63");
+                marker.put("shape", isBuy ? "arrowUp" : "arrowDown");
+                marker.put("text", d.getAction());
+                return marker;
+            })
+            .toList();
+        
+        return Map.of(
+            "strategyId", strategyId,
+            "symbol", symbol,
+            "priceSeries", priceSeries,
+            "indicators", indicatorSeries,
+            "markers", markers,
+            "metadata", Map.of(
+                "indicatorNames", indicatorNames,
+                "dataPoints", data.size(),
+                "timeRange", Map.of(
+                    "from", data.get(0).getTimestamp().getEpochSecond(),
+                    "to", data.get(data.size() - 1).getTimestamp().getEpochSecond()
+                )
+            )
+        );
+    }
 }
