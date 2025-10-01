@@ -1,11 +1,11 @@
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
 import React, { useEffect, useRef } from 'react';
 
 export const ChartComponent = props => {
     const {
         data,
         colors: {
-            backgroundColor = '#0f1115',
+            backgroundColor = 'transparent',
             textColor = 'black',
             upColor = '#26a69a',
             downColor = '#ef5350',
@@ -30,15 +30,15 @@ export const ChartComponent = props => {
                     textColor: textColor || '#d1d5db',
                 },
                 width: chartContainerRef.current.clientWidth,
-                height: 300,
-                grid: {
+                height: 960,
+                grid: { 
                     vertLines: { color: '#2a2e39' },
                     horzLines: { color: '#2a2e39' },
                 },
             });
             chart.timeScale().fitContent();
 
-            const candleSeries = chart.addSeries(CandlestickSeries, {
+            const candleSeries = chart.addCandlestickSeries({
                 upColor,
                 downColor,
                 wickUpColor,

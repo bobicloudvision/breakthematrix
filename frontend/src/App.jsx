@@ -3,7 +3,7 @@ import { Chart } from "./Chart";
 
 export default function App() {
   return (
-    <div style={{ backgroundColor: '#0f1115', height: '100vh', width: '100vw' }}>
+    <div className="bg-gray-900 h-screen w-screen">
       <div>
         <Chart />
       </div>
