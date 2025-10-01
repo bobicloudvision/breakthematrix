@@ -5,7 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="cd7e49ef-d3da-43a9-b9eb-6f505cdd4aa1" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/WebSocketConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/WebSocketConfig.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -37,6 +36,7 @@
     "RequestMappingsPanelWidth0": "75",
     "RequestMappingsPanelWidth1": "75",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "Spring Boot.Main.executor": "Run",
     "git-widget-placeholder": "main",
@@ -86,7 +86,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1759328184425</updated>
-      <workItem from="1759328213059" duration="2157000" />
+      <workItem from="1759328213059" duration="2866000" />
     </task>
     <servers />
   </component>
