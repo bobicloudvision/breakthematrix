@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="cd7e49ef-d3da-43a9-b9eb-6f505cdd4aa1" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/WebSocketConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/WebSocketConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/strategy/impl/MovingAverageStrategy.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/strategy/impl/MovingAverageStrategy.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/visualization/VisualizationManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/visualization/VisualizationManager.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -86,7 +87,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1759328184425</updated>
-      <workItem from="1759328213059" duration="2866000" />
+      <workItem from="1759328213059" duration="3203000" />
     </task>
     <servers />
   </component>

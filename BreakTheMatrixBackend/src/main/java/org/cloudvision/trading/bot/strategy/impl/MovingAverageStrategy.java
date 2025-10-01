@@ -151,6 +151,11 @@ public class MovingAverageStrategy implements TradingStrategy {
             this.longPeriod = (Integer) config.getParameter("longPeriod");
         }
         
+        // Register with visualization manager
+        if (visualizationManager != null) {
+            visualizationManager.registerStrategy(getStrategyId(), getSymbols());
+        }
+        
         System.out.println("Initialized MA Strategy: " + shortPeriod + "/" + longPeriod + " periods");
     }
 
@@ -216,5 +221,68 @@ public class MovingAverageStrategy implements TradingStrategy {
         
         // Send to visualization manager
         visualizationManager.addVisualizationData(vizData);
+    }
+    
+    /**
+     * Simulate ticker data for testing (public method for TestController)
+     */
+    public void simulateTickerData(String symbol) {
+        if (enabled) {
+            BigDecimal simulatedPrice = new BigDecimal("50000").add(
+                new BigDecimal(Math.random() * 2000 - 1000).setScale(2, RoundingMode.HALF_UP)
+            );
+            
+            TradingData simulatedData = new TradingData(
+                symbol,
+                simulatedPrice,
+                new BigDecimal("1.5"),
+                java.time.Instant.now(),
+                "Simulated",
+                org.cloudvision.trading.model.TradingDataType.TICKER
+            );
+            
+            analyze(simulatedData);
+        }
+    }
+    
+    /**
+     * Simulate kline data for testing (public method for TestController)
+     */
+    public void simulateKlineData(String symbol, org.cloudvision.trading.model.TimeInterval interval) {
+        if (enabled) {
+            java.time.Instant now = java.time.Instant.now();
+            BigDecimal basePrice = new BigDecimal("50000");
+            BigDecimal open = basePrice.add(new BigDecimal(Math.random() * 100 - 50));
+            BigDecimal close = open.add(new BigDecimal(Math.random() * 200 - 100));
+            BigDecimal high = open.max(close).add(new BigDecimal(Math.random() * 50));
+            BigDecimal low = open.min(close).subtract(new BigDecimal(Math.random() * 50));
+            
+            org.cloudvision.trading.model.CandlestickData candlestick = 
+                new org.cloudvision.trading.model.CandlestickData(
+                    symbol,
+                    now.minusSeconds(60),
+                    now,
+                    open,
+                    high,
+                    low,
+                    close,
+                    new BigDecimal("125.5"),
+                    new BigDecimal("6275000.00"),
+                    1250,
+                    interval.getValue(),
+                    "Simulated",
+                    true
+                );
+            
+            TradingData simulatedData = new TradingData(
+                symbol,
+                now,
+                "Simulated",
+                org.cloudvision.trading.model.TradingDataType.KLINE,
+                candlestick
+            );
+            
+            analyze(simulatedData);
+        }
     }
 }

@@ -13,6 +13,7 @@ public class VisualizationManager {
     
     private final Map<String, List<StrategyVisualizationData>> strategyData = new ConcurrentHashMap<>();
     private final Map<String, Consumer<StrategyVisualizationData>> dataHandlers = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> registeredStrategies = new ConcurrentHashMap<>(); // strategyId -> symbols
     private final int maxDataPoints = 1000; // Keep last 1000 data points per strategy
 
     /**
@@ -91,19 +92,41 @@ public class VisualizationManager {
     }
 
     /**
-     * Get all available strategy-symbol combinations
+     * Register a strategy with its symbols (called during strategy initialization)
+     */
+    public void registerStrategy(String strategyId, List<String> symbols) {
+        registeredStrategies.put(strategyId, new CopyOnWriteArrayList<>(symbols));
+        System.out.println("Registered strategy for visualization: " + strategyId + " with symbols: " + symbols);
+    }
+
+    /**
+     * Get all available strategies (includes both registered and active strategies)
      */
     public List<String> getAvailableStrategies() {
-        return strategyData.keySet().stream()
+        // Combine registered strategies with strategies that have data
+        var dataStrategies = strategyData.keySet().stream()
                 .map(key -> key.split("_")[0])
                 .distinct()
                 .toList();
+        
+        var allStrategies = new java.util.HashSet<String>();
+        allStrategies.addAll(registeredStrategies.keySet());
+        allStrategies.addAll(dataStrategies);
+        
+        return List.copyOf(allStrategies);
     }
 
     /**
      * Get all symbols for a strategy
      */
     public List<String> getStrategySymbols(String strategyId) {
+        // First check registered symbols
+        List<String> registeredSymbols = registeredStrategies.get(strategyId);
+        if (registeredSymbols != null && !registeredSymbols.isEmpty()) {
+            return List.copyOf(registeredSymbols);
+        }
+        
+        // Fallback to symbols with data
         return strategyData.keySet().stream()
                 .filter(key -> key.startsWith(strategyId + "_"))
                 .map(key -> key.substring(strategyId.length() + 1))
