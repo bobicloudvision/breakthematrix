@@ -41,7 +41,7 @@ public class PaperTradingAccount implements TradingAccount {
     private java.time.LocalDate currentDay;
     
     public PaperTradingAccount() {
-        this("paper-main", "Main Paper Trading Account", new BigDecimal("600000")); // $100k default
+        this("paper-main", "PaperTradePRO", new BigDecimal("600000")); // $600k default
     }
     
     public PaperTradingAccount(String accountId, String accountName, BigDecimal initialBalance) {

@@ -214,7 +214,7 @@ export default function App() {
         </div>
 
         {/* Right Sidebar - Bot Dashboard */}
-        <div className="w-80 border-l border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
+        <div className="w-80 border-l border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5 overflow-y-auto">
           <BotControl interval={interval} historicalLimit={1000} />
         </div>
       </div>
