@@ -160,7 +160,7 @@ export default function App() {
               />
             </div>
             {/* Bottom Tabs */}
-            <div className="h-52 border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
+            <div className="h-80 border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
               <div className="h-12 flex items-center gap-3 px-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
                 <button 
                   onClick={() => setActiveTab('orders')}
@@ -194,7 +194,7 @@ export default function App() {
                 </button>
                 {/* Future tabs: Positions, Alerts, Console, etc. */}
               </div>
-              <div className="h-[calc(100%-2.5rem)]">
+              <div className="h-[calc(100%-3.5rem)]">
                 {activeTab === 'orders' && <OrdersTab />}
                 {activeTab === 'strategies' && <StrategiesTab />}
                 {activeTab === 'accounts' && <AccountsTab />}

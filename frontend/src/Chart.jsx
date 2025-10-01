@@ -44,7 +44,7 @@ export const ChartComponent = props => {
                     textColor: textColor || '#d1d5db',
                 },
                 width: chartContainerRef.current.clientWidth,
-                height: chartContainerRef.current.clientHeight || 400,
+                height: chartContainerRef.current.clientHeight || 200,
                 grid: { 
                     vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
                     horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
