@@ -786,28 +786,28 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                             <div className="text-white/60 text-sm font-medium">Portfolio</div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Total Value</span>
-                                    <span className="text-white text-sm font-mono">${dashboardData.portfolio.totalValue.toLocaleString()}</span>
+                                    <span className="text-white/70 text-xs">Total Balance</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.balance.toLocaleString()}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Daily P&L</span>
+                                    <span className="text-white/70 text-xs">Total P&L</span>
                                     <span className={`text-sm font-mono ${
-                                        dashboardData.portfolio.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                        portfolioData.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'
                                     }`}>
-                                        ${dashboardData.portfolio.dailyPnL.toFixed(2)}
+                                        ${portfolioData.totalPnL.toFixed(2)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Unrealized P&L</span>
-                                    <span className={`text-sm font-mono ${
-                                        dashboardData.portfolio.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
-                                    }`}>
-                                        ${dashboardData.portfolio.unrealizedPnL.toFixed(2)}
-                                    </span>
+                                    <span className="text-white/70 text-xs">Total Trades</span>
+                                    <span className="text-white text-sm">{portfolioData.stats.totalTrades}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/70 text-xs">Active Positions</span>
-                                    <span className="text-white text-sm">{dashboardData.portfolio.activePositions}</span>
+                                    <span className="text-white/70 text-xs">Win Rate</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.stats.winRate >= 50 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        {(portfolioData.stats.winRate * 100).toFixed(1)}%
+                                    </span>
                                 </div>
                             </div>
                         </div>
