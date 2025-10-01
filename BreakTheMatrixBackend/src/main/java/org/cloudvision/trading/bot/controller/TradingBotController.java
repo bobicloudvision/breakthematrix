@@ -1,5 +1,10 @@
 package org.cloudvision.trading.bot.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cloudvision.trading.bot.OrderManager;
 import org.cloudvision.trading.bot.PortfolioManager;
 import org.cloudvision.trading.bot.RiskManager;
@@ -15,6 +20,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/bot")
+@Tag(name = "Trading Bot", description = "Main trading bot control and monitoring endpoints")
 public class TradingBotController {
     
     private final TradingBot tradingBot;
@@ -24,28 +30,77 @@ public class TradingBotController {
     }
 
     // Bot Control Endpoints
-    @PostMapping("/start")
-    public String startBot() {
-        tradingBot.start();
-        return "Trading bot started";
+    @Operation(summary = "Enable Bot", description = "Enable the trading bot in analysis mode. Bot will analyze market data and generate signals but won't execute trades.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Bot enabled successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/enable")
+    public String enable() {
+        tradingBot.enable();
+        return "Bot enabled - Analysis mode active";
     }
 
-    @PostMapping("/stop")
-    public String stopBot() {
-        tradingBot.stop();
-        return "Trading bot stopped";
+    @Operation(summary = "Disable Bot", description = "Completely disable the trading bot. Stops all analysis and trading activities.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Bot disabled successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/disable")
+    public String disable() {
+        tradingBot.disable();
+        return "Bot disabled";
     }
 
-    @PostMapping("/emergency-stop")
-    public String emergencyStop() {
-        tradingBot.emergencyStop();
-        return "Emergency stop executed";
+    @Operation(summary = "Start Trading", description = "Start trading execution. Bot must be enabled first. Will execute buy/sell orders based on strategy signals.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Trading started successfully"),
+        @ApiResponse(responseCode = "400", description = "Bot must be enabled before starting trading"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/start-trading")
+    public String startTrading() {
+        try {
+            tradingBot.startTrading();
+            return "Trading started";
+        } catch (IllegalStateException e) {
+            return "Error: " + e.getMessage();
+        }
     }
 
+    @Operation(summary = "Stop Trading", description = "Stop trading execution while keeping analysis active. No more orders will be executed.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Trading stopped successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/stop-trading")
+    public String stopTrading() {
+        tradingBot.stopTrading();
+        return "Trading stopped - Analysis continues";
+    }
+
+    @Operation(summary = "Emergency Disable", description = "Emergency shutdown: immediately disable bot and cancel all pending orders.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Emergency disable executed successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PostMapping("/emergency-disable")
+    public String emergencyDisable() {
+        tradingBot.emergencyDisable();
+        return "Emergency disable executed";
+    }
+
+    @Operation(summary = "Get Bot Status", description = "Get current status of the trading bot including enabled state, trading status, and strategy information.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Status retrieved successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/status")
     public Map<String, Object> getBotStatus() {
         return Map.of(
             "enabled", tradingBot.isBotEnabled(),
+            "tradingStarted", tradingBot.isTradingStarted(),
+            "mode", tradingBot.getBotMode(),
             "strategies", tradingBot.getStrategies().size(),
             "activeStrategies", tradingBot.getStrategyStatus().values().stream().mapToLong(b -> b ? 1 : 0).sum()
         );
@@ -138,6 +193,8 @@ public class TradingBotController {
         return Map.of(
             "bot", Map.of(
                 "enabled", tradingBot.isBotEnabled(),
+                "tradingStarted", tradingBot.isTradingStarted(),
+                "mode", tradingBot.getBotMode(),
                 "strategies", tradingBot.getStrategies().size()
             ),
             "portfolio", Map.of(

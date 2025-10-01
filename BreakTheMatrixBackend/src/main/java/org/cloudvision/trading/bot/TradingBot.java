@@ -22,6 +22,7 @@ public class TradingBot {
     private final List<TradingStrategy> strategies = new CopyOnWriteArrayList<>();
     private final Map<String, Boolean> strategyStatus = new ConcurrentHashMap<>();
     private boolean botEnabled = false;
+    private boolean tradingEnabled = false; // Separate flag for trading execution
 
     public TradingBot(UniversalTradingDataService tradingDataService,
                      OrderManager orderManager,
@@ -50,14 +51,21 @@ public class TradingBot {
                 try {
                     List<Order> orders = strategy.analyze(data);
                     
+                    // Always process orders for analysis, but only execute if trading is enabled
                     for (Order order : orders) {
-                        // Apply risk management
-                        if (riskManager.validateOrder(order)) {
-                            // Execute order
-                            orderManager.submitOrder(order);
-                            System.out.println("🤖 Bot executed order: " + order);
+                        if (tradingEnabled) {
+                            // Apply risk management and execute
+                            if (riskManager.validateOrder(order)) {
+                                orderManager.submitOrder(order);
+                                System.out.println("🤖 Bot executed order: " + order);
+                            } else {
+                                System.out.println("❌ Risk manager rejected order: " + order);
+                            }
                         } else {
-                            System.out.println("❌ Risk manager rejected order: " + order);
+                            // Analysis mode - log signals but don't execute
+                            System.out.println("📊 Analysis mode - Signal generated: " + order.getSide() + 
+                                             " " + order.getSymbol() + " @ " + order.getPrice() + 
+                                             " (Trading disabled)");
                         }
                     }
                 } catch (Exception e) {
@@ -98,11 +106,11 @@ public class TradingBot {
     }
 
     /**
-     * Start the trading bot
+     * Enable the bot (analysis mode by default)
      */
-    public void start() {
+    public void enable() {
         botEnabled = true;
-        System.out.println("🚀 Trading Bot STARTED");
+        System.out.println("🚀 Bot ENABLED - Analysis mode active");
         
         // Subscribe to market data for all strategy symbols
         for (TradingStrategy strategy : strategies) {
@@ -114,27 +122,61 @@ public class TradingBot {
     }
 
     /**
-     * Stop the trading bot
+     * Disable the bot completely (stops analysis and trading)
      */
-    public void stop() {
+    public void disable() {
         botEnabled = false;
-        System.out.println("🛑 Trading Bot STOPPED");
+        tradingEnabled = false;
+        System.out.println("🛑 Bot DISABLED");
     }
 
     /**
-     * Emergency stop - cancel all orders and stop bot
+     * Start trading execution (bot must be enabled first)
      */
-    public void emergencyStop() {
-        stop();
+    public void startTrading() {
+        if (!botEnabled) {
+            throw new IllegalStateException("Bot must be enabled before starting trading");
+        }
+        tradingEnabled = true;
+        System.out.println("💰 Trading STARTED - Bot will now execute orders");
+    }
+
+    /**
+     * Stop trading execution (keeps analysis running)
+     */
+    public void stopTrading() {
+        tradingEnabled = false;
+        System.out.println("📊 Trading STOPPED - Analysis mode continues");
+    }
+
+    /**
+     * Emergency disable - cancel all orders and disable bot
+     */
+    public void emergencyDisable() {
+        disable();
         orderManager.cancelAllOrders();
-        System.out.println("🚨 EMERGENCY STOP - All orders cancelled");
+        System.out.println("🚨 EMERGENCY DISABLE - All orders cancelled");
     }
 
     // Getters
     public boolean isBotEnabled() { return botEnabled; }
+    public boolean isTradingStarted() { return tradingEnabled; }
     public List<TradingStrategy> getStrategies() { return List.copyOf(strategies); }
     public Map<String, Boolean> getStrategyStatus() { return Map.copyOf(strategyStatus); }
     public OrderManager getOrderManager() { return orderManager; }
     public RiskManager getRiskManager() { return riskManager; }
     public PortfolioManager getPortfolioManager() { return portfolioManager; }
+    
+    /**
+     * Get bot mode description
+     */
+    public String getBotMode() {
+        if (!botEnabled) {
+            return "DISABLED";
+        } else if (tradingEnabled) {
+            return "TRADING";
+        } else {
+            return "ANALYSIS_ONLY";
+        }
+    }
 }

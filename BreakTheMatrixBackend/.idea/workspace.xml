@@ -5,8 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="cd7e49ef-d3da-43a9-b9eb-6f505cdd4aa1" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/strategy/impl/MovingAverageStrategy.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/strategy/impl/MovingAverageStrategy.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/visualization/VisualizationManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/visualization/VisualizationManager.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/HelloController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/HelloController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/TradingBot.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/TradingBot.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/controller/StrategyVisualizationController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/controller/StrategyVisualizationController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/controller/TestController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/controller/TradingBotController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/cloudvision/trading/bot/controller/TradingBotController.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,7 +92,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1759328184425</updated>
-      <workItem from="1759328213059" duration="3203000" />
+      <workItem from="1759328213059" duration="4123000" />
     </task>
     <servers />
   </component>

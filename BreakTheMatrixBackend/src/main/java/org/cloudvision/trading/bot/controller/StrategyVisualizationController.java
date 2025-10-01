@@ -1,5 +1,10 @@
 package org.cloudvision.trading.bot.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cloudvision.trading.bot.visualization.StrategyVisualizationData;
 import org.cloudvision.trading.bot.visualization.VisualizationManager;
 import org.springframework.web.bind.annotation.*;
@@ -9,6 +14,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/visualization")
+@Tag(name = "Strategy Visualization", description = "Endpoints for retrieving strategy analysis and visualization data")
 public class StrategyVisualizationController {
     
     private final VisualizationManager visualizationManager;
@@ -17,13 +23,26 @@ public class StrategyVisualizationController {
         this.visualizationManager = visualizationManager;
     }
 
+    @Operation(summary = "Get Available Strategies", description = "Retrieve list of all available trading strategies for visualization.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Strategies retrieved successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/strategies")
     public List<String> getAvailableStrategies() {
         return visualizationManager.getAvailableStrategies();
     }
 
+    @Operation(summary = "Get Strategy Symbols", description = "Get all trading symbols supported by a specific strategy.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Symbols retrieved successfully"),
+        @ApiResponse(responseCode = "404", description = "Strategy not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/strategies/{strategyId}/symbols")
-    public List<String> getStrategySymbols(@PathVariable String strategyId) {
+    public List<String> getStrategySymbols(
+            @Parameter(description = "Strategy identifier", example = "moving-average-crossover")
+            @PathVariable String strategyId) {
         return visualizationManager.getStrategySymbols(strategyId);
     }
 
