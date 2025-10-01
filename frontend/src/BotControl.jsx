@@ -36,9 +36,28 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             totalOrders: 0
         }
     });
+    const [riskData, setRiskData] = useState({
+        currentExposure: 0,
+        maxExposure: 0,
+        dailyPnL: 0,
+        maxDailyLoss: 0,
+        activePositions: 0,
+        exposureUtilization: 0
+    });
+    const [portfolioData, setPortfolioData] = useState({
+        totalBalance: 0,
+        availableBalance: 0,
+        totalExposure: 0,
+        unrealizedPnL: 0,
+        realizedPnL: 0,
+        dailyPnL: 0,
+        activePositions: 0,
+        totalValue: 0
+    });
     const [expandedSections, setExpandedSections] = useState({
         status: true,
-        settings: false,
+        portfolio: false,
+        risk: false,
         performance: false,
         logs: false
     });
@@ -93,10 +112,56 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         }
     };
 
-    // Poll dashboard data every 5 seconds
+    // Fetch detailed risk data
+    const fetchRiskData = async () => {
+        try {
+            const response = await fetch('http://localhost:8080/api/bot/risk', {
+                method: 'GET',
+                headers: {
+                    'accept': '*/*',
+                },
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setRiskData(data);
+                console.log('Risk data fetched:', data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch risk data:', err);
+        }
+    };
+
+    // Fetch portfolio data
+    const fetchPortfolioData = async () => {
+        try {
+            const response = await fetch('http://localhost:8080/api/bot/portfolio', {
+                method: 'GET',
+                headers: {
+                    'accept': '*/*',
+                },
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setPortfolioData(data);
+                console.log('Portfolio data fetched:', data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch portfolio data:', err);
+        }
+    };
+
+    // Poll dashboard, risk, and portfolio data every 5 seconds
     useEffect(() => {
         fetchDashboardData(); // Initial fetch
-        const interval = setInterval(fetchDashboardData, 5000);
+        fetchRiskData(); // Initial risk fetch
+        fetchPortfolioData(); // Initial portfolio fetch
+        const interval = setInterval(() => {
+            fetchDashboardData();
+            fetchRiskData();
+            fetchPortfolioData();
+        }, 5000);
         return () => clearInterval(interval);
     }, []);
 
@@ -123,8 +188,12 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('enabled');
             console.log('Bot enabled successfully');
-            // Refresh dashboard data after enabling
-            setTimeout(fetchDashboardData, 1000);
+            // Refresh all data after enabling
+            setTimeout(() => {
+                fetchDashboardData();
+                fetchRiskData();
+                fetchPortfolioData();
+            }, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to enable bot:', err);
@@ -156,8 +225,12 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('disabled');
             console.log('Bot disabled successfully');
-            // Refresh dashboard data after disabling
-            setTimeout(fetchDashboardData, 1000);
+            // Refresh all data after disabling
+            setTimeout(() => {
+                fetchDashboardData();
+                fetchRiskData();
+                fetchPortfolioData();
+            }, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to disable bot:', err);
@@ -189,8 +262,12 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('trading started');
             console.log('Trading started successfully');
-            // Refresh dashboard data after starting trading
-            setTimeout(fetchDashboardData, 1000);
+            // Refresh all data after starting trading
+            setTimeout(() => {
+                fetchDashboardData();
+                fetchRiskData();
+                fetchPortfolioData();
+            }, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to start trading:', err);
@@ -222,8 +299,12 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
             
             setLastAction('trading stopped');
             console.log('Trading stopped successfully');
-            // Refresh dashboard data after stopping trading
-            setTimeout(fetchDashboardData, 1000);
+            // Refresh all data after stopping trading
+            setTimeout(() => {
+                fetchDashboardData();
+                fetchRiskData();
+                fetchPortfolioData();
+            }, 1000);
         } catch (err) {
             setError(err.message);
             console.error('Failed to stop trading:', err);
@@ -425,6 +506,182 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                                 Bot {lastAction} successfully
                             </div>
                         )}
+                    </div>
+                )}
+            </div>
+
+            {/* Portfolio Section */}
+            <div className="border-b border-white/10">
+                <SectionHeader
+                    title="Portfolio"
+                    section="portfolio"
+                    icon={
+                        <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                    }
+                />
+                {expandedSections.portfolio && (
+                    <div className="p-4 space-y-4">
+                        {/* Balance Information */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Balance</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Total Balance</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.totalBalance.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Available Balance</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.availableBalance.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Total Value</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.totalValue.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* P&L Information */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Profit & Loss</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Daily P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${portfolioData.dailyPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Unrealized P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${portfolioData.unrealizedPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Realized P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        portfolioData.realizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${portfolioData.realizedPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Position Information */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Positions</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Active Positions</span>
+                                    <span className="text-white text-sm">{portfolioData.activePositions}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Total Exposure</span>
+                                    <span className="text-white text-sm font-mono">${portfolioData.totalExposure.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Portfolio Summary */}
+                        <div className="p-3 bg-black/30 rounded-lg border border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-white/70 text-xs">Portfolio Status</span>
+                                <div className={`w-2 h-2 rounded-full ${
+                                    portfolioData.activePositions > 0 ? 'bg-blue-500' : 'bg-gray-500'
+                                }`}></div>
+                            </div>
+                            <div className="text-xs text-white/60">
+                                {portfolioData.activePositions > 0 
+                                    ? `${portfolioData.activePositions} active position${portfolioData.activePositions > 1 ? 's' : ''}`
+                                    : 'No active positions'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Risk Management Section */}
+            <div className="border-b border-white/10">
+                <SectionHeader
+                    title="Risk Management"
+                    section="risk"
+                    icon={
+                        <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    }
+                />
+                {expandedSections.risk && (
+                    <div className="p-4 space-y-4">
+                        {/* Exposure Metrics */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Exposure</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Current Exposure</span>
+                                    <span className="text-white text-sm font-mono">${riskData.currentExposure.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Max Exposure</span>
+                                    <span className="text-white text-sm font-mono">${riskData.maxExposure.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Utilization</span>
+                                    <span className={`text-sm font-mono ${
+                                        riskData.exposureUtilization >= 80 ? 'text-red-400' : 
+                                        riskData.exposureUtilization >= 60 ? 'text-yellow-400' : 'text-green-400'
+                                    }`}>
+                                        {riskData.exposureUtilization.toFixed(1)}%
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Risk Limits */}
+                        <div className="space-y-3">
+                            <div className="text-white/60 text-sm font-medium">Risk Limits</div>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Daily P&L</span>
+                                    <span className={`text-sm font-mono ${
+                                        riskData.dailyPnL >= 0 ? 'text-green-400' : 'text-red-400'
+                                    }`}>
+                                        ${riskData.dailyPnL.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Max Daily Loss</span>
+                                    <span className="text-white text-sm font-mono">${riskData.maxDailyLoss.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/70 text-xs">Active Positions</span>
+                                    <span className="text-white text-sm">{riskData.activePositions}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Risk Status Indicator */}
+                        <div className="p-3 bg-black/30 rounded-lg border border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-white/70 text-xs">Risk Status</span>
+                                <div className={`w-2 h-2 rounded-full ${
+                                    riskData.exposureUtilization >= 80 ? 'bg-red-500' : 
+                                    riskData.exposureUtilization >= 60 ? 'bg-yellow-500' : 'bg-green-500'
+                                }`}></div>
+                            </div>
+                            <div className="text-xs text-white/60">
+                                {riskData.exposureUtilization >= 80 ? 'High Risk - Consider reducing exposure' :
+                                 riskData.exposureUtilization >= 60 ? 'Medium Risk - Monitor closely' :
+                                 'Low Risk - Normal operation'}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

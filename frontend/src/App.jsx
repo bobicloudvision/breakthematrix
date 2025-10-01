@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Chart } from "./Chart";
 import { TradingProviderDropdown } from "./TradingProviderDropdown";
 import { BotControl } from "./BotControl";
+import { OrdersTab } from "./OrdersTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -143,13 +144,23 @@ export default function App() {
           </header>
 
           {/* Chart Area */}
-          <main className="flex-1">
-            <div className="h-full w-full">
+          <main className="flex-1 flex flex-col">
+            <div className="flex-1 w-full">
               <Chart 
                 provider={selectedProvider}
                 symbol={symbol}
                 interval={interval}
               />
+            </div>
+            {/* Bottom Tabs */}
+            <div className="h-52 border-t border-white/10 bg-black/30 backdrop-blur-sm">
+              <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10">
+                <button className="px-3 h-8 text-sm rounded-md bg-white/10 text-white">Orders</button>
+                {/* Future tabs: Positions, Alerts, Console, etc. */}
+              </div>
+              <div className="h-[calc(100%-2.5rem)]">
+                <OrdersTab />
+              </div>
             </div>
           </main>
         </div>
