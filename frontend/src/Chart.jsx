@@ -32,6 +32,7 @@ export const ChartComponent = props => {
     const indicatorSeriesRef = useRef({});
     const markersRef = useRef([]);
     const isAddingIndicatorsRef = useRef(false);
+    const isMountedRef = useRef(true);
 
     useEffect(
         () => {
@@ -108,6 +109,7 @@ export const ChartComponent = props => {
             });
 
             return () => {
+                isMountedRef.current = false;
                 window.removeEventListener('resize', handleResize);
                 chart.remove();
                 chartRef.current = null;
@@ -249,7 +251,27 @@ export const ChartComponent = props => {
             const indicators = strategyData.series.indicators;
             console.log('Processing indicators:', indicators.length);
 
-            indicators.forEach((indicator, index) => {
+            // Process indicators one by one to avoid overwhelming the chart
+            const processIndicator = (index) => {
+                try {
+                    // Check if component is still mounted
+                    if (!isMountedRef.current) {
+                        console.log('Component unmounted, stopping indicator processing');
+                        return;
+                    }
+                    
+                    // Check if chart is still valid before processing
+                    if (!chartRef.current || !chart) {
+                        console.log('Chart is no longer valid, stopping indicator processing');
+                        return;
+                    }
+                    
+                    if (index >= indicators.length) {
+                        console.log('All indicators processed');
+                        return;
+                    }
+
+                const indicator = indicators[index];
                 console.log(`Processing indicator ${index + 1}/${indicators.length}:`, indicator.name);
                 
                 // Validate data format based on series type
@@ -301,6 +323,12 @@ export const ChartComponent = props => {
                 }
 
                 try {
+                    // Check if chart is still valid before creating series
+                    if (!chart || !chartRef.current) {
+                        console.error('Chart is no longer valid, skipping indicator');
+                        return;
+                    }
+                    
                     let series;
                     
                     switch (indicator.type.toLowerCase()) {
@@ -373,15 +401,57 @@ export const ChartComponent = props => {
                             return;
                     }
 
+                    // Check if series was created successfully
+                    if (!series) {
+                        console.error(`Failed to create series for ${indicator.name}`);
+                        return;
+                    }
+                    
                     console.log(`${indicator.name} series created, setting data...`);
-                    series.setData(validData);
-                    indicatorSeriesRef.current[indicator.name] = series;
-                    console.log(`${indicator.name} series added successfully`);
+                    
+                    // Add a small delay before setting data to prevent timing issues
+                    setTimeout(() => {
+                        try {
+                            // Check if series is still valid
+                            if (!series || typeof series.setData !== 'function') {
+                                console.error(`${indicator.name} series is invalid or destroyed`);
+                                return;
+                            }
+                            
+                            // Check if chart is still valid
+                            if (!chart || !chartRef.current) {
+                                console.error('Chart is no longer valid');
+                                return;
+                            }
+                            
+                            console.log(`Setting data for ${indicator.name} with ${validData.length} points`);
+                            series.setData(validData);
+                            indicatorSeriesRef.current[indicator.name] = series;
+                            console.log(`${indicator.name} series added successfully`);
+                        } catch (e) {
+                            console.error(`Error setting data for ${indicator.name}:`, e);
+                        }
+                    }, 100 + (50 * index)); // Increased base delay and stagger
                     
                 } catch (e) {
                     console.error(`Error adding ${indicator.name} series:`, e);
                 }
-            });
+                
+                // Process next indicator after a delay
+                setTimeout(() => {
+                    processIndicator(index + 1);
+                }, 100);
+                } catch (e) {
+                    console.error(`Error processing indicator ${index}:`, e);
+                    // Continue with next indicator even if this one fails
+                    setTimeout(() => {
+                        processIndicator(index + 1);
+                    }, 100);
+                }
+            };
+
+            // Start processing indicators
+            processIndicator(0);
 
             // Add markers for trading signals
             if (strategyData.markers && Array.isArray(strategyData.markers) && strategyData.markers.length > 0) {
