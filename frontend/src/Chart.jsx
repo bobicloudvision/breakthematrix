@@ -1,9 +1,11 @@
 import { createChart, ColorType } from 'lightweight-charts';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export const ChartComponent = props => {
     const {
         data,
+        loading = false,
+        error = null,
         colors: {
             backgroundColor = 'transparent',
             textColor = 'black',
@@ -17,11 +19,17 @@ export const ChartComponent = props => {
     } = props;
 
     const chartContainerRef = useRef();
+    const chartRef = useRef();
+    const seriesRef = useRef();
 
     useEffect(
         () => {
+            if (!chartContainerRef.current) return;
+
             const handleResize = () => {
-                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+                if (chartContainerRef.current && chartRef.current) {
+                    chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+                }
             };
 
             const chart = createChart(chartContainerRef.current, {
@@ -30,13 +38,12 @@ export const ChartComponent = props => {
                     textColor: textColor || '#d1d5db',
                 },
                 width: chartContainerRef.current.clientWidth,
-                height: 960,
+                height: 400,
                 grid: { 
                     vertLines: { color: '#2a2e39' },
                     horzLines: { color: '#2a2e39' },
                 },
             });
-            chart.timeScale().fitContent();
 
             const candleSeries = chart.addCandlestickSeries({
                 upColor,
@@ -46,18 +53,62 @@ export const ChartComponent = props => {
                 borderUpColor,
                 borderDownColor,
             });
-            candleSeries.setData(data);
+
+            // Store references
+            chartRef.current = chart;
+            seriesRef.current = candleSeries;
+
+            // Set initial data if available
+            if (data && data.length > 0) {
+                candleSeries.setData(data);
+                chart.timeScale().fitContent();
+            }
 
             window.addEventListener('resize', handleResize);
 
             return () => {
                 window.removeEventListener('resize', handleResize);
-
                 chart.remove();
+                chartRef.current = null;
+                seriesRef.current = null;
             };
         },
-        [data, backgroundColor, textColor, upColor, downColor, wickUpColor, wickDownColor, borderUpColor, borderDownColor]
+        [backgroundColor, textColor, upColor, downColor, wickUpColor, wickDownColor, borderUpColor, borderDownColor]
     );
+
+    // Update data when it changes
+    useEffect(() => {
+        if (seriesRef.current && data && data.length > 0) {
+            console.log('Updating chart with new data:', data.length, 'candles');
+            seriesRef.current.setData(data);
+            if (chartRef.current) {
+                chartRef.current.timeScale().fitContent();
+            }
+        }
+    }, [data]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-80 bg-gray-800 rounded-lg">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p className="text-gray-400">Loading chart data...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-80 bg-gray-800 rounded-lg">
+                <div className="text-center">
+                    <div className="text-red-500 text-6xl mb-4">⚠️</div>
+                    <p className="text-red-400 mb-2">Failed to load chart data</p>
+                    <p className="text-gray-400 text-sm">{error}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div
@@ -66,21 +117,66 @@ export const ChartComponent = props => {
     );
 };
 
-const initialData = [
-    { time: '2018-12-22', open: 32.1, high: 33.0, low: 31.8, close: 32.5 },
-    { time: '2018-12-23', open: 32.5, high: 32.6, low: 30.9, close: 31.1 },
-    { time: '2018-12-24', open: 31.1, high: 31.2, low: 26.7, close: 27.02 },
-    { time: '2018-12-25', open: 27.0, high: 27.6, low: 26.8, close: 27.32 },
-    { time: '2018-12-26', open: 27.3, high: 27.4, low: 24.9, close: 25.17 },
-    { time: '2018-12-27', open: 25.2, high: 29.1, low: 25.0, close: 28.89 },
-    { time: '2018-12-28', open: 28.8, high: 29.0, low: 25.2, close: 25.46 },
-    { time: '2018-12-29', open: 25.5, high: 25.6, low: 23.6, close: 23.92 },
-    { time: '2018-12-30', open: 24.0, high: 24.2, low: 22.5, close: 22.68 },
-    { time: '2018-12-31', open: 22.7, high: 22.9, low: 22.4, close: 22.67 },
-];
+// Transform API data to chart format
+const transformApiData = (apiData) => {
+    return apiData.map(candle => ({
+        time: new Date(candle.openTime).getTime() / 1000, // Convert to Unix timestamp
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+    }));
+};
 
-export function Chart(props) {
+export function Chart({ provider, symbol, interval }) {
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchHistoricalData = async () => {
+            console.log('Chart useEffect triggered:', { provider, symbol, interval });
+            
+            if (!provider || !symbol || !interval) {
+                console.log('Missing required props, clearing chart data');
+                setData([]);
+                return;
+            }
+
+            try {
+                setLoading(true);
+                setError(null);
+                
+                const providerName = typeof provider === 'string' ? provider : (provider.name || provider);
+                const url = `http://localhost:8080/api/trading/historical/${providerName}/${symbol}/${interval}?limit=1000`;
+                
+                console.log('Fetching data from:', url);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const apiData = await response.json();
+                console.log('API response:', apiData);
+                const chartData = transformApiData(apiData);
+                console.log('Transformed chart data:', chartData);
+                setData(chartData);
+            } catch (err) {
+                setError(err.message);
+                console.error('Failed to fetch historical data:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchHistoricalData();
+    }, [provider, symbol, interval]);
+
     return (
-        <ChartComponent {...props} data={initialData}></ChartComponent>
+        <ChartComponent 
+            data={data} 
+            loading={loading} 
+            error={error}
+        />
     );
 }
