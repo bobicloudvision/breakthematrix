@@ -27,7 +27,8 @@ import java.util.function.Consumer;
 
 @Component
 public class BinanceTradingProvider implements TradingDataProvider {
-    private static final String BINANCE_WS_URL = "wss://stream.binance.com/ws/btcusdt@kline_1m";
+    // Use combined streams endpoint for dynamic subscriptions
+    private static final String BINANCE_WS_URL = "wss://stream.binance.com/ws";
     private static final String BINANCE_REST_API_URL = "https://api.binance.com/api/v3";
     
     private Consumer<TradingData> dataHandler;
@@ -50,7 +51,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
         }
         
         try {
-            System.out.println("🔗 Connecting directly to Binance WebSocket: " + BINANCE_WS_URL);
+            System.out.println("🔗 Connecting to Binance Combined Streams WebSocket: " + BINANCE_WS_URL);
             
             URI serverUri = URI.create(BINANCE_WS_URL);
             webSocketClient = new WebSocketClient(serverUri) {
@@ -59,6 +60,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
                     connected = true;
                     System.out.println("✅ Connected to Binance WebSocket successfully!");
                     System.out.println("🤝 Handshake status: " + handshake.getHttpStatus());
+                    System.out.println("💡 You can now subscribe to any symbol/interval dynamically");
                 }
 
                 @Override
@@ -111,9 +113,18 @@ public class BinanceTradingProvider implements TradingDataProvider {
         System.out.println("🔄 Attempting to reconnect to Binance...");
         connect();
         
-        // For direct stream connection, no need to re-subscribe
+        // Re-subscribe to all previously subscribed streams
         if (connected) {
-            System.out.println("✅ Reconnected to BTCUSDT kline stream");
+            System.out.println("✅ Reconnected to Binance WebSocket");
+            System.out.println("🔄 Re-subscribing to " + activeStreams.size() + " streams...");
+            
+            // Re-subscribe to all active streams
+            List<String> streamsToResubscribe = new ArrayList<>(activeStreams);
+            activeStreams.clear();
+            
+            for (String stream : streamsToResubscribe) {
+                sendSubscriptionMessage(stream, true);
+            }
         }
     }
 
@@ -178,12 +189,19 @@ public class BinanceTradingProvider implements TradingDataProvider {
             return;
         }
         
-        // For direct stream connection, we're already connected to btcusdt@kline_1m
-        if (symbol.equalsIgnoreCase("BTCUSDT") && interval.getValue().equals("1m")) {
-            System.out.println("✅ Already connected to " + symbol + " klines (" + interval.getValue() + ")");
+        try {
+            System.out.println("🕯️ Subscribing to " + symbol + " klines (" + interval.getValue() + ")...");
+            
+            String streamName = symbol.toLowerCase() + "@kline_" + interval.getValue();
+            sendSubscriptionMessage(streamName, true);
+            
             subscribedKlines.computeIfAbsent(symbol, k -> new ArrayList<>()).add(interval);
-        } else {
-            System.err.println("❌ This demo only supports BTCUSDT 1m klines (currently connected stream)");
+            activeStreams.add(streamName);
+            
+            System.out.println("✅ Successfully subscribed to " + symbol + " klines (" + interval.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to subscribe to " + symbol + " klines: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -242,20 +260,36 @@ public class BinanceTradingProvider implements TradingDataProvider {
         try {
             JsonNode json = objectMapper.readTree(message);
             
-            // For direct stream connection, we get kline data directly
-            if (json.has("k")) {
-                // This is kline data from btcusdt@kline_1m
+            // Handle subscription responses
+            if (json.has("result") && json.get("result").isNull()) {
+                int id = json.has("id") ? json.get("id").asInt() : -1;
+                System.out.println("✅ Subscription response received (id: " + id + ")");
+                return;
+            }
+            
+            // Handle error responses
+            if (json.has("error")) {
+                System.err.println("❌ Binance error: " + json.get("error"));
+                return;
+            }
+            
+            // Handle kline stream data
+            if (json.has("e") && "kline".equals(json.get("e").asText())) {
                 handleKlineDataDirect(json);
-            } else if (json.has("e") && "24hrTicker".equals(json.get("e").asText())) {
-                // Ignore 24hr ticker data (we only want klines)
-                // System.out.println("📊 24hr ticker: " + json.get("c").asText());
-            } else {
-                System.out.println("📈 Received other data: " + message);
+            } 
+            // Handle ticker stream data
+            else if (json.has("e") && "24hrTicker".equals(json.get("e").asText())) {
+                String streamName = json.has("stream") ? json.get("stream").asText() : "unknown";
+                handleTickerData(streamName, json);
+            } 
+            // Unknown message type
+            else if (!json.has("result")) {
+                System.out.println("📈 Received other data: " + message.substring(0, Math.min(200, message.length())));
             }
             
         } catch (Exception e) {
             System.err.println("❌ Error parsing Binance message: " + e.getMessage());
-            System.err.println("📜 Raw message: " + message);
+            System.err.println("📜 Raw message: " + message.substring(0, Math.min(200, message.length())));
             e.printStackTrace();
         }
     }
