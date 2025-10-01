@@ -12,6 +12,7 @@ import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
+import org.cloudvision.trading.model.TimeInterval;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -36,9 +37,38 @@ public class TradingBotController {
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @PostMapping("/enable")
-    public String enable() {
-        tradingBot.enable();
-        return "Bot enabled - Analysis mode active";
+    public String enable(
+            @RequestParam(required = false, defaultValue = "false") boolean bootstrap,
+            @RequestParam(required = false, defaultValue = "1m") String interval,
+            @RequestParam(required = false, defaultValue = "100") int historicalLimit) {
+        try {
+            if (bootstrap) {
+                TimeInterval timeInterval = TimeInterval.fromString(interval);
+                tradingBot.enable(true, timeInterval, historicalLimit);
+                return "Bot enabled with historical bootstrapping - Analysis mode active (" + 
+                       historicalLimit + " candles, " + interval + " interval)";
+            } else {
+                tradingBot.enable();
+                return "Bot enabled - Analysis mode active";
+            }
+        } catch (IllegalArgumentException e) {
+            return "Invalid interval: " + interval;
+        }
+    }
+    
+    @Operation(summary = "Bootstrap Strategies", description = "Bootstrap strategies with historical data before starting real-time analysis")
+    @PostMapping("/bootstrap")
+    public String bootstrapStrategies(
+            @RequestParam(defaultValue = "Binance") String provider,
+            @RequestParam(defaultValue = "1m") String interval,
+            @RequestParam(defaultValue = "100") int limit) {
+        try {
+            TimeInterval timeInterval = TimeInterval.fromString(interval);
+            tradingBot.bootstrapStrategies(provider, timeInterval, limit);
+            return "Strategies bootstrapped with " + limit + " historical candles (" + interval + " interval)";
+        } catch (IllegalArgumentException e) {
+            return "Invalid interval: " + interval;
+        }
     }
 
     @Operation(summary = "Disable Bot", description = "Completely disable the trading bot. Stops all analysis and trading activities.")

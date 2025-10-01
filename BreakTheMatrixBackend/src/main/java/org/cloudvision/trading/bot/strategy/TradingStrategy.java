@@ -1,6 +1,7 @@
 package org.cloudvision.trading.bot.strategy;
 
 import org.cloudvision.trading.bot.model.Order;
+import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
 
 import java.util.List;
@@ -13,6 +14,19 @@ public interface TradingStrategy {
      * @return List of orders to execute (empty if no action needed)
      */
     List<Order> analyze(TradingData data);
+    
+    /**
+     * Bootstrap strategy with historical candlestick data
+     * This should be called before starting real-time analysis
+     * @param historicalData List of historical candlestick data
+     */
+    void bootstrapWithHistoricalData(List<CandlestickData> historicalData);
+    
+    /**
+     * Check if strategy has been bootstrapped with historical data
+     * @return true if bootstrapped, false otherwise
+     */
+    boolean isBootstrapped();
     
     /**
      * Get strategy identifier

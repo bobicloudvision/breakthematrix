@@ -2,10 +2,13 @@ package org.cloudvision.trading.bot;
 
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
+import org.cloudvision.trading.model.CandlestickData;
+import org.cloudvision.trading.model.TimeInterval;
 import org.cloudvision.trading.model.TradingData;
 import org.cloudvision.trading.service.UniversalTradingDataService;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -132,19 +135,109 @@ public class TradingBot {
     }
 
     /**
-     * Enable the bot (analysis mode by default)
+     * Bootstrap strategies with historical data
+     * @param provider Provider name (e.g., "Binance")
+     * @param interval Time interval for historical data
+     * @param limit Number of historical candles to fetch
      */
-    public void enable() {
+    public void bootstrapStrategies(String provider, TimeInterval interval, int limit) {
+        System.out.println("🔄 Bootstrapping strategies with historical data...");
+        
+        for (TradingStrategy strategy : strategies) {
+            for (String symbol : strategy.getSymbols()) {
+                try {
+                    System.out.println("📊 Fetching " + limit + " historical candles for " + symbol + " (" + interval.getValue() + ")");
+                    
+                    List<CandlestickData> historicalData = tradingDataService.getHistoricalKlines(
+                        provider, symbol, interval, limit
+                    );
+                    
+                    if (!historicalData.isEmpty()) {
+                        strategy.bootstrapWithHistoricalData(historicalData);
+                        System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped for " + symbol);
+                    } else {
+                        System.err.println("❌ No historical data available for " + symbol);
+                    }
+                    
+                } catch (Exception e) {
+                    System.err.println("❌ Error bootstrapping strategy for " + symbol + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        System.out.println("✅ Strategy bootstrapping complete!");
+    }
+    
+    /**
+     * Bootstrap strategies with historical data using time range
+     * @param provider Provider name (e.g., "Binance")
+     * @param interval Time interval for historical data
+     * @param startTime Start time for historical data
+     * @param endTime End time for historical data
+     */
+    public void bootstrapStrategies(String provider, TimeInterval interval, Instant startTime, Instant endTime) {
+        System.out.println("🔄 Bootstrapping strategies with historical data from " + startTime + " to " + endTime);
+        
+        for (TradingStrategy strategy : strategies) {
+            for (String symbol : strategy.getSymbols()) {
+                try {
+                    System.out.println("📊 Fetching historical data for " + symbol + " (" + interval.getValue() + ")");
+                    
+                    List<CandlestickData> historicalData = tradingDataService.getHistoricalKlines(
+                        provider, symbol, interval, startTime, endTime
+                    );
+                    
+                    if (!historicalData.isEmpty()) {
+                        strategy.bootstrapWithHistoricalData(historicalData);
+                        System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped for " + symbol);
+                    } else {
+                        System.err.println("❌ No historical data available for " + symbol);
+                    }
+                    
+                } catch (Exception e) {
+                    System.err.println("❌ Error bootstrapping strategy for " + symbol + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+        System.out.println("✅ Strategy bootstrapping complete!");
+    }
+
+    /**
+     * Enable the bot (analysis mode by default)
+     * @param bootstrapHistorical Whether to bootstrap with historical data first
+     * @param interval Time interval for kline subscriptions and historical data
+     * @param historicalLimit Number of historical candles to fetch (if bootstrapping)
+     */
+    public void enable(boolean bootstrapHistorical, TimeInterval interval, int historicalLimit) {
+        // Connect to provider first
+        tradingDataService.connectProvider("Binance");
+        
+        // Bootstrap with historical data if requested
+        if (bootstrapHistorical) {
+            System.out.println("📊 Bootstrapping with " + historicalLimit + " historical candles...");
+            bootstrapStrategies("Binance", interval, historicalLimit);
+        }
+        
         botEnabled = true;
         System.out.println("🚀 Bot ENABLED - Analysis mode active");
         
-        // Subscribe to market data for all strategy symbols
+        // Subscribe to real-time kline data for all strategy symbols
         for (TradingStrategy strategy : strategies) {
             for (String symbol : strategy.getSymbols()) {
-                tradingDataService.connectProvider("Binance");
-                tradingDataService.subscribeToSymbol("Binance", symbol);
+                tradingDataService.subscribeToKlines("Binance", symbol, interval);
+                System.out.println("📡 Subscribed to " + symbol + " klines (" + interval.getValue() + ")");
             }
         }
+    }
+    
+    /**
+     * Enable the bot (analysis mode by default) - simple version without bootstrapping
+     */
+    public void enable() {
+        enable(false, TimeInterval.ONE_MINUTE, 0);
     }
 
     /**

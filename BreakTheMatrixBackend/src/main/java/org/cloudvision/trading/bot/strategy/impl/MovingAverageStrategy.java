@@ -1,10 +1,11 @@
 package org.cloudvision.trading.bot.strategy.impl;
 
+import org.cloudvision.trading.bot.indicators.TechnicalIndicators;
 import org.cloudvision.trading.bot.model.*;
 import org.cloudvision.trading.bot.strategy.*;
 import org.cloudvision.trading.bot.visualization.StrategyVisualizationData;
 import org.cloudvision.trading.bot.visualization.VisualizationManager;
-import org.cloudvision.trading.model.TradingData;
+import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -13,47 +14,30 @@ import java.math.RoundingMode;
 import java.util.*;
 
 @Component
-public class MovingAverageStrategy implements TradingStrategy {
+public class MovingAverageStrategy extends AbstractTradingStrategy {
     
     @Autowired
     private VisualizationManager visualizationManager;
     
-    private StrategyConfig config;
-    private StrategyStats stats;
-    private boolean enabled = true;
-    private final Map<String, List<BigDecimal>> priceHistory = new HashMap<>();
-    private final Map<String, BigDecimal> lastSignal = new HashMap<>();
-    
     // Strategy parameters
     private int shortPeriod = 10;
     private int longPeriod = 20;
-
+    
     @Override
-    public List<Order> analyze(TradingData data) {
-        if (!enabled || !data.getType().toString().equals("TICKER")) {
-            return Collections.emptyList();
-        }
-
-        String symbol = data.getSymbol();
-        BigDecimal currentPrice = data.getPrice();
-        
-        // Store price history
-        priceHistory.computeIfAbsent(symbol, k -> new ArrayList<>()).add(currentPrice);
-        List<BigDecimal> prices = priceHistory.get(symbol);
-        
-        // Keep only necessary history
-        if (prices.size() > longPeriod + 10) {
-            prices.subList(0, prices.size() - longPeriod - 5).clear();
-        }
+    protected List<Order> analyzePrice(PriceData priceData) {
+        String symbol = priceData.symbol;
+        BigDecimal currentPrice = priceData.price;
         
         // Need enough data for both moving averages
-        if (prices.size() < longPeriod) {
+        if (!hasEnoughData(symbol, longPeriod)) {
             return Collections.emptyList();
         }
         
-        // Calculate moving averages
-        BigDecimal shortMA = calculateMA(prices, shortPeriod);
-        BigDecimal longMA = calculateMA(prices, longPeriod);
+        List<BigDecimal> prices = getPriceHistory(symbol);
+        
+        // Calculate moving averages using TechnicalIndicators utility
+        BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
+        BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
         
         // Generate signals
         List<Order> orders = new ArrayList<>();
@@ -78,49 +62,9 @@ public class MovingAverageStrategy implements TradingStrategy {
         }
         
         // Generate visualization data
-        generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, data.getTimestamp());
+        generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, priceData.timestamp);
         
         return orders;
-    }
-    
-    private BigDecimal calculateMA(List<BigDecimal> prices, int period) {
-        if (prices.size() < period) {
-            return BigDecimal.ZERO;
-        }
-        
-        BigDecimal sum = BigDecimal.ZERO;
-        for (int i = prices.size() - period; i < prices.size(); i++) {
-            sum = sum.add(prices.get(i));
-        }
-        
-        return sum.divide(new BigDecimal(period), 8, RoundingMode.HALF_UP);
-    }
-    
-    private Order createBuyOrder(String symbol, BigDecimal price) {
-        BigDecimal quantity = config.getMaxPositionSize().divide(price, 8, RoundingMode.HALF_UP);
-        return new Order(
-            UUID.randomUUID().toString(),
-            symbol,
-            OrderType.MARKET,
-            OrderSide.BUY,
-            quantity,
-            price,
-            getStrategyId()
-        );
-    }
-    
-    private Order createSellOrder(String symbol, BigDecimal price) {
-        // For simplicity, assume we're selling the same amount we bought
-        BigDecimal quantity = config.getMaxPositionSize().divide(price, 8, RoundingMode.HALF_UP);
-        return new Order(
-            UUID.randomUUID().toString(),
-            symbol,
-            OrderType.MARKET,
-            OrderSide.SELL,
-            quantity,
-            price,
-            getStrategyId()
-        );
     }
 
     @Override
@@ -140,8 +84,7 @@ public class MovingAverageStrategy implements TradingStrategy {
 
     @Override
     public void initialize(StrategyConfig config) {
-        this.config = config;
-        this.stats = new StrategyStats();
+        super.initialize(config);
         
         // Get strategy-specific parameters
         if (config.getParameter("shortPeriod") != null) {
@@ -158,20 +101,35 @@ public class MovingAverageStrategy implements TradingStrategy {
         
         System.out.println("Initialized MA Strategy: " + shortPeriod + "/" + longPeriod + " periods");
     }
-
+    
     @Override
-    public boolean isEnabled() {
-        return enabled;
+    protected int getMaxHistorySize() {
+        return longPeriod + 50; // Keep enough history for calculations
     }
-
+    
     @Override
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    @Override
-    public StrategyStats getStats() {
-        return stats;
+    protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
+        // Calculate initial moving averages and set signal state
+        for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            List<BigDecimal> prices = getPriceHistory(symbol);
+            
+            if (prices.size() >= longPeriod) {
+                BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
+                BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
+                
+                // Set initial signal state (no orders, just establish baseline)
+                if (shortMA.compareTo(longMA) > 0) {
+                    lastSignal.put(symbol, BigDecimal.ONE); // Bullish
+                } else {
+                    lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish
+                }
+                
+                System.out.println("📊 " + symbol + " initial state: Short MA: " + shortMA + 
+                                 ", Long MA: " + longMA + " (" + 
+                                 (shortMA.compareTo(longMA) > 0 ? "BULLISH" : "BEARISH") + ")");
+            }
+        }
     }
     
     /**
@@ -232,14 +190,15 @@ public class MovingAverageStrategy implements TradingStrategy {
                 new BigDecimal(Math.random() * 2000 - 1000).setScale(2, RoundingMode.HALF_UP)
             );
             
-            TradingData simulatedData = new TradingData(
-                symbol,
-                simulatedPrice,
-                new BigDecimal("1.5"),
-                java.time.Instant.now(),
-                "Simulated",
-                org.cloudvision.trading.model.TradingDataType.TICKER
-            );
+            org.cloudvision.trading.model.TradingData simulatedData = 
+                new org.cloudvision.trading.model.TradingData(
+                    symbol,
+                    simulatedPrice,
+                    new BigDecimal("1.5"),
+                    java.time.Instant.now(),
+                    "Simulated",
+                    org.cloudvision.trading.model.TradingDataType.TICKER
+                );
             
             analyze(simulatedData);
         }
@@ -274,15 +233,17 @@ public class MovingAverageStrategy implements TradingStrategy {
                     true
                 );
             
-            TradingData simulatedData = new TradingData(
-                symbol,
-                now,
-                "Simulated",
-                org.cloudvision.trading.model.TradingDataType.KLINE,
-                candlestick
-            );
+            org.cloudvision.trading.model.TradingData simulatedData = 
+                new org.cloudvision.trading.model.TradingData(
+                    symbol,
+                    now,
+                    "Simulated",
+                    org.cloudvision.trading.model.TradingDataType.KLINE,
+                    candlestick
+                );
             
             analyze(simulatedData);
         }
     }
 }
+
