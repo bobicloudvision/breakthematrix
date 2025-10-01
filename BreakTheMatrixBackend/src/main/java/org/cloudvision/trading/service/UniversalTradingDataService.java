@@ -50,14 +50,25 @@ public class UniversalTradingDataService {
     }
 
     public void setGlobalDataHandler(Consumer<TradingData> handler) {
+        System.out.println("🔧 Setting global data handler: " + (handler != null ? handler.getClass().getSimpleName() : "null"));
+        if (this.globalDataHandler != null) {
+            System.out.println("⚠️ WARNING: Overwriting existing global data handler!");
+        }
         this.globalDataHandler = handler;
+        System.out.println("✅ Global data handler set successfully");
     }
 
     private void handleData(TradingData data) {
         System.out.println("Received: " + data);
         if (globalDataHandler != null) {
             System.out.println("🔄 Forwarding data to global handler...");
-            globalDataHandler.accept(data);
+            try {
+                globalDataHandler.accept(data);
+                System.out.println("✅ Data forwarded successfully to global handler");
+            } catch (Exception e) {
+                System.err.println("❌ Exception in global data handler: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                e.printStackTrace();
+            }
         } else {
             System.err.println("❌ No global data handler set! Data not forwarded to WebSocket.");
         }

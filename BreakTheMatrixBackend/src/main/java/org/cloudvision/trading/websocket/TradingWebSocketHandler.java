@@ -1,6 +1,9 @@
 package org.cloudvision.trading.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.model.TradingData;
 import org.cloudvision.trading.model.TimeInterval;
 import org.cloudvision.trading.service.UniversalTradingDataService;
@@ -18,15 +21,23 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TradingWebSocketHandler extends TextWebSocketHandler {
     
     private final UniversalTradingDataService tradingService;
+    private final TradingBot tradingBot;
     private final ObjectMapper objectMapper;
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
-    public TradingWebSocketHandler(UniversalTradingDataService tradingService) {
+    public TradingWebSocketHandler(UniversalTradingDataService tradingService, TradingBot tradingBot) {
         this.tradingService = tradingService;
-        this.objectMapper = new ObjectMapper();
+        this.tradingBot = tradingBot;
         
-        // Set up global data handler to broadcast to all connected clients
-        this.tradingService.setGlobalDataHandler(this::broadcastTradingData);
+        // Configure ObjectMapper for Java 8 time support
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        
+        // Register with TradingBot to receive forwarded data
+        System.out.println("🔧 Registering WebSocket handler with TradingBot");
+        this.tradingBot.setAdditionalDataHandler(this::broadcastTradingData);
+        System.out.println("✅ WebSocket handler registered with TradingBot successfully");
     }
 
     @Override
@@ -169,6 +180,7 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void broadcastTradingData(TradingData data) {
+        System.out.println("🚀 broadcastTradingData() method called with: " + data.getSymbol());
         try {
             System.out.println("📡 Broadcasting data to " + sessions.size() + " WebSocket sessions: " + data.getSymbol());
             

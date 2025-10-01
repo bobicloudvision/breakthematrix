@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 @Service
 public class TradingBot {
@@ -23,6 +24,9 @@ public class TradingBot {
     private final Map<String, Boolean> strategyStatus = new ConcurrentHashMap<>();
     private boolean botEnabled = false;
     private boolean tradingEnabled = false; // Separate flag for trading execution
+    
+    // Additional handler to forward data to (e.g., WebSocket handler)
+    private Consumer<TradingData> additionalDataHandler;
 
     public TradingBot(UniversalTradingDataService tradingDataService,
                      OrderManager orderManager,
@@ -38,9 +42,31 @@ public class TradingBot {
     }
 
     /**
+     * Set additional data handler (e.g., for WebSocket broadcasting)
+     */
+    public void setAdditionalDataHandler(Consumer<TradingData> handler) {
+        this.additionalDataHandler = handler;
+        System.out.println("🔗 Additional data handler set in TradingBot");
+    }
+    
+    /**
      * Process incoming market data and execute strategies
      */
     private void processMarketData(TradingData data) {
+        System.out.println("🤖 TradingBot processing market data: " + data.getSymbol());
+        
+        // Forward to additional handler FIRST (e.g., WebSocket)
+        if (additionalDataHandler != null) {
+            try {
+                System.out.println("🔄 Forwarding data to additional handler (WebSocket)...");
+                additionalDataHandler.accept(data);
+            } catch (Exception e) {
+                System.err.println("❌ Error in additional data handler: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        // Then process for trading bot
         if (!botEnabled) {
             return;
         }
