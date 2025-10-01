@@ -23,6 +23,7 @@ public class PaperTradingAccount implements TradingAccount {
     private final Map<String, BigDecimal> balances; // Asset -> Balance
     private final Map<String, Order> orders; // OrderId -> Order
     private final List<Trade> tradeHistory;
+    private final PositionManager positionManager; // Position tracking
     private final Instant createdAt;
     private boolean enabled;
     
@@ -51,6 +52,7 @@ public class PaperTradingAccount implements TradingAccount {
         this.balances = new ConcurrentHashMap<>();
         this.orders = new ConcurrentHashMap<>();
         this.tradeHistory = Collections.synchronizedList(new ArrayList<>());
+        this.positionManager = new PositionManager(); // Initialize position manager
         this.createdAt = Instant.now();
         this.enabled = true;
         this.dailyStartBalance = initialBalance;
@@ -112,6 +114,10 @@ public class PaperTradingAccount implements TradingAccount {
                     balances.put(quoteAsset, quoteBalance.subtract(orderValue));
                     balances.put(baseAsset, 
                         balances.getOrDefault(baseAsset, BigDecimal.ZERO).add(order.getQuantity()));
+                    
+                    // Open LONG position
+                    positionManager.openPosition(order.getSymbol(), PositionSide.LONG, 
+                        order.getPrice(), order.getQuantity());
                     break;
                     
                 case SELL:
@@ -126,6 +132,17 @@ public class PaperTradingAccount implements TradingAccount {
                     balances.put(baseAsset, baseBalance.subtract(order.getQuantity()));
                     balances.put(quoteAsset, 
                         balances.getOrDefault(quoteAsset, BigDecimal.ZERO).add(orderValue));
+                    
+                    // Close positions (FIFO - close oldest first)
+                    List<Position> openPositions = positionManager.getOpenPositionsBySymbol(order.getSymbol());
+                    BigDecimal remainingQty = order.getQuantity();
+                    for (Position position : openPositions) {
+                        if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
+                        
+                        BigDecimal closeQty = remainingQty.min(position.getQuantity());
+                        positionManager.closePosition(position.getPositionId(), order.getPrice(), closeQty);
+                        remainingQty = remainingQty.subtract(closeQty);
+                    }
                     break;
             }
             
@@ -281,6 +298,7 @@ public class PaperTradingAccount implements TradingAccount {
         balances.put("USDT", initialBalance);
         orders.clear();
         tradeHistory.clear();
+        positionManager.reset(); // Reset positions
         totalPnL = BigDecimal.ZERO;
         realizedPnL = BigDecimal.ZERO;
         totalTrades = 0;
@@ -302,6 +320,33 @@ public class PaperTradingAccount implements TradingAccount {
         this.enabled = enabled;
         System.out.println(enabled ? "✅" : "🚫" + " Paper trading account " + 
                          (enabled ? "enabled" : "disabled"));
+    }
+    
+    // Position management methods
+    
+    @Override
+    public List<Position> getOpenPositions() {
+        return positionManager.getOpenPositions();
+    }
+    
+    @Override
+    public List<Position> getOpenPositionsBySymbol(String symbol) {
+        return positionManager.getOpenPositionsBySymbol(symbol);
+    }
+    
+    @Override
+    public Position getPosition(String positionId) {
+        return positionManager.getPosition(positionId);
+    }
+    
+    @Override
+    public List<Position> getPositionHistory() {
+        return positionManager.getPositionHistory();
+    }
+    
+    @Override
+    public PositionManager getPositionManager() {
+        return positionManager;
     }
     
     // Helper methods

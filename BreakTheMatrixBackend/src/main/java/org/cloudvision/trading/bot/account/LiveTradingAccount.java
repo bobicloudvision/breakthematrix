@@ -19,6 +19,7 @@ public class LiveTradingAccount implements TradingAccount {
     private final String exchangeName;
     private final String apiKey;
     private final String apiSecret;
+    private final PositionManager positionManager;
     private boolean enabled;
     private final Instant createdAt;
     
@@ -29,6 +30,7 @@ public class LiveTradingAccount implements TradingAccount {
         this.exchangeName = exchangeName;
         this.apiKey = apiKey;
         this.apiSecret = apiSecret;
+        this.positionManager = new PositionManager();
         this.enabled = false; // Disabled by default for safety
         this.createdAt = Instant.now();
         
@@ -173,6 +175,37 @@ public class LiveTradingAccount implements TradingAccount {
     
     public String getExchangeName() {
         return exchangeName;
+    }
+    
+    // Position management methods
+    
+    @Override
+    public List<Position> getOpenPositions() {
+        // TODO: Fetch from exchange API
+        return positionManager.getOpenPositions();
+    }
+    
+    @Override
+    public List<Position> getOpenPositionsBySymbol(String symbol) {
+        // TODO: Fetch from exchange API
+        return positionManager.getOpenPositionsBySymbol(symbol);
+    }
+    
+    @Override
+    public Position getPosition(String positionId) {
+        // TODO: Fetch from exchange API
+        return positionManager.getPosition(positionId);
+    }
+    
+    @Override
+    public List<Position> getPositionHistory() {
+        // TODO: Fetch from exchange API
+        return positionManager.getPositionHistory();
+    }
+    
+    @Override
+    public PositionManager getPositionManager() {
+        return positionManager;
     }
 }
 

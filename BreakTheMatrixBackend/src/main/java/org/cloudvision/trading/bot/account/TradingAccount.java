@@ -112,5 +112,32 @@ public interface TradingAccount {
      * Enable/disable account
      */
     void setEnabled(boolean enabled);
+    
+    // Position management
+    
+    /**
+     * Get all open positions
+     */
+    List<Position> getOpenPositions();
+    
+    /**
+     * Get open positions for a specific symbol
+     */
+    List<Position> getOpenPositionsBySymbol(String symbol);
+    
+    /**
+     * Get position by ID
+     */
+    Position getPosition(String positionId);
+    
+    /**
+     * Get position history (closed positions)
+     */
+    List<Position> getPositionHistory();
+    
+    /**
+     * Get position manager
+     */
+    PositionManager getPositionManager();
 }
 

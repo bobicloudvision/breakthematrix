@@ -5,6 +5,7 @@ import { BotControl } from "./BotControl";
 import { OrdersTab } from "./OrdersTab";
 import { StrategiesTab } from "./StrategiesTab";
 import { AccountsTab } from "./AccountsTab";
+import { PositionsTab } from "./PositionsTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -173,21 +174,31 @@ export default function App() {
           </header>
 
           {/* Chart Area */}
-          <main className="flex-1 flex flex-col">
-            <div className="flex-1 w-full">
+          <main className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 w-full min-h-0 flex items-center justify-center">
               {selectedProvider ? (
-                <Chart 
-                  provider={selectedProvider}
-                  symbol={symbol}
-                  interval={interval}
-                  activeStrategies={activeStrategies}
-                />
+                <div className="w-full h-full">
+                  <Chart 
+                    provider={selectedProvider}
+                    symbol={symbol}
+                    interval={interval}
+                    activeStrategies={activeStrategies}
+                  />
+                </div>
               ) : (
-                <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
-                  <div className="text-center">
+                <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
+                  <div className="text-center max-w-md mx-auto px-4">
                     <div className="text-6xl mb-4">📊</div>
                     <p className="text-cyan-300 text-xl font-medium mb-2">Select a Trading Provider</p>
-                    <p className="text-slate-400">Choose a provider from the dropdown above to start trading</p>
+                    <p className="text-slate-400 mb-4">Choose a provider from the dropdown above to start trading</p>
+                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600/30">
+                      <p className="text-slate-300 text-sm mb-2">Available providers:</p>
+                      <ul className="text-slate-400 text-xs text-left space-y-1">
+                        <li>• Binance (Live trading)</li>
+                        <li>• Mock Provider (Testing)</li>
+                        <li>• More providers coming soon...</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               )}
@@ -225,12 +236,23 @@ export default function App() {
                 >
                   Accounts
                 </button>
-                {/* Future tabs: Positions, Alerts, Console, etc. */}
+                <button 
+                  onClick={() => setActiveTab('positions')}
+                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    activeTab === 'positions' 
+                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
+                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                  }`}
+                >
+                  Positions
+                </button>
+                {/* Future tabs: Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-3.5rem)]">
                 {activeTab === 'orders' && <OrdersTab />}
                 {activeTab === 'strategies' && <StrategiesTab />}
                 {activeTab === 'accounts' && <AccountsTab />}
+                {activeTab === 'positions' && <PositionsTab />}
               </div>
             </div>
           </main>

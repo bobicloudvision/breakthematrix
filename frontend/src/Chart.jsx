@@ -425,7 +425,7 @@ export const ChartComponent = props => {
                             }
                             
                             console.log(`Setting data for ${indicator.name} with ${validData.length} points`);
-                            series.setData(validData);
+                            // series.setData(validData); TODO: Uncomment this
                             indicatorSeriesRef.current[indicator.name] = series;
                             console.log(`${indicator.name} series added successfully`);
                         } catch (e) {
