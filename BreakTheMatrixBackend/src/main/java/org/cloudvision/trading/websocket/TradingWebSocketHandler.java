@@ -170,6 +170,8 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
 
     private void broadcastTradingData(TradingData data) {
         try {
+            System.out.println("📡 Broadcasting data to " + sessions.size() + " WebSocket sessions: " + data.getSymbol());
+            
             Map<String, Object> messageData = Map.of(
                 "type", "tradingData",
                 "symbol", data.getSymbol(),
@@ -209,15 +211,20 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
             TextMessage message = new TextMessage(jsonData);
             
             // Broadcast to all connected sessions
-            sessions.values().forEach(session -> {
+            int sentCount = 0;
+            for (WebSocketSession session : sessions.values()) {
                 try {
                     if (session.isOpen()) {
                         session.sendMessage(message);
+                        sentCount++;
+                    } else {
+                        System.out.println("⚠️ Session " + session.getId() + " is closed, skipping");
                     }
                 } catch (IOException e) {
                     System.err.println("Failed to send message to session " + session.getId() + ": " + e.getMessage());
                 }
-            });
+            }
+            System.out.println("✅ Successfully broadcast to " + sentCount + " sessions");
         } catch (Exception e) {
             System.err.println("Failed to broadcast trading data: " + e.getMessage());
         }

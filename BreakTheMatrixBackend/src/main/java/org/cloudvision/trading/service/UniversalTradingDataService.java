@@ -56,7 +56,10 @@ public class UniversalTradingDataService {
     private void handleData(TradingData data) {
         System.out.println("Received: " + data);
         if (globalDataHandler != null) {
+            System.out.println("🔄 Forwarding data to global handler...");
             globalDataHandler.accept(data);
+        } else {
+            System.err.println("❌ No global data handler set! Data not forwarded to WebSocket.");
         }
     }
 
