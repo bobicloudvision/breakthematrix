@@ -1,10 +1,12 @@
 package org.cloudvision.trading.service;
 
+import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
 import org.cloudvision.trading.model.TimeInterval;
 import org.cloudvision.trading.provider.TradingDataProvider;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,5 +87,22 @@ public class UniversalTradingDataService {
 
     public TradingDataProvider getProvider(String name) {
         return providers.get(name);
+    }
+
+    public List<CandlestickData> getHistoricalKlines(String providerName, String symbol, TimeInterval interval, int limit) {
+        TradingDataProvider provider = providers.get(providerName);
+        if (provider != null) {
+            return provider.getHistoricalKlines(symbol, interval, limit);
+        }
+        return List.of();
+    }
+
+    public List<CandlestickData> getHistoricalKlines(String providerName, String symbol, TimeInterval interval, 
+                                                     Instant startTime, Instant endTime) {
+        TradingDataProvider provider = providers.get(providerName);
+        if (provider != null) {
+            return provider.getHistoricalKlines(symbol, interval, startTime, endTime);
+        }
+        return List.of();
     }
 }

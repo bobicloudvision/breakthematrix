@@ -10,6 +10,9 @@ import org.java_websocket.handshake.ServerHandshake;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.function.Consumer;
 @Component
 public class BinanceTradingProvider implements TradingDataProvider {
     private static final String BINANCE_WS_URL = "wss://stream.binance.com/ws/btcusdt@kline_1m";
+    private static final String BINANCE_REST_API_URL = "https://api.binance.com/api/v3";
     
     private Consumer<TradingData> dataHandler;
     private boolean connected = false;
@@ -36,6 +40,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicInteger requestId = new AtomicInteger(1);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @Override
     public void connect() {
@@ -339,6 +344,136 @@ public class BinanceTradingProvider implements TradingDataProvider {
     @Override
     public boolean isConnected() {
         return connected;
+    }
+
+    @Override
+    public List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, int limit) {
+        try {
+            System.out.println("📊 Fetching " + limit + " historical klines for " + symbol + " (" + interval.getValue() + ")");
+            
+            String url = String.format("%s/klines?symbol=%s&interval=%s&limit=%d",
+                BINANCE_REST_API_URL,
+                symbol.toUpperCase(),
+                interval.getValue(),
+                Math.min(limit, 1000) // Binance max is 1000
+            );
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                System.err.println("❌ Failed to fetch historical data. Status: " + response.statusCode());
+                System.err.println("Response: " + response.body());
+                return new ArrayList<>();
+            }
+            
+            return parseKlineResponse(response.body(), symbol, interval.getValue());
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching historical klines: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, Instant startTime, Instant endTime) {
+        try {
+            System.out.println("📊 Fetching historical klines for " + symbol + " (" + interval.getValue() + ") from " + 
+                             startTime + " to " + endTime);
+            
+            String url = String.format("%s/klines?symbol=%s&interval=%s&startTime=%d&endTime=%d&limit=1000",
+                BINANCE_REST_API_URL,
+                symbol.toUpperCase(),
+                interval.getValue(),
+                startTime.toEpochMilli(),
+                endTime.toEpochMilli()
+            );
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                System.err.println("❌ Failed to fetch historical data. Status: " + response.statusCode());
+                System.err.println("Response: " + response.body());
+                return new ArrayList<>();
+            }
+            
+            return parseKlineResponse(response.body(), symbol, interval.getValue());
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching historical klines: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Parse Binance kline response array
+     * Format: [[openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, ...], ...]
+     */
+    private List<CandlestickData> parseKlineResponse(String responseBody, String symbol, String interval) {
+        List<CandlestickData> klines = new ArrayList<>();
+        
+        try {
+            JsonNode array = objectMapper.readTree(responseBody);
+            
+            if (!array.isArray()) {
+                System.err.println("❌ Expected array response from Binance klines API");
+                return klines;
+            }
+            
+            for (JsonNode klineArray : array) {
+                try {
+                    Instant openTime = Instant.ofEpochMilli(klineArray.get(0).asLong());
+                    BigDecimal open = new BigDecimal(klineArray.get(1).asText());
+                    BigDecimal high = new BigDecimal(klineArray.get(2).asText());
+                    BigDecimal low = new BigDecimal(klineArray.get(3).asText());
+                    BigDecimal close = new BigDecimal(klineArray.get(4).asText());
+                    BigDecimal volume = new BigDecimal(klineArray.get(5).asText());
+                    Instant closeTime = Instant.ofEpochMilli(klineArray.get(6).asLong());
+                    BigDecimal quoteVolume = new BigDecimal(klineArray.get(7).asText());
+                    int numberOfTrades = klineArray.get(8).asInt();
+                    
+                    CandlestickData candlestick = new CandlestickData(
+                        symbol,
+                        openTime,
+                        closeTime,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume,
+                        quoteVolume,
+                        numberOfTrades,
+                        interval,
+                        getProviderName(),
+                        true // Historical data is always closed
+                    );
+                    
+                    klines.add(candlestick);
+                    
+                } catch (Exception e) {
+                    System.err.println("❌ Error parsing individual kline: " + e.getMessage());
+                }
+            }
+            
+            System.out.println("✅ Successfully parsed " + klines.size() + " historical klines for " + symbol);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing kline response: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return klines;
     }
 
     /**

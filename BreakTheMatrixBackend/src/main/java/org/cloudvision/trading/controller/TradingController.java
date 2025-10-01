@@ -1,9 +1,11 @@
 package org.cloudvision.trading.controller;
 
+import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TimeInterval;
 import org.cloudvision.trading.service.UniversalTradingDataService;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -62,6 +64,32 @@ public class TradingController {
             return "Unsubscribed from " + symbol + " klines (" + interval + ") on " + provider;
         } catch (IllegalArgumentException e) {
             return "Invalid interval: " + interval;
+        }
+    }
+
+    @GetMapping("/historical/{provider}/{symbol}/{interval}")
+    public List<CandlestickData> getHistoricalKlines(
+            @PathVariable String provider,
+            @PathVariable String symbol,
+            @PathVariable String interval,
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(required = false) Long startTime,
+            @RequestParam(required = false) Long endTime) {
+        try {
+            TimeInterval timeInterval = TimeInterval.fromString(interval);
+            
+            // If startTime and endTime are provided, use time range query
+            if (startTime != null && endTime != null) {
+                Instant start = Instant.ofEpochMilli(startTime);
+                Instant end = Instant.ofEpochMilli(endTime);
+                return tradingService.getHistoricalKlines(provider, symbol, timeInterval, start, end);
+            }
+            
+            // Otherwise use limit-based query
+            return tradingService.getHistoricalKlines(provider, symbol, timeInterval, limit);
+        } catch (IllegalArgumentException e) {
+            System.err.println("Invalid interval: " + interval);
+            return List.of();
         }
     }
 }
