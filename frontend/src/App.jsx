@@ -3,12 +3,14 @@ import { Chart } from "./Chart";
 import { TradingProviderDropdown } from "./TradingProviderDropdown";
 import { BotControl } from "./BotControl";
 import { OrdersTab } from "./OrdersTab";
+import { StrategiesTab } from "./StrategiesTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [symbol, setSymbol] = useState('ETHUSDT');
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('orders');
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -155,11 +157,31 @@ export default function App() {
             {/* Bottom Tabs */}
             <div className="h-52 border-t border-white/10 bg-black/30 backdrop-blur-sm">
               <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10">
-                <button className="px-3 h-8 text-sm rounded-md bg-white/10 text-white">Orders</button>
+                <button 
+                  onClick={() => setActiveTab('orders')}
+                  className={`px-3 h-8 text-sm rounded-md transition-all ${
+                    activeTab === 'orders' 
+                      ? 'bg-white/20 text-white border border-white/30' 
+                      : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  Orders
+                </button>
+                <button 
+                  onClick={() => setActiveTab('strategies')}
+                  className={`px-3 h-8 text-sm rounded-md transition-all ${
+                    activeTab === 'strategies' 
+                      ? 'bg-white/20 text-white border border-white/30' 
+                      : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  Strategies
+                </button>
                 {/* Future tabs: Positions, Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-2.5rem)]">
-                <OrdersTab />
+                {activeTab === 'orders' && <OrdersTab />}
+                {activeTab === 'strategies' && <StrategiesTab />}
               </div>
             </div>
           </main>
