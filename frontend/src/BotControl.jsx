@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 export const BotControl = ({ interval, historicalLimit = 100 }) => {
     const [isEnabled, setIsEnabled] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isTradingLoading, setIsTradingLoading] = useState(false);
     const [error, setError] = useState(null);
     const [lastAction, setLastAction] = useState(null);
     const [botStatus, setBotStatus] = useState({
@@ -113,6 +114,72 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
         }
     };
 
+    const startTrading = async () => {
+        try {
+            setIsTradingLoading(true);
+            setError(null);
+            
+            const url = 'http://localhost:8080/api/bot/start-trading';
+            
+            console.log('Starting trading:', url);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json',
+                },
+                body: '',
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            setLastAction('trading started');
+            console.log('Trading started successfully');
+            // Refresh status after starting trading
+            setTimeout(fetchBotStatus, 1000);
+        } catch (err) {
+            setError(err.message);
+            console.error('Failed to start trading:', err);
+        } finally {
+            setIsTradingLoading(false);
+        }
+    };
+
+    const stopTrading = async () => {
+        try {
+            setIsTradingLoading(true);
+            setError(null);
+            
+            const url = 'http://localhost:8080/api/bot/stop-trading';
+            
+            console.log('Stopping trading:', url);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'accept': '*/*',
+                    'Content-Type': 'application/json',
+                },
+                body: '',
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            setLastAction('trading stopped');
+            console.log('Trading stopped successfully');
+            // Refresh status after stopping trading
+            setTimeout(fetchBotStatus, 1000);
+        } catch (err) {
+            setError(err.message);
+            console.error('Failed to stop trading:', err);
+        } finally {
+            setIsTradingLoading(false);
+        }
+    };
+
     const handleToggle = () => {
         if (isEnabled) {
             disableBot();
@@ -208,7 +275,7 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                             <span className="text-white text-sm">{historicalLimit}</span>
                         </div>
 
-                        {/* Toggle Button */}
+                        {/* Bot Enable/Disable Button */}
                         <button
                             onClick={handleToggle}
                             disabled={isLoading}
@@ -236,6 +303,62 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                                 </div>
                             )}
                         </button>
+
+                        {/* Trading Control Buttons */}
+                        {isEnabled && (
+                            <div className="space-y-2">
+                                <div className="text-xs text-white/60 font-medium">Trading Controls</div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={startTrading}
+                                        disabled={isTradingLoading || botStatus.tradingStarted}
+                                        className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                                            botStatus.tradingStarted
+                                                ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30 cursor-not-allowed'
+                                                : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30'
+                                        } ${isTradingLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    >
+                                        {isTradingLoading ? (
+                                            <div className="flex items-center justify-center gap-1">
+                                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                <span>Starting...</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center gap-1">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-5-8a3 3 0 110 6 3 3 0 010-6z" />
+                                                </svg>
+                                                <span>Start Trading</span>
+                                            </div>
+                                        )}
+                                    </button>
+
+                                    <button
+                                        onClick={stopTrading}
+                                        disabled={isTradingLoading || !botStatus.tradingStarted}
+                                        className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                                            !botStatus.tradingStarted
+                                                ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30 cursor-not-allowed'
+                                                : 'bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30'
+                                        } ${isTradingLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                    >
+                                        {isTradingLoading ? (
+                                            <div className="flex items-center justify-center gap-1">
+                                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                <span>Stopping...</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center gap-1">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <span>Stop Trading</span>
+                                            </div>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Error Display */}
                         {error && (
