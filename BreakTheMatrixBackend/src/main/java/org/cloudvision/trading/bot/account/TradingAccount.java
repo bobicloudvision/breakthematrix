@@ -139,5 +139,12 @@ public interface TradingAccount {
      * Get position manager
      */
     PositionManager getPositionManager();
+    
+    /**
+     * Update current prices for all open positions
+     * This updates unrealized P&L and checks stop loss/take profit
+     * @param currentPrices Map of symbol -> current price
+     */
+    void updateCurrentPrices(Map<String, BigDecimal> currentPrices);
 }
 

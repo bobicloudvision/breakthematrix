@@ -383,5 +383,11 @@ public class PaperTradingAccount implements TradingAccount {
         public Order getOrder() { return order; }
         public Instant getExecutionTime() { return executionTime; }
     }
+    
+    @Override
+    public void updateCurrentPrices(Map<String, BigDecimal> currentPrices) {
+        // Update unrealized P&L for all open positions
+        positionManager.updatePrices(currentPrices);
+    }
 }
 

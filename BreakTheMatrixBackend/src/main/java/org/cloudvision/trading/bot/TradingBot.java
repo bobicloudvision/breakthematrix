@@ -59,6 +59,9 @@ public class TradingBot {
     private void processMarketData(TradingData data) {
         System.out.println("🤖 TradingBot processing market data: " + data.getSymbol());
         
+        // Update current prices for all accounts to calculate unrealized P&L
+        updateAccountPrices(data);
+        
         // Forward to additional handler FIRST (e.g., WebSocket)
         if (additionalDataHandler != null) {
             try {
@@ -341,5 +344,45 @@ public class TradingBot {
             account.getAccountName(), 
             account.getAccountType().getDisplayName(),
             account.getBalance());
+    }
+    
+    /**
+     * Update current prices for all trading accounts
+     * This updates unrealized P&L for open positions
+     */
+    private void updateAccountPrices(TradingData data) {
+        // Extract current price from the data
+        java.math.BigDecimal currentPrice = null;
+        String symbol = data.getSymbol();
+        
+        switch (data.getType()) {
+            case TICKER:
+                currentPrice = data.getPrice();
+                break;
+            case KLINE:
+                if (data.getCandlestickData() != null) {
+                    currentPrice = data.getCandlestickData().getClose();
+                }
+                break;
+            default:
+                return; // Unknown data type
+        }
+        
+        if (currentPrice == null) {
+            return;
+        }
+        
+        // Create price map
+        Map<String, java.math.BigDecimal> currentPrices = new ConcurrentHashMap<>();
+        currentPrices.put(symbol, currentPrice);
+        
+        // Update prices for all accounts
+        for (org.cloudvision.trading.bot.account.TradingAccount account : accountManager.getAllAccounts()) {
+            try {
+                account.updateCurrentPrices(currentPrices);
+            } catch (Exception e) {
+                System.err.println("❌ Error updating prices for account " + account.getAccountName() + ": " + e.getMessage());
+            }
+        }
     }
 }
