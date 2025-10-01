@@ -38,7 +38,7 @@ export const ChartComponent = props => {
                     textColor: textColor || '#d1d5db',
                 },
                 width: chartContainerRef.current.clientWidth,
-                height: 400,
+                height: chartContainerRef.current.clientHeight || 400,
                 grid: { 
                     vertLines: { color: '#2a2e39' },
                     horzLines: { color: '#2a2e39' },
@@ -64,7 +64,13 @@ export const ChartComponent = props => {
                 chart.timeScale().fitContent();
             }
 
-            window.addEventListener('resize', handleResize);
+            window.addEventListener('resize', () => {
+                if (!chartContainerRef.current || !chartRef.current) return;
+                chartRef.current.applyOptions({ 
+                    width: chartContainerRef.current.clientWidth,
+                    height: chartContainerRef.current.clientHeight || 400,
+                });
+            });
 
             return () => {
                 window.removeEventListener('resize', handleResize);
@@ -113,6 +119,7 @@ export const ChartComponent = props => {
     return (
         <div
             ref={chartContainerRef}
+            className="w-full h-full"
         />
     );
 };

@@ -28,6 +28,7 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
     }, []);
 
     const handleProviderClick = (provider) => {
+        console.log('Provider clicked:', provider);
         onProviderSelect(provider);
         setIsOpen(false);
     };
@@ -68,7 +69,10 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
     return (
         <div className="relative">
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => {
+                    console.log('Dropdown button clicked, isOpen:', isOpen);
+                    setIsOpen(!isOpen);
+                }}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
             >
                 <span>{selectedProvider ? selectedProvider.name || selectedProvider : 'Select Provider'}</span>
@@ -83,7 +87,7 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
             </button>
 
             {isOpen && (
-                <div className="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
                     {providers.length === 0 ? (
                         <div className="px-4 py-2 text-gray-400">No providers available</div>
                     ) : (
