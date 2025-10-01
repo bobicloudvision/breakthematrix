@@ -71,7 +71,7 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-gray-900 to-black">
+    <div className="min-h-screen w-full">
 
 
       <div className="flex h-screen">
@@ -82,7 +82,7 @@ export default function App() {
             <div className="mx-auto max-w-7xl px-4 py-3">
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
-                  BreakTheMatrix v1.0.0 - Beta
+                  BreakTheMatrix 
                 </div>
 
                 {/* Controls - compact inline */}
@@ -153,16 +153,26 @@ export default function App() {
           {/* Chart Area */}
           <main className="flex-1 flex flex-col">
             <div className="flex-1 w-full">
-              <Chart 
-                provider={selectedProvider}
-                symbol={symbol}
-                interval={interval}
-              />
+              {selectedProvider ? (
+                <Chart 
+                  provider={selectedProvider}
+                  symbol={symbol}
+                  interval={interval}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
+                  <div className="text-center">
+                    <div className="text-6xl mb-4">📊</div>
+                    <p className="text-cyan-300 text-xl font-medium mb-2">Select a Trading Provider</p>
+                    <p className="text-slate-400">Choose a provider from the dropdown above to start trading</p>
+                  </div>
+                </div>
+              )}
             </div>
             {/* Bottom Tabs */}
-            <div className="h-80 border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
+            <div className="h-[400px] border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
               <div className="h-12 flex items-center gap-3 px-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
-                <button 
+                <button  
                   onClick={() => setActiveTab('orders')}
                   className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
                     activeTab === 'orders' 

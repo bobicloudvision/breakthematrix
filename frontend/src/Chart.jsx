@@ -13,7 +13,7 @@ export const ChartComponent = props => {
         error = null,
         realCount = 0,
         colors: {
-            backgroundColor = '#161a25',
+            backgroundColor = 'transparent',
             textColor = '#fff',
             upColor = '#4caf50',
             downColor = '#e91e63',
@@ -136,7 +136,7 @@ export const ChartComponent = props => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-80 bg-gray-800 rounded-lg">
+            <div className="flex items-center justify-center h-80 rounded-lg">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                     <p className="text-gray-400">Loading chart data...</p>
@@ -147,7 +147,7 @@ export const ChartComponent = props => {
 
     if (error) {
         return (
-            <div className="flex items-center justify-center h-80 bg-gray-800 rounded-lg">
+            <div className="flex items-center justify-center h-80 rounded-lg">
                 <div className="text-center">
                     <div className="text-red-500 text-6xl mb-4">⚠️</div>
                     <p className="text-red-400 mb-2">Failed to load chart data</p>
@@ -233,7 +233,9 @@ export function Chart({ provider, symbol, interval }) {
     const [error, setError] = useState(null);
 
     useEffect(() => {
+
         const fetchHistoricalData = async () => {
+
             console.log('Chart useEffect triggered:', { provider, symbol, interval });
             
             if (!provider || !symbol || !interval) {

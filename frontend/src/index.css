@@ -6,6 +6,6 @@
 html, body, #root {
   height: 100%;
   color: #fff;
-  background-color: #0f0f0f;
+  @apply bg-gradient-to-br from-slate-900 via-gray-900 to-black;
 }
 
