@@ -11,15 +11,16 @@ export const ChartComponent = props => {
         data,
         loading = false,
         error = null,
+        realCount = 0,
         colors: {
-            backgroundColor = '#0f0f0f',
-            textColor = 'black',
-            upColor = '#26a69a',
-            downColor = '#ef5350',
-            wickUpColor = '#26a69a',
-            wickDownColor = '#ef5350',
-            borderUpColor = '#26a69a',
-            borderDownColor = '#ef5350',
+            backgroundColor = '#161a25',
+            textColor = '#fff',
+            upColor = '#4caf50',
+            downColor = '#e91e63',
+            wickUpColor = '#4caf50',
+            wickDownColor = '#e91e63',
+            borderUpColor = '#4caf50',
+            borderDownColor = '#e91e63',
         } = {},
     } = props;
 
@@ -79,12 +80,14 @@ export const ChartComponent = props => {
             // Set initial data if available
             if (data && data.length > 0) {
                 candleSeries.setData(data);
-                // Default zoom: show last N candles using logical range
+                // Default zoom: show last N REAL candles (exclude future placeholders)
                 const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
-                if (data.length > defaultZoomCandles) {
+                const endIndex = realCount > 0 ? realCount - 1 : data.length - 1;
+                const startIndex = Math.max(0, endIndex - defaultZoomCandles + 1);
+                if (endIndex > 0) {
                     chart.timeScale().setVisibleLogicalRange({
-                        from: data.length - defaultZoomCandles,
-                        to: data.length - 1,
+                        from: startIndex,
+                        to: endIndex,
                     });
                 } else {
                     chart.timeScale().fitContent();
@@ -115,19 +118,21 @@ export const ChartComponent = props => {
             console.log('Updating chart with new data:', data.length, 'candles');
             seriesRef.current.setData(data);
             if (chartRef.current) {
-                // Default zoom: show last N candles using logical range
+                // Default zoom: show last N REAL candles (exclude future placeholders)
                 const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
-                if (data.length > defaultZoomCandles) {
+                const endIndex = realCount > 0 ? realCount - 1 : data.length - 1;
+                const startIndex = Math.max(0, endIndex - defaultZoomCandles + 1);
+                if (endIndex > 0) {
                     chartRef.current.timeScale().setVisibleLogicalRange({
-                        from: data.length - defaultZoomCandles,
-                        to: data.length - 1,
+                        from: startIndex,
+                        to: endIndex,
                     });
                 } else {
                     chartRef.current.timeScale().fitContent();
                 }
             }
         }
-    }, [data]);
+    }, [data, realCount]);
 
     if (loading) {
         return (
@@ -171,8 +176,59 @@ const transformApiData = (apiData) => {
     }));
 };
 
+// Generate future empty data to maintain grid visibility until end of day
+const generateFutureData = (lastCandle, interval) => {
+    if (!lastCandle) return [];
+    
+    const futureData = [];
+    const intervalSec = getIntervalSeconds(interval);
+    let currentTime = lastCandle.time;
+    const lastPrice = lastCandle.close;
+    
+    // Get the end of the current day (23:59:59)
+    const lastCandleDate = new Date(lastCandle.time * 1000);
+    const endOfDay = new Date(lastCandleDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    const endOfDayTimestamp = Math.floor(endOfDay.getTime() / 1000);
+    
+    console.log('Last candle time:', new Date(lastCandle.time * 1000).toISOString());
+    console.log('End of day:', endOfDay.toISOString());
+    console.log('Interval sec:', intervalSec);
+    
+    // Generate candles until end of day
+    while (currentTime < endOfDayTimestamp) {
+        currentTime += intervalSec;
+        if (currentTime <= endOfDayTimestamp) {
+            futureData.push({
+                time: currentTime,
+                open: lastPrice,
+                high: lastPrice,
+                low: lastPrice,
+                close: lastPrice,
+            });
+        }
+    }
+    
+    console.log('Generated future data:', futureData.length, 'candles');
+    return futureData;
+};
+
+// Get interval in seconds
+const getIntervalSeconds = (interval) => {
+    const intervalMap = {
+        '1m': 60,
+        '5m': 5 * 60,
+        '15m': 15 * 60,
+        '1h': 60 * 60,
+        '4h': 4 * 60 * 60,
+        '1d': 24 * 60 * 60,
+    };
+    return intervalMap[interval] || 60;
+};
+
 export function Chart({ provider, symbol, interval }) {
     const [data, setData] = useState([]);
+    const [realCount, setRealCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -202,8 +258,35 @@ export function Chart({ provider, symbol, interval }) {
                 const apiData = await response.json();
                 console.log('API response:', apiData);
                 const chartData = transformApiData(apiData);
-                console.log('Transformed chart data:', chartData);
-                setData(chartData);
+                setRealCount(chartData.length);
+                
+                // Generate future empty data to maintain grid visibility until end of day
+                const futureData = generateFutureData(chartData[chartData.length - 1], interval);
+                
+                // Fallback: if no future data generated, create at least 10 future candles
+                const finalFutureData = futureData.length > 0 ? futureData : (() => {
+                    const fallbackData = [];
+                    const intervalSec = getIntervalSeconds(interval);
+                    let currentTime = chartData[chartData.length - 1].time;
+                    const lastPrice = chartData[chartData.length - 1].close;
+                    
+                    for (let i = 1; i <= 10; i++) {
+                        currentTime += intervalSec;
+                        fallbackData.push({
+                            time: currentTime,
+                            open: lastPrice,
+                            high: lastPrice,
+                            low: lastPrice,
+                            close: lastPrice,
+                        });
+                    }
+                    return fallbackData;
+                })();
+                
+                const combinedData = [...chartData, ...finalFutureData];
+                
+                console.log('Transformed chart data:', chartData.length, 'candles +', futureData.length, 'future candles');
+                setData(combinedData);
             } catch (err) {
                 setError(err.message);
                 console.error('Failed to fetch historical data:', err);
@@ -220,6 +303,7 @@ export function Chart({ provider, symbol, interval }) {
             data={data} 
             loading={loading} 
             error={error}
+            realCount={realCount}
         />
     );
 }

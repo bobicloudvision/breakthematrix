@@ -37,11 +37,11 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
         return (
             <div className="relative">
                 <button 
-                    className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 flex items-center justify-between"
+                    className="w-full px-4 py-2 h-9 bg-white/5 text-white rounded-md border border-white/10 flex items-center justify-between cursor-not-allowed"
                     disabled
                 >
-                    <span>Loading providers...</span>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <span className="text-white/80">Loading providers...</span>
+                    <svg className="w-4 h-4 animate-spin text-white/70" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -54,7 +54,7 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
         return (
             <div className="relative">
                 <button 
-                    className="w-full px-4 py-2 bg-red-700 text-white rounded-lg border border-red-600 flex items-center justify-between"
+                    className="w-full px-4 py-2 h-9 bg-red-500/20 text-red-300 rounded-md border border-red-500/30 flex items-center justify-between cursor-not-allowed"
                     disabled
                 >
                     <span>Error loading providers</span>
@@ -73,11 +73,11 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
                     console.log('Dropdown button clicked, isOpen:', isOpen);
                     setIsOpen(!isOpen);
                 }}
-                className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
+                className="w-full px-3 py-2 h-9 bg-white/5 text-white rounded-md border border-white/10 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
             >
-                <span>{selectedProvider ? selectedProvider.name || selectedProvider : 'Select Provider'}</span>
+                <span className="text-white/90">{selectedProvider ? selectedProvider.name || selectedProvider : 'Select Provider'}</span>
                 <svg 
-                    className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
+                    className={`w-4 h-4 text-white/70 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
@@ -87,9 +87,9 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
             </button>
 
             {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                <div className="absolute z-50 w-full mt-1 bg-black/80 backdrop-blur-md border border-white/10 rounded-md shadow-xl max-h-60 overflow-auto">
                     {providers.length === 0 ? (
-                        <div className="px-4 py-2 text-gray-400">No providers available</div>
+                        <div className="px-4 py-2 text-white/60">No providers available</div>
                     ) : (
                         providers.map((provider, index) => {
                             const providerName = typeof provider === 'string' ? provider : (provider.name || provider);
@@ -97,7 +97,7 @@ export const TradingProviderDropdown = ({ onProviderSelect, selectedProvider }) 
                                 <button
                                     key={provider.id || index}
                                     onClick={() => handleProviderClick(providerName)}
-                                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-600 focus:outline-none focus:bg-gray-600 first:rounded-t-lg last:rounded-b-lg"
+                                    className="w-full px-3 py-2 text-left text-white hover:bg-white/10 focus:outline-none focus:bg-white/10 first:rounded-t-md last:rounded-b-md"
                                 >
                                     {providerName}
                                 </button>
