@@ -9,6 +9,7 @@ import org.cloudvision.trading.service.UniversalTradingDataService;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -155,6 +156,9 @@ public class TradingBot {
         System.out.println("🔄 Bootstrapping strategies with historical data...");
         
         for (TradingStrategy strategy : strategies) {
+            // Collect all historical data for this strategy
+            List<CandlestickData> allHistoricalData = new ArrayList<>();
+            
             for (String symbol : strategy.getSymbols()) {
                 try {
                     System.out.println("📊 Fetching " + limit + " historical candles for " + symbol + " (" + interval.getValue() + ")");
@@ -164,14 +168,29 @@ public class TradingBot {
                     );
                     
                     if (!historicalData.isEmpty()) {
-                        strategy.bootstrapWithHistoricalData(historicalData);
-                        System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped for " + symbol);
+                        allHistoricalData.addAll(historicalData);
+                        System.out.println("✅ Fetched " + historicalData.size() + " candles for " + symbol);
                     } else {
                         System.err.println("❌ No historical data available for " + symbol);
                     }
                     
                 } catch (Exception e) {
-                    System.err.println("❌ Error bootstrapping strategy for " + symbol + ": " + e.getMessage());
+                    System.err.println("❌ Error fetching historical data for " + symbol + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+            
+            // Bootstrap strategy with all historical data
+            if (!allHistoricalData.isEmpty()) {
+                strategy.bootstrapWithHistoricalData(allHistoricalData);
+                System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped with " + allHistoricalData.size() + " candles");
+                
+                // Generate historical visualization data
+                try {
+                    strategy.generateHistoricalVisualizationData(allHistoricalData);
+                    System.out.println("✅ Generated historical visualization data for " + strategy.getStrategyName());
+                } catch (Exception e) {
+                    System.err.println("⚠️ Error generating historical visualization data: " + e.getMessage());
                     e.printStackTrace();
                 }
             }

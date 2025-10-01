@@ -128,20 +128,20 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             .build());
         
         // Spread - Histogram in separate pane
-        metadata.put("spread", IndicatorMetadata.builder("spread")
-            .displayName("MA Spread")
-            .asHistogram("#26a69a")
-            .separatePane(true)
-            .paneOrder(1)
-            .build());
-        
-        // Spread Percentage - Not displayed by default (but available)
-        metadata.put("spreadPercent", IndicatorMetadata.builder("spreadPercent")
-            .displayName("Spread %")
-            .asLine("#95A5A6", 1)
-            .separatePane(true)
-            .paneOrder(1)
-            .build());
+//        metadata.put("spread", IndicatorMetadata.builder("spread")
+//            .displayName("MA Spread")
+//            .asHistogram("#26a69a")
+//            .separatePane(true)
+//            .paneOrder(1)
+//            .build());
+//
+//        // Spread Percentage - Not displayed by default (but available)
+//        metadata.put("spreadPercent", IndicatorMetadata.builder("spreadPercent")
+//            .displayName("Spread %")
+//            .asLine("#95A5A6", 1)
+//            .separatePane(true)
+//            .paneOrder(1)
+//            .build());
         
         return metadata;
     }
@@ -171,6 +171,65 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         }
     }
     
+    @Override
+    public void generateHistoricalVisualizationData(List<CandlestickData> historicalData) {
+        if (visualizationManager == null || historicalData == null || historicalData.isEmpty()) {
+            return;
+        }
+        
+        System.out.println("📊 Generating historical visualization data for " + getStrategyName() + 
+                         " with " + historicalData.size() + " candles");
+        
+        // Group by symbol
+        Map<String, List<CandlestickData>> dataBySymbol = new HashMap<>();
+        for (CandlestickData candle : historicalData) {
+            dataBySymbol.computeIfAbsent(candle.getSymbol(), k -> new ArrayList<>()).add(candle);
+        }
+        
+        // Process each symbol
+        for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            List<CandlestickData> candles = entry.getValue();
+            
+            // Sort chronologically
+            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            
+            // Build price history progressively and calculate indicators
+            List<BigDecimal> progressivePrices = new ArrayList<>();
+            BigDecimal previousSignal = null;
+            
+            for (CandlestickData candle : candles) {
+                progressivePrices.add(candle.getClose());
+                
+                // Only calculate indicators once we have enough data
+                if (progressivePrices.size() >= longPeriod) {
+                    BigDecimal shortMA = TechnicalIndicators.calculateSMA(progressivePrices, shortPeriod);
+                    BigDecimal longMA = TechnicalIndicators.calculateSMA(progressivePrices, longPeriod);
+                    
+                    // Determine action based on crossover
+                    String action = "HOLD";
+                    if (shortMA.compareTo(longMA) > 0 && 
+                        (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
+                        action = "BUY";
+                        previousSignal = BigDecimal.ONE;
+                    } else if (shortMA.compareTo(longMA) < 0 && 
+                               (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
+                        action = "SELL";
+                        previousSignal = BigDecimal.ONE.negate();
+                    } else if (previousSignal == null) {
+                        previousSignal = shortMA.compareTo(longMA) > 0 ? BigDecimal.ONE : BigDecimal.ONE.negate();
+                    }
+                    
+                    // Generate visualization data
+                    generateVisualizationData(symbol, candle.getClose(), shortMA, longMA, action, candle.getCloseTime());
+                }
+            }
+            
+            System.out.println("✅ Generated " + (candles.size() - longPeriod + 1) + 
+                             " visualization points for " + symbol);
+        }
+    }
+    
     /**
      * Generate visualization data for the strategy
      */
@@ -183,11 +242,11 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         Map<String, BigDecimal> indicators = new HashMap<>();
         indicators.put("shortMA", shortMA);
         indicators.put("longMA", longMA);
-        indicators.put("spread", shortMA.subtract(longMA));
-        indicators.put("spreadPercent", longMA.compareTo(BigDecimal.ZERO) > 0 ? 
-            shortMA.subtract(longMA).divide(longMA, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : 
-            BigDecimal.ZERO);
-        
+//        indicators.put("spread", shortMA.subtract(longMA));
+//        indicators.put("spreadPercent", longMA.compareTo(BigDecimal.ZERO) > 0 ?
+//            shortMA.subtract(longMA).divide(longMA, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) :
+//            BigDecimal.ZERO);
+//
         // Prepare signals
         Map<String, Object> signals = new HashMap<>();
         signals.put("goldenCross", shortMA.compareTo(longMA) > 0);

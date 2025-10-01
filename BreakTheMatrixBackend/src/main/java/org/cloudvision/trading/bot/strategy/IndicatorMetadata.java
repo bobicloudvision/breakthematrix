@@ -100,6 +100,43 @@ public class IndicatorMetadata {
             return this;
         }
 
+        /**
+         * Bar series (for OHLC data)
+         * Note: Requires data format { time, open, high, low, close }
+         */
+        public Builder asBar(String upColor, String downColor) {
+            this.seriesType = "bar";
+            this.config.put("upColor", upColor);
+            this.config.put("downColor", downColor);
+            return this;
+        }
+
+        /**
+         * Candlestick series (for OHLC data)
+         * Note: Requires data format { time, open, high, low, close }
+         */
+        public Builder asCandlestick(String upColor, String downColor, String wickUpColor, String wickDownColor) {
+            this.seriesType = "candlestick";
+            this.config.put("upColor", upColor);
+            this.config.put("downColor", downColor);
+            this.config.put("wickUpColor", wickUpColor);
+            this.config.put("wickDownColor", wickDownColor);
+            this.config.put("borderVisible", false);
+            return this;
+        }
+
+        /**
+         * Candlestick series with default colors
+         */
+        public Builder asCandlestick() {
+            return asCandlestick(
+                "#26a69a", // Up - green
+                "#ef5350", // Down - red
+                "#26a69a", // Wick up - green
+                "#ef5350"  // Wick down - red
+            );
+        }
+
         public IndicatorMetadata build() {
             config.put("title", displayName);
             return new IndicatorMetadata(name, displayName, seriesType, config, separatePane, paneOrder);

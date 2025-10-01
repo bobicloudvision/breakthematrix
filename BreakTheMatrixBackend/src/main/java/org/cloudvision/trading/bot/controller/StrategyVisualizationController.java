@@ -306,13 +306,18 @@ public class StrategyVisualizationController {
     
     /**
      * Simple fallback configuration for indicators without metadata
-     * Provides basic neutral styling
+     * Provides basic neutral styling for all TradingView series types
      */
     private Map<String, Object> getSeriesConfig(String indicatorName, String seriesType) {
         Map<String, Object> config = new java.util.HashMap<>();
         
         // Simple neutral defaults based on series type
         switch (seriesType) {
+            case "line":
+                config.put("color", "#808080");
+                config.put("lineWidth", 1);
+                break;
+                
             case "area":
                 config.put("topColor", "rgba(128, 128, 128, 0.3)");
                 config.put("bottomColor", "rgba(128, 128, 128, 0.0)");
@@ -324,7 +329,31 @@ public class StrategyVisualizationController {
                 config.put("color", "#808080");
                 break;
                 
-            case "line":
+            case "baseline":
+                config.put("topLineColor", "#26a69a");
+                config.put("bottomLineColor", "#ef5350");
+                config.put("topFillColor1", "rgba(38, 166, 154, 0.28)");
+                config.put("topFillColor2", "rgba(38, 166, 154, 0.05)");
+                config.put("bottomFillColor1", "rgba(239, 83, 80, 0.05)");
+                config.put("bottomFillColor2", "rgba(239, 83, 80, 0.28)");
+                config.put("baseValue", Map.of("type", "price", "price", 0));
+                break;
+                
+            case "candlestick":
+                config.put("upColor", "#26a69a");
+                config.put("downColor", "#ef5350");
+                config.put("wickUpColor", "#26a69a");
+                config.put("wickDownColor", "#ef5350");
+                config.put("borderVisible", false);
+                break;
+                
+            case "bar":
+                config.put("upColor", "#26a69a");
+                config.put("downColor", "#ef5350");
+                config.put("openVisible", true);
+                config.put("thinBars", false);
+                break;
+                
             default:
                 config.put("color", "#808080");
                 config.put("lineWidth", 1);

@@ -252,33 +252,125 @@ export const ChartComponent = props => {
             indicators.forEach((indicator, index) => {
                 console.log(`Processing indicator ${index + 1}/${indicators.length}:`, indicator.name);
                 
-                // Validate data format
-                const validData = indicator.data.filter(item => 
-                    item && typeof item.time === 'number' && typeof item.value === 'number'
-                );
+                // Validate data format based on series type
+                let validData;
+                
+                switch (indicator.type.toLowerCase()) {
+                    case 'candlestick':
+                        validData = indicator.data.filter(item => 
+                            item && 
+                            typeof item.time === 'number' && 
+                            typeof item.open === 'number' && 
+                            typeof item.high === 'number' && 
+                            typeof item.low === 'number' && 
+                            typeof item.close === 'number'
+                        );
+                        break;
+                        
+                    case 'bar':
+                        validData = indicator.data.filter(item => 
+                            item && 
+                            typeof item.time === 'number' && 
+                            typeof item.open === 'number' && 
+                            typeof item.high === 'number' && 
+                            typeof item.low === 'number' && 
+                            typeof item.close === 'number'
+                        );
+                        break;
+                        
+                    case 'histogram':
+                        validData = indicator.data.filter(item => 
+                            item && 
+                            typeof item.time === 'number' && 
+                            typeof item.value === 'number'
+                        );
+                        break;
+                        
+                    default: // line, area, baseline
+                        validData = indicator.data.filter(item => 
+                            item && 
+                            typeof item.time === 'number' && 
+                            typeof item.value === 'number'
+                        );
+                        break;
+                }
                 
                 if (validData.length === 0) {
-                    console.warn(`No valid data points found for indicator: ${indicator.name}`);
+                    console.warn(`No valid data points found for indicator: ${indicator.name} (type: ${indicator.type})`);
                     return;
                 }
 
                 try {
                     let series;
                     
-                    if (indicator.type === 'line') {
-                        series = chart.addLineSeries({
-                            color: indicator.config.color,
-                            lineWidth: indicator.config.lineWidth,
-                            title: indicator.config.title
-                        });
-                    } else if (indicator.type === 'histogram') {
-                        series = chart.addHistogramSeries({
-                            color: indicator.config.color,
-                            title: indicator.config.title
-                        });
-                    } else {
-                        console.warn(`Unsupported indicator type: ${indicator.type}`);
-                        return;
+                    switch (indicator.type.toLowerCase()) {
+                        case 'line':
+                            series = chart.addLineSeries({
+                                color: indicator.config.color,
+                                lineWidth: indicator.config.lineWidth || 2,
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        case 'area':
+                            series = chart.addAreaSeries({
+                                lineColor: indicator.config.color,
+                                topColor: indicator.config.topColor || indicator.config.color + '40', // 25% opacity
+                                bottomColor: indicator.config.bottomColor || indicator.config.color + '10', // 6% opacity
+                                lineWidth: indicator.config.lineWidth || 2,
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        case 'bar':
+                            series = chart.addBarSeries({
+                                upColor: indicator.config.upColor || indicator.config.color,
+                                downColor: indicator.config.downColor || indicator.config.color,
+                                openVisible: indicator.config.openVisible !== false,
+                                thinBars: indicator.config.thinBars || false,
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        case 'baseline':
+                            series = chart.addBaselineSeries({
+                                baseValue: indicator.config.baseValue || { type: 'price', price: 0 },
+                                lineColor: indicator.config.color,
+                                topFillColor1: indicator.config.topFillColor1 || indicator.config.color + '40',
+                                topFillColor2: indicator.config.topFillColor2 || indicator.config.color + '20',
+                                bottomFillColor1: indicator.config.bottomFillColor1 || indicator.config.color + '20',
+                                bottomFillColor2: indicator.config.bottomFillColor2 || indicator.config.color + '40',
+                                lineWidth: indicator.config.lineWidth || 2,
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        case 'candlestick':
+                            series = chart.addCandlestickSeries({
+                                upColor: indicator.config.upColor || '#4caf50',
+                                downColor: indicator.config.downColor || '#e91e63',
+                                wickUpColor: indicator.config.wickUpColor || indicator.config.upColor || '#4caf50',
+                                wickDownColor: indicator.config.wickDownColor || indicator.config.downColor || '#e91e63',
+                                borderUpColor: indicator.config.borderUpColor || indicator.config.upColor || '#4caf50',
+                                borderDownColor: indicator.config.borderDownColor || indicator.config.downColor || '#e91e63',
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        case 'histogram':
+                            series = chart.addHistogramSeries({
+                                color: indicator.config.color,
+                                priceFormat: indicator.config.priceFormat || {
+                                    type: 'volume',
+                                },
+                                priceScaleId: indicator.config.priceScaleId || '',
+                                title: indicator.config.title
+                            });
+                            break;
+                            
+                        default:
+                            console.warn(`Unsupported indicator type: ${indicator.type}`);
+                            return;
                     }
 
                     console.log(`${indicator.name} series created, setting data...`);

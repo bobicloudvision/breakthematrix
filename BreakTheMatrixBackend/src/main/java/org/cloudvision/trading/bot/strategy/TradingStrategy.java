@@ -70,4 +70,11 @@ public interface TradingStrategy {
      * @return Map of indicator name to its visualization metadata
      */
     Map<String, IndicatorMetadata> getIndicatorMetadata();
+    
+    /**
+     * Generate historical visualization data from historical candlestick data
+     * This is called after bootstrapping to populate visualization history
+     * @param historicalData Historical candlestick data
+     */
+    void generateHistoricalVisualizationData(List<CandlestickData> historicalData);
 }

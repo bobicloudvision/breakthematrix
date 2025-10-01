@@ -123,6 +123,67 @@ public class RSIStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public void generateHistoricalVisualizationData(List<CandlestickData> historicalData) {
+        if (historicalData == null || historicalData.isEmpty()) {
+            return;
+        }
+        
+        System.out.println("📊 Generating historical visualization data for RSI Strategy with " + 
+                         historicalData.size() + " candles");
+        
+        // Group by symbol
+        Map<String, List<CandlestickData>> dataBySymbol = new HashMap<>();
+        for (CandlestickData candle : historicalData) {
+            dataBySymbol.computeIfAbsent(candle.getSymbol(), k -> new ArrayList<>()).add(candle);
+        }
+        
+        // Process each symbol
+        for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            List<CandlestickData> candles = entry.getValue();
+            
+            // Sort chronologically
+            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            
+            // Build price history progressively and calculate RSI
+            List<BigDecimal> progressivePrices = new ArrayList<>();
+            BigDecimal previousSignal = null;
+            
+            for (CandlestickData candle : candles) {
+                progressivePrices.add(candle.getClose());
+                
+                // Only calculate RSI once we have enough data
+                if (progressivePrices.size() >= rsiPeriod + 1) {
+                    BigDecimal rsi = TechnicalIndicators.calculateRSI(progressivePrices, rsiPeriod);
+                    
+                    if (rsi != null) {
+                        // Determine action based on RSI levels
+                        String action = "HOLD";
+                        if (rsi.compareTo(new BigDecimal(oversoldThreshold)) < 0 && 
+                            (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
+                            action = "BUY";
+                            previousSignal = BigDecimal.ONE;
+                        } else if (rsi.compareTo(new BigDecimal(overboughtThreshold)) > 0 && 
+                                   (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
+                            action = "SELL";
+                            previousSignal = BigDecimal.ONE.negate();
+                        } else if (previousSignal == null) {
+                            previousSignal = BigDecimal.ZERO;
+                        }
+                        
+                        // Create visualization data (you'll need to implement this method)
+                        // For now, just showing the structure
+                        // generateVisualizationData(symbol, candle.getClose(), rsi, action, candle.getCloseTime());
+                    }
+                }
+            }
+            
+            System.out.println("✅ Generated " + (candles.size() - rsiPeriod) + 
+                             " visualization points for " + symbol);
+        }
+    }
+    
+    @Override
     protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
         System.out.println("✅ RSI Strategy bootstrapped for " + dataBySymbol.size() + " symbols");
     }

@@ -283,5 +283,12 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         // Default implementation - subclasses should override to define their indicators
         return new HashMap<>();
     }
+
+    @Override
+    public void generateHistoricalVisualizationData(List<CandlestickData> historicalData) {
+        // Default implementation does nothing
+        // Subclasses should override to generate visualization data from historical candles
+        System.out.println("⚠️ " + getStrategyName() + " does not implement historical visualization generation");
+    }
 }
 
