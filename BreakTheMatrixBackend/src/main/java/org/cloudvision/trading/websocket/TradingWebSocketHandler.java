@@ -103,8 +103,25 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
 
     private void handleSubscribeKlines(WebSocketSession session, String provider, String symbol, String interval) throws IOException {
         try {
+            System.out.println("🔄 Processing klines subscription: " + provider + "/" + symbol + "/" + interval);
+            
             TimeInterval timeInterval = TimeInterval.fromString(interval);
+            
+            // Connect provider (this should not throw exceptions now)
             tradingService.connectProvider(provider);
+            
+            // Check if provider is actually connected
+            var tradingProvider = tradingService.getProvider(provider);
+            if (tradingProvider == null || !tradingProvider.isConnected()) {
+                String errorResponse = String.format(
+                    "{\"type\":\"error\",\"message\":\"Provider %s is not available or failed to connect\"}", 
+                    provider
+                );
+                session.sendMessage(new TextMessage(errorResponse));
+                return;
+            }
+            
+            // Subscribe to klines
             tradingService.subscribeToKlines(provider, symbol, timeInterval);
             
             String response = String.format(
@@ -112,7 +129,13 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
                 provider, symbol, interval
             );
             session.sendMessage(new TextMessage(response));
+            
+            System.out.println("✅ Klines subscription processed successfully");
+            
         } catch (Exception e) {
+            System.err.println("❌ Error in handleSubscribeKlines: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            e.printStackTrace();
+            
             String errorResponse = String.format(
                 "{\"type\":\"error\",\"message\":\"Failed to subscribe to %s klines (%s) on %s: %s\"}", 
                 symbol, interval, provider, e.getMessage()
