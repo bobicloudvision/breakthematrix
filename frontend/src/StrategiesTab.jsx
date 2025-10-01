@@ -47,6 +47,32 @@ export function StrategiesTab() {
     return Number(num).toFixed(2);
   };
 
+  const toggleStrategy = async (strategyId, enabled) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [strategyId]: true }));
+      const action = enabled ? 'disable' : 'enable';
+      const url = `http://localhost:8080/api/bot/strategies/${strategyId}/${action}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { accept: '*/*' },
+        body: '',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      // Refresh strategies after successful toggle
+      await fetchStrategies();
+    } catch (e) {
+      console.error('Failed to toggle strategy:', e);
+      setError(`Failed to ${enabled ? 'disable' : 'enable'} strategy: ${e.message}`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [strategyId]: false }));
+    }
+  };
+
   return (
     <div className="h-full w-full flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/30 flex-shrink-0">
@@ -79,7 +105,27 @@ export function StrategiesTab() {
                       <div className={`w-2 h-2 rounded-full ${strategy.enabled ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                       <h3 className="text-white font-medium">{strategy.name}</h3>
                     </div>
-                    <div className="text-xs text-white/60">{strategy.id}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-white/60">{strategy.id}</div>
+                      <button
+                        onClick={() => toggleStrategy(strategy.id, strategy.enabled)}
+                        disabled={actionLoading[strategy.id]}
+                        className={`px-3 py-1 text-xs rounded-md transition-all ${
+                          strategy.enabled
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30'
+                            : 'bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30'
+                        } ${actionLoading[strategy.id] ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        {actionLoading[strategy.id] ? (
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                            <span>...</span>
+                          </div>
+                        ) : (
+                          strategy.enabled ? 'Disable' : 'Enable'
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Symbols */}
