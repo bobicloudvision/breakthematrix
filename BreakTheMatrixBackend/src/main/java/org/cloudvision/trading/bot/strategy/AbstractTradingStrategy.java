@@ -1,11 +1,14 @@
 package org.cloudvision.trading.bot.strategy;
 
+import org.cloudvision.trading.bot.account.AccountManager;
+import org.cloudvision.trading.bot.account.TradingAccount;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.model.OrderSide;
 import org.cloudvision.trading.bot.model.OrderType;
 import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
 import org.cloudvision.trading.model.TradingDataType;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -22,6 +25,9 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     protected StrategyStats stats;
     protected boolean enabled = true;
     protected boolean bootstrapped = false;
+    
+    @Autowired(required = false)
+    protected AccountManager accountManager;
     
     // Price history for each symbol
     protected final Map<String, List<BigDecimal>> priceHistory = new HashMap<>();
@@ -142,10 +148,15 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
 
     /**
-     * Create a sell order
+     * Create a sell order - sells the entire position
      */
     protected Order createSellOrder(String symbol, BigDecimal price) {
-        BigDecimal quantity = calculateOrderQuantity(symbol, price);
+        BigDecimal quantity = calculateSellQuantity(symbol);
+        
+        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            System.out.println("⚠️ No position to sell for " + symbol);
+        }
+        
         return new Order(
             UUID.randomUUID().toString(),
             symbol,
@@ -158,13 +169,68 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
 
     /**
-     * Calculate order quantity based on position size and price
+     * Calculate order quantity for BUY orders based on position size and price
      */
     protected BigDecimal calculateOrderQuantity(String symbol, BigDecimal price) {
         if (config == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
         return config.getMaxPositionSize().divide(price, 8, RoundingMode.HALF_UP);
+    }
+    
+    /**
+     * Calculate sell quantity - returns the actual position held
+     */
+    protected BigDecimal calculateSellQuantity(String symbol) {
+        if (accountManager == null) {
+            System.out.println("⚠️ AccountManager not available, using default quantity calculation");
+            return BigDecimal.ZERO;
+        }
+        
+        try {
+            TradingAccount activeAccount = accountManager.getActiveAccount();
+            if (activeAccount == null) {
+                System.out.println("⚠️ No active account");
+                return BigDecimal.ZERO;
+            }
+            
+            // Extract base asset from symbol (e.g., BTCUSDT -> BTC)
+            String baseAsset = extractBaseAsset(symbol);
+            BigDecimal position = activeAccount.getAssetBalance(baseAsset);
+            
+            if (position.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("📊 Current " + baseAsset + " position: " + position);
+                return position;
+            } else {
+                System.out.println("⚠️ No " + baseAsset + " position to sell");
+                return BigDecimal.ZERO;
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error calculating sell quantity: " + e.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    /**
+     * Extract base asset from trading pair symbol
+     * Examples: BTCUSDT -> BTC, ETHBTC -> ETH
+     */
+    protected String extractBaseAsset(String symbol) {
+        // Common quote assets
+        String[] quoteAssets = {"USDT", "BUSD", "USDC", "BTC", "ETH", "BNB"};
+        
+        for (String quote : quoteAssets) {
+            if (symbol.endsWith(quote)) {
+                return symbol.substring(0, symbol.length() - quote.length());
+            }
+        }
+        
+        // Default: assume last 4 characters are quote asset
+        if (symbol.length() > 4) {
+            return symbol.substring(0, symbol.length() - 4);
+        }
+        
+        return symbol;
     }
 
     @Override
