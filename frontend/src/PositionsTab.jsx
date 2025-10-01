@@ -6,6 +6,9 @@ export function PositionsTab() {
   const [historicalPositions, setHistoricalPositions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [wsConnection, setWsConnection] = useState(null);
+  const [wsStatus, setWsStatus] = useState('disconnected'); // disconnected, connecting, connected, error
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   // Fetch open positions
   const fetchOpenPositions = async () => {
@@ -51,14 +54,120 @@ export function PositionsTab() {
     }
   };
 
+  // Manual WebSocket reconnection
+  const reconnectWebSocket = () => {
+    if (wsConnection) {
+      wsConnection.close();
+    }
+    setReconnectAttempts(0);
+    setWsStatus('connecting');
+  };
+
+  // Request positions via WebSocket
+  const requestPositionsViaWS = () => {
+    if (wsConnection && wsStatus === 'connected') {
+      wsConnection.send(JSON.stringify({ 
+        action: 'getPositions', 
+        accountId: 'paper-main' 
+      }));
+    }
+  };
+
+  // WebSocket connection for real-time position updates
+  useEffect(() => {
+    const connectWebSocket = () => {
+      try {
+        setWsStatus('connecting');
+        const ws = new WebSocket('ws://localhost:8080/positions-ws');
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected for positions');
+          setWsStatus('connected');
+          setReconnectAttempts(0);
+          // Subscribe to position updates
+          ws.send(JSON.stringify({
+            action: 'subscribe'
+          }));
+          // Get current positions
+          ws.send(JSON.stringify({ 
+            action: 'getPositions', 
+            accountId: 'paper-main' 
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('Received position update:', data);
+            
+            // Handle getPositions response
+            if (data.action === 'getPositions' && data.positions) {
+              console.log('Received positions data:', data.positions);
+              setOpenPositions(data.positions);
+            }
+            // Handle different types of position updates
+            else if (data.type === 'position_update' || data.type === 'position_opened' || data.type === 'position_closed') {
+              // Update open positions list
+              fetchOpenPositions();
+            }
+            // Handle general position updates
+            else if (data.positions) {
+              console.log('Received positions update:', data.positions);
+              setOpenPositions(data.positions);
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log('WebSocket disconnected for positions');
+          setWsStatus('disconnected');
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttempts < 5) {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+            setTimeout(() => {
+              setReconnectAttempts(prev => prev + 1);
+              connectWebSocket();
+            }, delay);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setWsStatus('error');
+        };
+
+        setWsConnection(ws);
+      } catch (error) {
+        console.error('Failed to create WebSocket connection:', error);
+        setWsStatus('error');
+      }
+    };
+
+    // Only connect WebSocket when component mounts
+    connectWebSocket();
+
+    // Cleanup on unmount
+    return () => {
+      if (wsConnection) {
+        wsConnection.close();
+      }
+    };
+  }, [reconnectAttempts]);
+
   // Load data when component mounts or sub-tab changes
   useEffect(() => {
     if (activeSubTab === 'active') {
-      fetchOpenPositions();
+      if (wsStatus === 'connected') {
+        requestPositionsViaWS();
+      } else {
+        fetchOpenPositions();
+      }
     } else if (activeSubTab === 'history') {
       fetchHistoricalPositions();
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, wsStatus]);
 
   // Format currency values
   const formatCurrency = (value) => {
@@ -223,12 +332,49 @@ export function PositionsTab() {
         >
           History ({historicalPositions.length})
         </button>
-        <button
-          onClick={() => activeSubTab === 'active' ? fetchOpenPositions() : fetchHistoricalPositions()}
-          className="ml-auto px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10 transition-all duration-200"
-        >
-          🔄 Refresh
-        </button>
+        <div className="ml-auto flex items-center gap-3">
+          {/* WebSocket Status Indicator */}
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${
+              wsStatus === 'connected' ? 'bg-green-400' :
+              wsStatus === 'connecting' ? 'bg-yellow-400' :
+              wsStatus === 'error' ? 'bg-red-400' :
+              'bg-slate-400'
+            }`}></div>
+            <span className="text-xs text-slate-400">
+              {wsStatus === 'connected' ? 'Live' :
+               wsStatus === 'connecting' ? 'Connecting...' :
+               wsStatus === 'error' ? 'Error' :
+               'Disconnected'}
+            </span>
+          </div>
+          
+          {wsStatus !== 'connected' && (
+            <button
+              onClick={reconnectWebSocket}
+              className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30 hover:from-cyan-500/30 hover:to-blue-500/30 hover:text-cyan-200 hover:border-cyan-400/50 hover:shadow-md hover:shadow-cyan-500/10 transition-all duration-200"
+            >
+              🔌 Reconnect
+            </button>
+          )}
+          
+          <button
+            onClick={() => {
+              if (activeSubTab === 'active') {
+                if (wsStatus === 'connected') {
+                  requestPositionsViaWS();
+                } else {
+                  fetchOpenPositions();
+                }
+              } else {
+                fetchHistoricalPositions();
+              }
+            }}
+            className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10 transition-all duration-200"
+          >
+            🔄 Refresh {wsStatus === 'connected' && activeSubTab === 'active' ? '(WS)' : ''}
+          </button>
+        </div>
       </div>
 
       {/* Summary Stats */}
