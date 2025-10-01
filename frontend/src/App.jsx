@@ -45,20 +45,22 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="flex flex-col h-screen">
+    <div className="min-h-screen w-full relative" style={{ backgroundColor: '#0f0f0f' }}>
+    
+      
+      <div className="relative z-10 flex flex-col h-screen">
         {/* Header */}
-        <div className="p-4 border-b border-gray-800 bg-gray-900">
+        <div className="p-4 bg-black/20 backdrop-blur-sm">
           <div className="max-w-6xl mx-auto">
-            <h1 className="text-2xl font-bold">BreakTheMatrix Trading</h1>
+            <h1 className="text-2xl font-bold text-white">BreakTheMatrix Trading</h1>
           </div>
         </div>
 
         {/* Controls */}
-        <div className="p-4 bg-gray-900 border-b border-gray-800">
+        <div className="p-4 bg-black/20 backdrop-blur-sm">
           <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Trading Provider</label>
+              <label className="block text-sm font-medium mb-2 text-white">Trading Provider</label>
               <TradingProviderDropdown 
                 onProviderSelect={handleProviderSelect}
                 selectedProvider={selectedProvider}
@@ -66,22 +68,22 @@ export default function App() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2">Symbol</label>
+              <label className="block text-sm font-medium mb-2 text-white">Symbol</label>
               <input
                 type="text"
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-gray-700/80 backdrop-blur-sm text-white rounded-lg border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="e.g., ETHUSDT"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2">Interval</label>
+              <label className="block text-sm font-medium mb-2 text-white">Interval</label>
               <select
                 value={interval}
                 onChange={(e) => setInterval(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-gray-700/80 backdrop-blur-sm text-white rounded-lg border border-gray-600/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="1m">1 Minute</option>
                 <option value="5m">5 Minutes</option>
@@ -95,7 +97,7 @@ export default function App() {
         </div>
 
         {/* Chart Area */}
-        <div className="flex-1 bg-gray-800">
+        <div className="flex-1 bg-black/30 backdrop-blur-sm">
           <Chart 
             provider={selectedProvider}
             symbol={symbol}

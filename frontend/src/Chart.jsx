@@ -1,13 +1,18 @@
 import { createChart, ColorType } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 
+// Global variable for default zoom level (last N candles)
+if (typeof window !== 'undefined' && !window.BTM_DEFAULT_ZOOM_CANDLES) {
+    window.BTM_DEFAULT_ZOOM_CANDLES = 250;
+}
+
 export const ChartComponent = props => {
     const {
         data,
         loading = false,
         error = null,
         colors: {
-            backgroundColor = 'transparent',
+            backgroundColor = '#0f0f0f',
             textColor = 'black',
             upColor = '#26a69a',
             downColor = '#ef5350',
@@ -40,8 +45,21 @@ export const ChartComponent = props => {
                 width: chartContainerRef.current.clientWidth,
                 height: chartContainerRef.current.clientHeight || 400,
                 grid: { 
-                    vertLines: { color: '#2a2e39' },
-                    horzLines: { color: '#2a2e39' },
+                    vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                    horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                },
+                timeScale: {
+                    rightOffset: 12,
+                    barSpacing: 3,
+                    fixLeftEdge: false,
+                    fixRightEdge: false,
+                    lockVisibleTimeRangeOnResize: true,
+                    rightBarStaysOnScroll: true,
+                    borderVisible: false,
+                    borderColor: '#fff000',
+                    visible: true,
+                    timeVisible: true,
+                    secondsVisible: false,
                 },
             });
 
@@ -61,7 +79,16 @@ export const ChartComponent = props => {
             // Set initial data if available
             if (data && data.length > 0) {
                 candleSeries.setData(data);
-                chart.timeScale().fitContent();
+                // Default zoom: show last N candles using logical range
+                const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
+                if (data.length > defaultZoomCandles) {
+                    chart.timeScale().setVisibleLogicalRange({
+                        from: data.length - defaultZoomCandles,
+                        to: data.length - 1,
+                    });
+                } else {
+                    chart.timeScale().fitContent();
+                }
             }
 
             window.addEventListener('resize', () => {
@@ -88,7 +115,16 @@ export const ChartComponent = props => {
             console.log('Updating chart with new data:', data.length, 'candles');
             seriesRef.current.setData(data);
             if (chartRef.current) {
-                chartRef.current.timeScale().fitContent();
+                // Default zoom: show last N candles using logical range
+                const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
+                if (data.length > defaultZoomCandles) {
+                    chartRef.current.timeScale().setVisibleLogicalRange({
+                        from: data.length - defaultZoomCandles,
+                        to: data.length - 1,
+                    });
+                } else {
+                    chartRef.current.timeScale().fitContent();
+                }
             }
         }
     }, [data]);
