@@ -277,5 +277,11 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             this.rawData = rawData;
         }
     }
+
+    @Override
+    public Map<String, IndicatorMetadata> getIndicatorMetadata() {
+        // Default implementation - subclasses should override to define their indicators
+        return new HashMap<>();
+    }
 }
 

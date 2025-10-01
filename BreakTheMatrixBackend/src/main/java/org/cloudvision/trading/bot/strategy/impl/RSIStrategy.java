@@ -3,6 +3,7 @@ package org.cloudvision.trading.bot.strategy.impl;
 import org.cloudvision.trading.bot.indicators.TechnicalIndicators;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.AbstractTradingStrategy;
+import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
 import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
@@ -104,6 +105,21 @@ public class RSIStrategy extends AbstractTradingStrategy {
     @Override
     protected int getMaxHistorySize() {
         return rsiPeriod + 50;
+    }
+    
+    @Override
+    public Map<String, IndicatorMetadata> getIndicatorMetadata() {
+        Map<String, IndicatorMetadata> metadata = new HashMap<>();
+        
+        // RSI - Area chart in separate pane
+        metadata.put("RSI", IndicatorMetadata.builder("RSI")
+            .displayName("RSI(" + rsiPeriod + ")")
+            .asArea("rgba(76, 175, 80, 0.4)", "rgba(76, 175, 80, 0.0)", "rgba(76, 175, 80, 1)")
+            .separatePane(true)
+            .paneOrder(1)
+            .build());
+        
+        return metadata;
     }
     
     @Override

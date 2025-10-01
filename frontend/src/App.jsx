@@ -12,6 +12,7 @@ export default function App() {
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
+  const [activeStrategies, setActiveStrategies] = useState([]);
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -45,6 +46,11 @@ export default function App() {
     localStorage.setItem('tradingInterval', interval);
   }, [interval]);
 
+  // Fetch active strategies on component mount
+  useEffect(() => {
+    fetchActiveStrategies();
+  }, []);
+
   const handleProviderSelect = (provider) => {
     setSelectedProvider(provider);
     console.log('Selected provider:', provider);
@@ -54,6 +60,22 @@ export default function App() {
     setSymbol(newSymbol);
     setIsSymbolOpen(false);
     console.log('Selected symbol:', newSymbol);
+  };
+
+  // Fetch active strategies
+  const fetchActiveStrategies = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/bot/strategies/active');
+      if (response.ok) {
+        const strategies = await response.json();
+        setActiveStrategies(strategies);
+        console.log('Active strategies loaded:', strategies);
+      } else {
+        console.error('Failed to fetch active strategies:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching active strategies:', error);
+    }
   };
 
   const intervalOptions = [
@@ -158,6 +180,7 @@ export default function App() {
                   provider={selectedProvider}
                   symbol={symbol}
                   interval={interval}
+                  activeStrategies={activeStrategies}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">

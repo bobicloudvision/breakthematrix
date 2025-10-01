@@ -108,6 +108,45 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public Map<String, IndicatorMetadata> getIndicatorMetadata() {
+        Map<String, IndicatorMetadata> metadata = new HashMap<>();
+        
+        // Short Moving Average - Red line
+        metadata.put("shortMA", IndicatorMetadata.builder("shortMA")
+            .displayName("SMA " + shortPeriod)
+            .asLine("#FF6B6B", 2)
+            .separatePane(false)
+            .paneOrder(0) // Main chart
+            .build());
+        
+        // Long Moving Average - Blue line
+        metadata.put("longMA", IndicatorMetadata.builder("longMA")
+            .displayName("SMA " + longPeriod)
+            .asLine("#4ECDC4", 2)
+            .separatePane(false)
+            .paneOrder(0) // Main chart
+            .build());
+        
+        // Spread - Histogram in separate pane
+        metadata.put("spread", IndicatorMetadata.builder("spread")
+            .displayName("MA Spread")
+            .asHistogram("#26a69a")
+            .separatePane(true)
+            .paneOrder(1)
+            .build());
+        
+        // Spread Percentage - Not displayed by default (but available)
+        metadata.put("spreadPercent", IndicatorMetadata.builder("spreadPercent")
+            .displayName("Spread %")
+            .asLine("#95A5A6", 1)
+            .separatePane(true)
+            .paneOrder(1)
+            .build());
+        
+        return metadata;
+    }
+    
+    @Override
     protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
         // Calculate initial moving averages and set signal state
         for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {

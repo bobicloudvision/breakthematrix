@@ -5,6 +5,7 @@ import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
 
 import java.util.List;
+import java.util.Map;
 
 public interface TradingStrategy {
     
@@ -62,4 +63,11 @@ public interface TradingStrategy {
      * Get strategy statistics
      */
     StrategyStats getStats();
+    
+    /**
+     * Get indicator visualization metadata
+     * Defines how each indicator should be displayed in charts
+     * @return Map of indicator name to its visualization metadata
+     */
+    Map<String, IndicatorMetadata> getIndicatorMetadata();
 }
