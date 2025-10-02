@@ -73,11 +73,20 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
         else if (shortMA.compareTo(longMA) < 0 && (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
-            Order sellOrder = createSellOrder(symbol, currentPrice);
-            orders.add(sellOrder);
-            lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
-            action = "SELL";
-            System.out.println("🔴 MA Strategy: SELL signal for " + symbol + " at " + currentPrice);
+            // FUTURES: Only create sell order if we have open LONG positions
+            BigDecimal positionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            
+            if (positionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order sellOrder = createSellOrder(symbol, currentPrice);
+                orders.add(sellOrder);
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
+                action = "SELL";
+                System.out.println("🔴 MA Strategy: SELL signal for " + symbol + " at " + currentPrice + 
+                    " | Closing position: " + positionQuantity);
+            } else {
+                System.out.println("⚠️ MA Strategy: SELL signal for " + symbol + " but no open position to close");
+                // Keep previous signal state - don't change it
+            }
         }
         
         // Generate visualization data

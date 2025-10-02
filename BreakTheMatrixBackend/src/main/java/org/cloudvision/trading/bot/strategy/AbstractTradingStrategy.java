@@ -132,11 +132,11 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
 
     /**
-     * Create a buy order
+     * Create a buy order to open LONG position
      */
     protected Order createBuyOrder(String symbol, BigDecimal price) {
         BigDecimal quantity = calculateOrderQuantity(symbol, price);
-        return new Order(
+        Order order = new Order(
             UUID.randomUUID().toString(),
             symbol,
             OrderType.MARKET,
@@ -145,19 +145,30 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             price,
             getStrategyId()
         );
+        order.setPositionSide(org.cloudvision.trading.bot.account.PositionSide.LONG);
+        return order;
     }
 
     /**
-     * Create a sell order - sells the entire position
+     * DEPRECATED: Use createCloseLongOrder() instead for clarity
+     * Create a sell order to close LONG position
      */
+    @Deprecated
     protected Order createSellOrder(String symbol, BigDecimal price) {
-        BigDecimal quantity = calculateSellQuantity(symbol);
+        return createCloseLongOrder(symbol, price);
+    }
+    
+    /**
+     * Create a sell order to close LONG position
+     */
+    protected Order createCloseLongOrder(String symbol, BigDecimal price) {
+        BigDecimal quantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
         
         if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            System.out.println("⚠️ No position to sell for " + symbol);
+            System.out.println("⚠️ No LONG position to close for " + symbol);
         }
         
-        return new Order(
+        Order order = new Order(
             UUID.randomUUID().toString(),
             symbol,
             OrderType.MARKET,
@@ -166,6 +177,49 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             price,
             getStrategyId()
         );
+        order.setPositionSide(org.cloudvision.trading.bot.account.PositionSide.LONG);
+        return order;
+    }
+    
+    /**
+     * FUTURES: Create a sell order to open SHORT position
+     */
+    protected Order createShortOrder(String symbol, BigDecimal price) {
+        BigDecimal quantity = calculateOrderQuantity(symbol, price);
+        Order order = new Order(
+            UUID.randomUUID().toString(),
+            symbol,
+            OrderType.MARKET,
+            OrderSide.SELL,
+            quantity,
+            price,
+            getStrategyId()
+        );
+        order.setPositionSide(org.cloudvision.trading.bot.account.PositionSide.SHORT);
+        return order;
+    }
+    
+    /**
+     * FUTURES: Create a buy order to close SHORT position
+     */
+    protected Order createCloseShortOrder(String symbol, BigDecimal price) {
+        BigDecimal quantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
+        
+        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            System.out.println("⚠️ No SHORT position to close for " + symbol);
+        }
+        
+        Order order = new Order(
+            UUID.randomUUID().toString(),
+            symbol,
+            OrderType.MARKET,
+            OrderSide.BUY,
+            quantity,
+            price,
+            getStrategyId()
+        );
+        order.setPositionSide(org.cloudvision.trading.bot.account.PositionSide.SHORT);
+        return order;
     }
 
     /**
@@ -179,9 +233,9 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
     
     /**
-     * FUTURES: Calculate sell quantity - returns the total quantity of open positions
+     * FUTURES: Calculate quantity to close for a specific position side (LONG or SHORT)
      */
-    protected BigDecimal calculateSellQuantity(String symbol) {
+    protected BigDecimal calculateCloseQuantity(String symbol, org.cloudvision.trading.bot.account.PositionSide positionSide) {
         if (accountManager == null) {
             System.out.println("⚠️ AccountManager not available, using default quantity calculation");
             return BigDecimal.ZERO;
@@ -194,25 +248,29 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
                 return BigDecimal.ZERO;
             }
             
-            // FUTURES: Get total quantity from open positions
+            // FUTURES: Get total quantity from open positions of the specific side
             List<org.cloudvision.trading.bot.account.Position> openPositions = 
-                activeAccount.getOpenPositionsBySymbol(symbol);
+                activeAccount.getOpenPositionsBySymbol(symbol).stream()
+                    .filter(p -> p.getSide() == positionSide)
+                    .toList();
             
             if (openPositions.isEmpty()) {
-                System.out.println("⚠️ No open positions for " + symbol);
+                String sideStr = positionSide == org.cloudvision.trading.bot.account.PositionSide.LONG ? "LONG" : "SHORT";
+                System.out.println("⚠️ No open " + sideStr + " positions for " + symbol);
                 return BigDecimal.ZERO;
             }
             
-            // Sum up all position quantities for this symbol
+            // Sum up all position quantities for this symbol and side
             BigDecimal totalQuantity = openPositions.stream()
                 .map(org.cloudvision.trading.bot.account.Position::getQuantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             
-            System.out.println("📊 Total open position for " + symbol + ": " + totalQuantity);
+            String sideStr = positionSide == org.cloudvision.trading.bot.account.PositionSide.LONG ? "LONG" : "SHORT";
+            System.out.println("📊 Total open " + sideStr + " position for " + symbol + ": " + totalQuantity);
             return totalQuantity;
             
         } catch (Exception e) {
-            System.err.println("❌ Error calculating sell quantity: " + e.getMessage());
+            System.err.println("❌ Error calculating close quantity: " + e.getMessage());
             return BigDecimal.ZERO;
         }
     }

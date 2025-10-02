@@ -1,5 +1,7 @@
 package org.cloudvision.trading.bot.model;
 
+import org.cloudvision.trading.bot.account.PositionSide;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -17,6 +19,9 @@ public class Order {
     private BigDecimal executedPrice;
     private String strategyId;
     
+    // FUTURES: Position side (LONG or SHORT)
+    private PositionSide positionSide;
+    
     // Risk management - optional stop loss and take profit suggested by strategy
     private BigDecimal suggestedStopLoss;
     private BigDecimal suggestedTakeProfit;
@@ -33,6 +38,7 @@ public class Order {
         this.status = OrderStatus.PENDING;
         this.createdAt = Instant.now();
         this.executedQuantity = BigDecimal.ZERO;
+        // positionSide must be set explicitly by the strategy
     }
 
     // Getters and setters
@@ -59,6 +65,10 @@ public class Order {
     
     public BigDecimal getSuggestedTakeProfit() { return suggestedTakeProfit; }
     public void setSuggestedTakeProfit(BigDecimal suggestedTakeProfit) { this.suggestedTakeProfit = suggestedTakeProfit; }
+    
+    // FUTURES: Position side
+    public PositionSide getPositionSide() { return positionSide; }
+    public void setPositionSide(PositionSide positionSide) { this.positionSide = positionSide; }
 
     @Override
     public String toString() {

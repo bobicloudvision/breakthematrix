@@ -1,6 +1,7 @@
 package org.cloudvision.trading.bot.account;
 
 import org.cloudvision.trading.bot.model.Order;
+import org.cloudvision.trading.bot.model.OrderSide;
 import org.cloudvision.trading.bot.model.OrderStatus;
 import org.springframework.stereotype.Component;
 
@@ -101,80 +102,88 @@ public class PaperTradingAccount implements TradingAccount {
             
             // FUTURES TRADING: Calculate position value (margin required)
             BigDecimal positionValue = order.getPrice().multiply(order.getQuantity());
+            PositionSide positionSide = order.getPositionSide() != null ? order.getPositionSide() : PositionSide.LONG;
             
-            switch (order.getSide()) {
-                case BUY:
-                    // FUTURES: Open LONG position - Lock margin
-                    BigDecimal availableBalance = balance.subtract(lockedMargin);
-                    if (availableBalance.compareTo(positionValue) < 0) {
-                        order.setStatus(OrderStatus.REJECTED);
-                        System.err.println("❌ Insufficient available balance (margin)");
-                        System.err.println("   Available: $" + availableBalance + " | Required: $" + positionValue);
-                        return order;
-                    }
+            // Determine order intent
+            boolean isOpening = (order.getSide() == OrderSide.BUY && positionSide == PositionSide.LONG) ||
+                               (order.getSide() == OrderSide.SELL && positionSide == PositionSide.SHORT);
+            
+            if (isOpening) {
+                // OPENING POSITION (LONG or SHORT) - Lock margin
+                BigDecimal availableBalance = balance.subtract(lockedMargin);
+                if (availableBalance.compareTo(positionValue) < 0) {
+                    order.setStatus(OrderStatus.REJECTED);
+                    System.err.println("❌ Insufficient available balance (margin)");
+                    System.err.println("   Available: $" + availableBalance + " | Required: $" + positionValue);
+                    return order;
+                }
+                
+                // Lock margin for this position
+                lockedMargin = lockedMargin.add(positionValue);
+                
+                // Open position (LONG or SHORT)
+                Position newPosition = positionManager.openPosition(order.getSymbol(), positionSide, 
+                    order.getPrice(), order.getQuantity());
+                
+                // Set stop loss and take profit if suggested by strategy
+                if (order.getSuggestedStopLoss() != null) {
+                    newPosition.setStopLoss(order.getSuggestedStopLoss());
+                    System.out.println("🛡️ Stop loss set at: " + order.getSuggestedStopLoss());
+                }
+                if (order.getSuggestedTakeProfit() != null) {
+                    newPosition.setTakeProfit(order.getSuggestedTakeProfit());
+                    System.out.println("🎯 Take profit set at: " + order.getSuggestedTakeProfit());
+                }
+                
+                newPosition.setStrategyId(order.getStrategyId());
+                
+                String positionType = positionSide == PositionSide.LONG ? "LONG" : "SHORT";
+                System.out.println("💰 Opened " + positionType + " position | Margin locked: $" + positionValue + 
+                    " | Total locked: $" + lockedMargin);
+                
+            } else {
+                // CLOSING POSITION (LONG or SHORT) - Unlock margin and apply P&L
+                List<Position> openPositions = positionManager.getOpenPositionsBySymbol(order.getSymbol()).stream()
+                    .filter(p -> p.getSide() == positionSide)  // Filter by position side
+                    .toList();
                     
-                    // Lock margin for this position
-                    lockedMargin = lockedMargin.add(positionValue);
+                if (openPositions.isEmpty()) {
+                    order.setStatus(OrderStatus.REJECTED);
+                    String positionType = positionSide == PositionSide.LONG ? "LONG" : "SHORT";
+                    System.err.println("❌ No open " + positionType + " positions to close for " + order.getSymbol());
+                    return order;
+                }
+                
+                // Close positions (FIFO - close oldest first)
+                BigDecimal remainingQty = order.getQuantity();
+                for (Position position : openPositions) {
+                    if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
                     
-                    // Open LONG position
-                    Position longPosition = positionManager.openPosition(order.getSymbol(), PositionSide.LONG, 
-                        order.getPrice(), order.getQuantity());
+                    BigDecimal closeQty = remainingQty.min(position.getQuantity());
+                    BigDecimal pnlBeforeClose = position.getRealizedPnL();
                     
-                    // Set stop loss and take profit if suggested by strategy
-                    if (order.getSuggestedStopLoss() != null) {
-                        longPosition.setStopLoss(order.getSuggestedStopLoss());
-                        System.out.println("🛡️ Stop loss set at: " + order.getSuggestedStopLoss());
-                    }
-                    if (order.getSuggestedTakeProfit() != null) {
-                        longPosition.setTakeProfit(order.getSuggestedTakeProfit());
-                        System.out.println("🎯 Take profit set at: " + order.getSuggestedTakeProfit());
-                    }
+                    // Close the position
+                    positionManager.closePosition(position.getPositionId(), order.getPrice(), closeQty);
                     
-                    longPosition.setStrategyId(order.getStrategyId());
+                    // Calculate P&L from this close
+                    BigDecimal positionPnL = position.getRealizedPnL().subtract(pnlBeforeClose);
                     
-                    System.out.println("💰 Margin locked: $" + positionValue + " | Total locked: $" + lockedMargin);
-                    break;
+                    // Unlock margin proportionally
+                    BigDecimal marginToUnlock = position.getEntryPrice().multiply(closeQty);
+                    lockedMargin = lockedMargin.subtract(marginToUnlock);
                     
-                case SELL:
-                    // FUTURES: Close LONG position - Unlock margin and apply P&L
-                    List<Position> openPositions = positionManager.getOpenPositionsBySymbol(order.getSymbol());
-                    if (openPositions.isEmpty()) {
-                        order.setStatus(OrderStatus.REJECTED);
-                        System.err.println("❌ No open positions to close for " + order.getSymbol());
-                        return order;
-                    }
+                    // Apply P&L to balance
+                    balance = balance.add(positionPnL);
                     
-                    // Close positions (FIFO - close oldest first)
-                    BigDecimal remainingQty = order.getQuantity();
-                    for (Position position : openPositions) {
-                        if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
-                        
-                        BigDecimal closeQty = remainingQty.min(position.getQuantity());
-                        BigDecimal pnlBeforeClose = position.getRealizedPnL();
-                        BigDecimal originalPositionQty = position.getQuantity();
-                        
-                        // Close the position
-                        positionManager.closePosition(position.getPositionId(), order.getPrice(), closeQty);
-                        
-                        // Calculate P&L from this close
-                        BigDecimal positionPnL = position.getRealizedPnL().subtract(pnlBeforeClose);
-                        
-                        // Unlock margin proportionally
-                        BigDecimal marginToUnlock = position.getEntryPrice().multiply(closeQty);
-                        lockedMargin = lockedMargin.subtract(marginToUnlock);
-                        
-                        // Apply P&L to balance
-                        balance = balance.add(positionPnL);
-                        
-                        // Update account statistics
-                        updateAccountStatsOnClose(positionPnL);
-                        
-                        System.out.println("💰 Margin unlocked: $" + marginToUnlock + 
-                            " | P&L: $" + positionPnL + " | New balance: $" + balance);
-                        
-                        remainingQty = remainingQty.subtract(closeQty);
-                    }
-                    break;
+                    // Update account statistics
+                    updateAccountStatsOnClose(positionPnL);
+                    
+                    String positionType = position.getSide() == PositionSide.LONG ? "LONG" : "SHORT";
+                    System.out.println("💰 Closed " + positionType + " | Margin unlocked: $" + marginToUnlock + 
+                        " | P&L: $" + positionPnL + " | New balance: $" + balance);
+                    
+                    remainingQty = remainingQty.subtract(closeQty);
+                }
             }
             
             // Update order status
@@ -428,9 +437,47 @@ public class PaperTradingAccount implements TradingAccount {
         // Apply P&L to balance
         balance = balance.add(pnl);
         
+        // Create synthetic order for order history
+        createSyntheticCloseOrder(position);
+        
         System.out.println("🔓 Auto-close: Unlocked margin $" + marginToUnlock + 
             " | P&L: $" + pnl + " | New balance: $" + balance + 
             " | Available: $" + getAvailableBalance());
+    }
+    
+    /**
+     * Create a synthetic order for automatic position closes (stop loss/take profit)
+     * This ensures all position closes are visible in order history
+     */
+    private void createSyntheticCloseOrder(Position position) {
+        // Determine order side based on position side
+        // LONG position closes with SELL order
+        // SHORT position closes with BUY order
+        OrderSide orderSide = position.getSide() == PositionSide.LONG ? OrderSide.SELL : OrderSide.BUY;
+        
+        Order syntheticOrder = new Order(
+            java.util.UUID.randomUUID().toString(),
+            position.getSymbol(),
+            org.cloudvision.trading.bot.model.OrderType.MARKET,
+            orderSide,
+            position.getOriginalQuantity(),  // Use original quantity
+            position.getExitPrice(),
+            position.getStrategyId() != null ? position.getStrategyId() : "auto-close"
+        );
+        
+        syntheticOrder.setPositionSide(position.getSide());
+        syntheticOrder.setStatus(OrderStatus.FILLED);
+        syntheticOrder.setExecutedQuantity(position.getOriginalQuantity());
+        syntheticOrder.setExecutedPrice(position.getExitPrice());
+        syntheticOrder.setExecutedAt(position.getExitTime());
+        
+        // Store in order history
+        orders.put(syntheticOrder.getId(), syntheticOrder);
+        
+        String closeReason = position.getStopLoss() != null && 
+            position.getExitPrice().compareTo(position.getStopLoss()) <= 0 ? "Stop Loss" : "Take Profit";
+        
+        System.out.println("📝 Created synthetic order for " + closeReason + ": " + syntheticOrder.getId());
     }
     
     /**

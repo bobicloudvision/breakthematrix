@@ -76,11 +76,18 @@ public class RSIStrategy extends AbstractTradingStrategy {
         else if (rsi.compareTo(new BigDecimal(overboughtThreshold)) > 0 && 
                  (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
             
-            Order sellOrder = createSellOrder(symbol, currentPrice);
-            orders.add(sellOrder);
-            lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish
-            System.out.println("🔴 RSI Strategy: SELL signal for " + symbol + 
-                             " at " + currentPrice + " (RSI: " + rsi + ")");
+            // FUTURES: Only create sell order if we have open LONG positions
+            BigDecimal positionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            
+            if (positionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order sellOrder = createSellOrder(symbol, currentPrice);
+                orders.add(sellOrder);
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish
+                System.out.println("🔴 RSI Strategy: SELL signal for " + symbol + 
+                                 " at " + currentPrice + " (RSI: " + rsi + ") | Closing position: " + positionQuantity);
+            } else {
+                System.out.println("⚠️ RSI Strategy: SELL signal for " + symbol + " (RSI: " + rsi + ") but no open position to close");
+            }
         }
         
         return orders;
