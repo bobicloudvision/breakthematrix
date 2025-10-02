@@ -42,7 +42,6 @@ export const ChartComponent = props => {
     const chartRef = useRef();
     const seriesRef = useRef();
     const indicatorSeriesRef = useRef({});
-    const markersRef = useRef([]);
     const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
@@ -126,11 +125,14 @@ export const ChartComponent = props => {
             return () => {
                 isMountedRef.current = false;
                 window.removeEventListener('resize', handleResize);
+                if (markerPluginRef.current) {
+                    markerPluginRef.current.detach();
+                    markerPluginRef.current = null;
+                }
                 chart.remove();
                 chartRef.current = null;
                 seriesRef.current = null;
                 indicatorSeriesRef.current = {};
-                markersRef.current = [];
             };
         },
         [backgroundColor, textColor, upColor, downColor, wickUpColor, wickDownColor, borderUpColor, borderDownColor]
@@ -881,25 +883,40 @@ export const ChartComponent = props => {
             // Start processing indicators
             processIndicator(0);
 
-            // Add markers for trading signals (v5 API uses createSeriesMarkers)
-            if (strategyData.markers && Array.isArray(strategyData.markers) && strategyData.markers.length > 0) {
-                console.log('Adding markers:', strategyData.markers.length, 'markers');
-                try {
-                    // Remove existing markers plugin if any
-                    if (markerPluginRef.current) {
-                        markerPluginRef.current.setMarkers([]);
-                    }
-                    
-                    // Create new markers plugin
-                    markerPluginRef.current = createSeriesMarkers(seriesRef.current, strategyData.markers);
-                    console.log('Markers added successfully');
-                } catch (e) {
-                    console.error('Error setting markers:', e);
+            // Add markers for trading signals using v5 plugin API
+            // In v5, markers are now managed through a plugin, not directly on the series
+            setTimeout(() => {
+                if (!seriesRef.current || !isMountedRef.current) {
+                    console.warn('Cannot add markers: series ref is not available');
+                    return;
                 }
-            } else if (markerPluginRef.current) {
-                // Clear markers if no markers in strategy data
-                markerPluginRef.current.setMarkers([]);
-            }
+                
+                try {
+                    if (strategyData.markers && Array.isArray(strategyData.markers) && strategyData.markers.length > 0) {
+                        console.log('Adding markers using v5 plugin API:', strategyData.markers.length, 'markers');
+                        
+                        // Create or update marker plugin
+                        if (!markerPluginRef.current) {
+                            // Create new marker plugin
+                            markerPluginRef.current = createSeriesMarkers(seriesRef.current, strategyData.markers);
+                            console.log('✅ Marker plugin created with', strategyData.markers.length, 'markers');
+                        } else {
+                            // Update existing plugin with new markers
+                            markerPluginRef.current.setMarkers(strategyData.markers);
+                            console.log('✅ Marker plugin updated with', strategyData.markers.length, 'markers');
+                        }
+                    } else {
+                        // Clear markers if no markers in strategy data
+                        if (markerPluginRef.current) {
+                            console.log('Clearing markers...');
+                            markerPluginRef.current.setMarkers([]);
+                        }
+                    }
+                } catch (e) {
+                    console.error('❌ Error setting markers:', e);
+                    console.error('Error stack:', e.stack);
+                }
+            }, 200); // Small delay to ensure indicators are processed
             
             // Add boxes/rectangles if provided (with delay to ensure chart is ready)
             if (strategyData.boxes && Array.isArray(strategyData.boxes) && strategyData.boxes.length > 0) {
