@@ -2,6 +2,7 @@ package org.cloudvision.trading.bot.visualization;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 public class StrategyVisualizationData {
@@ -13,11 +14,19 @@ public class StrategyVisualizationData {
     private final Map<String, Object> signals;
     private final Map<String, BigDecimal> performance;
     private final String action; // "BUY", "SELL", "HOLD"
+    private final List<Map<String, Object>> boxes; // Visualization boxes (support/resistance zones, etc.)
 
     public StrategyVisualizationData(String strategyId, String symbol, Instant timestamp, 
                                    BigDecimal price, Map<String, BigDecimal> indicators,
                                    Map<String, Object> signals, Map<String, BigDecimal> performance,
                                    String action) {
+        this(strategyId, symbol, timestamp, price, indicators, signals, performance, action, null);
+    }
+
+    public StrategyVisualizationData(String strategyId, String symbol, Instant timestamp, 
+                                   BigDecimal price, Map<String, BigDecimal> indicators,
+                                   Map<String, Object> signals, Map<String, BigDecimal> performance,
+                                   String action, List<Map<String, Object>> boxes) {
         this.strategyId = strategyId;
         this.symbol = symbol;
         this.timestamp = timestamp;
@@ -26,6 +35,7 @@ public class StrategyVisualizationData {
         this.signals = signals;
         this.performance = performance;
         this.action = action;
+        this.boxes = boxes;
     }
 
     // Getters
@@ -37,10 +47,11 @@ public class StrategyVisualizationData {
     public Map<String, Object> getSignals() { return signals; }
     public Map<String, BigDecimal> getPerformance() { return performance; }
     public String getAction() { return action; }
+    public List<Map<String, Object>> getBoxes() { return boxes; }
 
     @Override
     public String toString() {
-        return String.format("StrategyViz{strategy='%s', symbol='%s', price=%s, action='%s', indicators=%s}",
-                strategyId, symbol, price, action, indicators.keySet());
+        return String.format("StrategyViz{strategy='%s', symbol='%s', price=%s, action='%s', indicators=%s, boxes=%d}",
+                strategyId, symbol, price, action, indicators.keySet(), boxes != null ? boxes.size() : 0);
     }
 }

@@ -33,6 +33,7 @@ export const ChartComponent = props => {
     const markersRef = useRef([]);
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
+    const boxesContainerRef = useRef(null);
 
     useEffect(
         () => {
@@ -175,6 +176,236 @@ export const ChartComponent = props => {
         }
     }, [strategyData, data]);
 
+    // Draw boxes/rectangles on chart
+    const drawBoxes = (chart, series, boxes) => {
+        // Get visible time range
+        const timeRange = chart.timeScale().getVisibleRange();
+        console.log('Chart visible time range:', {
+            from: timeRange?.from,
+            to: timeRange?.to,
+            fromDate: timeRange?.from ? new Date(timeRange.from * 1000).toISOString() : 'null',
+            toDate: timeRange?.to ? new Date(timeRange.to * 1000).toISOString() : 'null'
+        });
+        
+        // Get logical range (all loaded data)
+        const logicalRange = chart.timeScale().getVisibleLogicalRange();
+        console.log('Chart logical range:', logicalRange);
+        
+        console.log('drawBoxes called:', {
+            hasContainer: !!chartContainerRef.current,
+            hasChart: !!chart,
+            hasSeries: !!series,
+            boxesCount: boxes.length,
+            chartDataLength: data?.length
+        });
+        
+        if (!chartContainerRef.current || !chart || !series) {
+            console.error('drawBoxes: Missing required refs');
+            return;
+        }
+        
+        // Create or clear boxes container
+        if (!boxesContainerRef.current) {
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.top = '0';
+            container.style.left = '0';
+            container.style.right = '0';
+            container.style.bottom = '0';
+            container.style.pointerEvents = 'none';
+            container.style.zIndex = '10';
+            container.style.overflow = 'hidden';
+            chartContainerRef.current.style.position = 'relative';
+            chartContainerRef.current.appendChild(container);
+            boxesContainerRef.current = container;
+            console.log('Created boxes container');
+
+        } else {
+            // Clear existing boxes
+            boxesContainerRef.current.innerHTML = '';
+        }
+        
+        // Log the first and last data points in the chart
+        if (data && data.length > 0) {
+            console.log('Chart data range:', {
+                first: data[0].time,
+                last: data[data.length - 1].time,
+                firstDate: new Date(data[0].time * 1000).toISOString(),
+                lastDate: new Date(data[data.length - 1].time * 1000).toISOString(),
+                totalPoints: data.length
+            });
+        }
+        
+        console.log('Starting to process', boxes.length, 'boxes');
+        
+        boxes.forEach((box, idx) => {
+            console.log(`\n=== Processing box ${idx + 1} ===`);
+            try {
+                console.log(`Box ${idx + 1} data:`, box);
+                
+                // Try to get time scale first
+                const timeScale = chart.timeScale();
+                if (!timeScale) {
+                    console.error('Time scale not available');
+                    return;
+                }
+                
+                // IMPORTANT: We need to find the logical indices for our times
+                // timeToCoordinate might not work if times don't exactly match data points
+                // Let's try a different approach: find closest data points
+                let logical1 = null;
+                let logical2 = null;
+                
+                if (data && data.length > 0) {
+                    // Find logical indices for the box times
+                    for (let i = 0; i < data.length; i++) {
+                        if (data[i].time >= box.time1 && logical1 === null) {
+                            logical1 = i;
+                        }
+                        if (data[i].time >= box.time2) {
+                            logical2 = i;
+                            break;
+                        }
+                    }
+                    
+                    console.log(`Logical indices for box ${idx + 1}:`, { logical1, logical2 });
+                }
+                
+                // Convert time to pixel coordinates
+                let x1, x2;
+                if (logical1 !== null && logical2 !== null) {
+                    x1 = timeScale.logicalToCoordinate(logical1);
+                    x2 = timeScale.logicalToCoordinate(logical2);
+                    console.log(`Using logical coordinates: ${logical1} -> ${x1}, ${logical2} -> ${x2}`);
+                } else {
+                    x1 = timeScale.timeToCoordinate(box.time1);
+                    x2 = timeScale.timeToCoordinate(box.time2);
+                    console.log(`Using time coordinates directly`);
+                }
+                
+                console.log(`Time coordinates for box ${idx + 1}:`, { 
+                    time1: box.time1, 
+                    time2: box.time2,
+                    x1, 
+                    x2,
+                    time1Date: new Date(box.time1 * 1000).toISOString(),
+                    time2Date: new Date(box.time2 * 1000).toISOString()
+                });
+                
+                const y1 = series.priceToCoordinate(box.price1);
+                const y2 = series.priceToCoordinate(box.price2);
+                
+                console.log(`Box ${idx + 1} coordinates:`, { x1, x2, y1, y2 });
+                
+                if (x1 === null || x2 === null || y1 === null || y2 === null) {
+                    console.warn(`Could not calculate coordinates for box ${idx + 1}:`, box, { x1, x2, y1, y2 });
+                    
+                    // Try to understand why
+                    const visibleRange = timeScale.getVisibleRange();
+                    console.warn('Visible range:', visibleRange, {
+                        from: visibleRange?.from,
+                        to: visibleRange?.to,
+                        boxWithinRange: box.time1 >= visibleRange?.from && box.time2 <= visibleRange?.to
+                    });
+                    return;
+                }
+                
+                // Create box element
+                const boxElement = document.createElement('div');
+                boxElement.style.position = 'absolute';
+                boxElement.style.left = Math.min(x1, x2) + 'px';
+                boxElement.style.top = Math.min(y1, y2) + 'px';
+                boxElement.style.width = Math.abs(x2 - x1) + 'px';
+                boxElement.style.height = Math.abs(y2 - y1) + 'px';
+                boxElement.style.backgroundColor = box.backgroundColor || 'rgba(33, 150, 243, 0.1)';
+                boxElement.style.border = `${box.borderWidth || 1}px ${box.borderStyle || 'solid'} ${box.borderColor || '#2196F3'}`;
+                boxElement.style.boxSizing = 'border-box';
+                
+                // Add text label if provided
+                if (box.text) {
+                    const label = document.createElement('div');
+                    label.textContent = box.text;
+                    label.style.position = 'absolute';
+                    label.style.top = '4px';
+                    label.style.left = '4px';
+                    label.style.color = box.textColor || '#ffffff';
+                    label.style.fontSize = '11px';
+                    label.style.fontFamily = 'Arial, sans-serif';
+                    label.style.fontWeight = 'bold';
+                    label.style.textShadow = '1px 1px 2px rgba(0,0,0,0.8)';
+                    boxElement.appendChild(label);
+                }
+                
+                boxesContainerRef.current.appendChild(boxElement);
+                console.log(`✅ Box ${idx + 1} created successfully at position:`, {
+                    left: boxElement.style.left,
+                    top: boxElement.style.top,
+                    width: boxElement.style.width,
+                    height: boxElement.style.height,
+                    backgroundColor: boxElement.style.backgroundColor,
+                    border: boxElement.style.border
+                });
+            } catch (e) {
+                console.error(`❌ Error drawing box ${idx + 1}:`, e, box);
+            }
+        });
+        
+        console.log('Total boxes created:', boxesContainerRef.current.children.length);
+        
+        // Store box data with logical indices for updating
+        const boxesData = boxes.map(box => {
+            let logical1 = null;
+            let logical2 = null;
+            
+            if (data && data.length > 0) {
+                for (let i = 0; i < data.length; i++) {
+                    if (data[i].time >= box.time1 && logical1 === null) {
+                        logical1 = i;
+                    }
+                    if (data[i].time >= box.time2) {
+                        logical2 = i;
+                        break;
+                    }
+                }
+            }
+            
+            return { ...box, logical1, logical2 };
+        });
+        
+        // Update box positions on chart scroll/zoom
+        const updateBoxes = () => {
+            if (!boxesContainerRef.current || !chart || !series) return;
+            const boxElements = boxesContainerRef.current.children;
+            const timeScale = chart.timeScale();
+            
+            boxesData.forEach((box, index) => {
+                if (index >= boxElements.length) return;
+                
+                let x1, x2;
+                if (box.logical1 !== null && box.logical2 !== null) {
+                    x1 = timeScale.logicalToCoordinate(box.logical1);
+                    x2 = timeScale.logicalToCoordinate(box.logical2);
+                } else {
+                    x1 = timeScale.timeToCoordinate(box.time1);
+                    x2 = timeScale.timeToCoordinate(box.time2);
+                }
+                
+                const y1 = series.priceToCoordinate(box.price1);
+                const y2 = series.priceToCoordinate(box.price2);
+                
+                if (x1 !== null && x2 !== null && y1 !== null && y2 !== null) {
+                    const boxElement = boxElements[index];
+                    boxElement.style.left = Math.min(x1, x2) + 'px';
+                    boxElement.style.top = Math.min(y1, y2) + 'px';
+                    boxElement.style.width = Math.abs(x2 - x1) + 'px';
+                    boxElement.style.height = Math.abs(y2 - y1) + 'px';
+                }
+            });
+        };
+        
+        chart.timeScale().subscribeVisibleTimeRangeChange(updateBoxes);
+    };
+
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
         // Prevent concurrent indicator addition
@@ -190,8 +421,12 @@ export const ChartComponent = props => {
             indicators: !!(strategyData && strategyData.series && strategyData.series.indicators),
             mainSeries: !!seriesRef.current,
             data: !!data,
-            dataLength: data ? data.length : 0
+            dataLength: data ? data.length : 0,
+            hasBoxes: !!(strategyData && strategyData.boxes),
+            boxesLength: strategyData?.boxes?.length
         });
+        
+        console.log('Full strategyData structure:', strategyData);
 
         if (!chart) {
             console.log('Cannot add indicators: chart is null');
@@ -584,6 +819,23 @@ export const ChartComponent = props => {
                 }
             }
             
+            // Add boxes/rectangles if provided (with delay to ensure chart is ready)
+            if (strategyData.boxes && Array.isArray(strategyData.boxes) && strategyData.boxes.length > 0) {
+                console.log('Adding boxes:', strategyData.boxes.length, 'boxes', strategyData.boxes);
+                setTimeout(() => {
+                    if (chartRef.current && seriesRef.current && data && data.length > 0) {
+                        console.log('Attempting to draw boxes after delay...');
+                        drawBoxes(chartRef.current, seriesRef.current, strategyData.boxes);
+                    }
+                }, 500); // Increased delay
+            } else {
+                console.log('No boxes to add:', {
+                    hasBoxes: !!strategyData.boxes,
+                    isArray: Array.isArray(strategyData.boxes),
+                    length: strategyData.boxes?.length
+                });
+            }
+            
             console.log('All indicators added successfully');
             
             // Add a small delay to let the chart process the changes
@@ -796,7 +1048,13 @@ export function Chart({ provider, symbol, interval, activeStrategies = [] }) {
                         console.log('Fetching data for strategy:', strategy.id);
                         const data = await fetchStrategyData(strategy.id, symbol);
                         if (data) {
-                            console.log('Strategy data fetched successfully:', strategy.id);
+                            console.log('Strategy data fetched successfully:', strategy.id, {
+                                hasBoxes: !!data.boxes,
+                                boxesCount: data.boxes?.length,
+                                hasMarkers: !!data.markers,
+                                markersCount: data.markers?.length
+                            });
+                            console.log('Boxes in fetched data:', data.boxes);
                             strategyDataMap[strategy.id] = data;
                         } else {
                             console.log('Failed to fetch data for strategy:', strategy.id);

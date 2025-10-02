@@ -393,32 +393,55 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     private void generateVisualizationData(String symbol, BigDecimal price, Instant timestamp) {
         if (visualizationManager == null) return;
         
-        // Prepare indicators - show active order blocks
+        // Prepare indicators (empty for now since we're using boxes)
         Map<String, BigDecimal> indicators = new HashMap<>();
         
+        // Prepare boxes for order blocks
+        List<Map<String, Object>> boxes = new ArrayList<>();
+        
         LinkedList<OrderBlock> bullBlocks = bullishOrderBlocks.get(symbol);
+        int bullCount = (bullBlocks != null) ? bullBlocks.size() : 0;
+        
         if (bullBlocks != null && !bullBlocks.isEmpty()) {
-            int idx = 0;
             for (OrderBlock ob : bullBlocks) {
-                indicators.put("bullOB" + idx + "_top", ob.top);
-                indicators.put("bullOB" + idx + "_bottom", ob.bottom);
-                indicators.put("bullOB" + idx + "_avg", ob.average);
-                idx++;
-                if (idx >= 3) break;
+                Map<String, Object> box = new HashMap<>();
+                box.put("time1", ob.timestamp.getEpochSecond());
+                box.put("time2", timestamp.getEpochSecond()); // Extend to current time
+                box.put("price1", ob.top.doubleValue()); // Convert to double for JSON serialization
+                box.put("price2", ob.bottom.doubleValue());
+                box.put("backgroundColor", "rgba(22, 148, 0, 0.15)"); // Green with transparency
+                box.put("borderColor", "#169400");
+                box.put("borderWidth", 1);
+                box.put("borderStyle", "solid");
+                box.put("text", "Bullish OB");
+                box.put("textColor", "#169400");
+                boxes.add(box);
             }
         }
         
         LinkedList<OrderBlock> bearBlocks = bearishOrderBlocks.get(symbol);
+        int bearCount = (bearBlocks != null) ? bearBlocks.size() : 0;
+        
         if (bearBlocks != null && !bearBlocks.isEmpty()) {
-            int idx = 0;
             for (OrderBlock ob : bearBlocks) {
-                indicators.put("bearOB" + idx + "_top", ob.top);
-                indicators.put("bearOB" + idx + "_bottom", ob.bottom);
-                indicators.put("bearOB" + idx + "_avg", ob.average);
-                idx++;
-                if (idx >= 3) break;
+                Map<String, Object> box = new HashMap<>();
+                box.put("time1", ob.timestamp.getEpochSecond());
+                box.put("time2", timestamp.getEpochSecond()); // Extend to current time
+                box.put("price1", ob.top.doubleValue()); // Convert to double for JSON serialization
+                box.put("price2", ob.bottom.doubleValue());
+                box.put("backgroundColor", "rgba(255, 17, 0, 0.15)"); // Red with transparency
+                box.put("borderColor", "#ff1100");
+                box.put("borderWidth", 1);
+                box.put("borderStyle", "solid");
+                box.put("text", "Bearish OB");
+                box.put("textColor", "#ff1100");
+                boxes.add(box);
             }
         }
+        
+        // Debug log to verify boxes are being generated
+        System.out.println(String.format("📦 Order Block [%s]: Bull OBs=%d, Bear OBs=%d, Total Boxes=%d", 
+            symbol, bullCount, bearCount, boxes.size()));
         
         // Prepare signals
         Map<String, Object> signals = new HashMap<>();
@@ -460,7 +483,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             performance.put("profitFactor", stats.getProfitFactor() != null ? stats.getProfitFactor() : BigDecimal.ZERO);
         }
         
-        // Create visualization data
+        // Create visualization data with boxes
         StrategyVisualizationData vizData = new StrategyVisualizationData(
             getStrategyId(),
             symbol,
@@ -469,7 +492,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             indicators,
             signals,
             performance,
-            "HOLD"
+            "HOLD",
+            boxes
         );
         
         // Send to visualization manager
@@ -551,37 +575,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
-        Map<String, IndicatorMetadata> metadata = new HashMap<>();
-        
-        // Bullish Order Blocks (green zones)
-        for (int i = 0; i < maxBullishOrderBlocks; i++) {
-            metadata.put("bullOB" + i + "_avg", IndicatorMetadata.builder("bullOB" + i + "_avg")
-                .displayName("Bullish OB " + (i + 1) + " Average")
-                .asLine("#169400", 2)
-                .addConfig("zoneTop", "bullOB" + i + "_top")
-                .addConfig("zoneBottom", "bullOB" + i + "_bottom")
-                .addConfig("zoneColor", "#169400")
-                .addConfig("zoneOpacity", 0.2)
-                .separatePane(false)
-                .paneOrder(0)
-                .build());
-        }
-        
-        // Bearish Order Blocks (red zones)
-        for (int i = 0; i < maxBearishOrderBlocks; i++) {
-            metadata.put("bearOB" + i + "_avg", IndicatorMetadata.builder("bearOB" + i + "_avg")
-                .displayName("Bearish OB " + (i + 1) + " Average")
-                .asLine("#ff1100", 2)
-                .addConfig("zoneTop", "bearOB" + i + "_top")
-                .addConfig("zoneBottom", "bearOB" + i + "_bottom")
-                .addConfig("zoneColor", "#ff1100")
-                .addConfig("zoneOpacity", 0.2)
-                .separatePane(false)
-                .paneOrder(0)
-                .build());
-        }
-        
-        return metadata;
+        // Order blocks are now visualized using boxes instead of indicators
+        // Return empty metadata since we don't need any line/histogram indicators
+        return new HashMap<>();
     }
     
     @Override

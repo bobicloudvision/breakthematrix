@@ -312,6 +312,50 @@ public class StrategyVisualizationController {
             })
             .toList();
         
+        // Get boxes from the most recent data point only (since boxes are cumulative state)
+        List<Map<String, Object>> allBoxes = new java.util.ArrayList<>();
+        if (!data.isEmpty()) {
+            StrategyVisualizationData latestData = data.get(data.size() - 1);
+            if (latestData.getBoxes() != null) {
+                // Get the actual time range of the loaded data
+                long firstTime = data.get(0).getTimestamp().getEpochSecond();
+                long lastTime = data.get(data.size() - 1).getTimestamp().getEpochSecond();
+                
+                // Filter and adjust boxes to fit within the loaded time range
+                allBoxes = latestData.getBoxes().stream()
+                    .filter(box -> {
+                        // Include box if it overlaps with the loaded time range
+                        long boxTime1 = ((Number) box.get("time1")).longValue();
+                        long boxTime2 = ((Number) box.get("time2")).longValue();
+                        return boxTime1 <= lastTime && boxTime2 >= firstTime;
+                    })
+                    .map(box -> {
+                        // Adjust box time2 to not exceed the loaded data range
+                        Map<String, Object> adjustedBox = new java.util.HashMap<>(box);
+                        long boxTime1 = ((Number) box.get("time1")).longValue();
+                        long boxTime2 = ((Number) box.get("time2")).longValue();
+                        
+                        // Clamp time1 to the visible range
+                        if (boxTime1 < firstTime) {
+                            adjustedBox.put("time1", firstTime);
+                        }
+                        
+                        // Clamp time2 to the visible range
+                        if (boxTime2 > lastTime) {
+                            adjustedBox.put("time2", lastTime);
+                        }
+                        
+                        return adjustedBox;
+                    })
+                    .toList();
+            }
+            System.out.println(String.format("📦 Visualization Controller [%s]: Data points=%d, Time range=[%d-%d], Boxes=%d", 
+                symbol, data.size(), 
+                data.get(0).getTimestamp().getEpochSecond(),
+                data.get(data.size() - 1).getTimestamp().getEpochSecond(),
+                allBoxes.size()));
+        }
+        
         // Build response with multiple series
         Map<String, Object> response = new java.util.HashMap<>();
         response.put("strategyId", strategyId);
@@ -332,6 +376,9 @@ public class StrategyVisualizationController {
         
         response.put("series", series);
         response.put("markers", markers);
+        
+        // Always include boxes field (empty array if no boxes)
+        response.put("boxes", allBoxes);
         response.put("metadata", Map.of(
             "indicatorNames", indicatorNames,
             "dataPoints", data.size(),
