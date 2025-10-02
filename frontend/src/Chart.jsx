@@ -169,7 +169,7 @@ export const ChartComponent = props => {
                         addIndicators(chartRef.current, data);
                     }
                 });
-            }, 500);
+            }, 1000); // Increased delay to 1 second
 
             return () => clearTimeout(timeoutId);
         }
@@ -272,7 +272,12 @@ export const ChartComponent = props => {
                     }
 
                 const indicator = indicators[index];
-                console.log(`Processing indicator ${index + 1}/${indicators.length}:`, indicator.name);
+                console.log(`Processing indicator ${index + 1}/${indicators.length}:`, {
+                    name: indicator.name,
+                    type: indicator.type,
+                    config: indicator.config,
+                    dataLength: indicator.data ? indicator.data.length : 0
+                });
                 
                 // Validate data format based on series type
                 let validData;
@@ -285,7 +290,12 @@ export const ChartComponent = props => {
                             typeof item.open === 'number' && 
                             typeof item.high === 'number' && 
                             typeof item.low === 'number' && 
-                            typeof item.close === 'number'
+                            typeof item.close === 'number' &&
+                            !isNaN(item.time) && 
+                            !isNaN(item.open) && 
+                            !isNaN(item.high) && 
+                            !isNaN(item.low) && 
+                            !isNaN(item.close)
                         );
                         break;
                         
@@ -296,7 +306,12 @@ export const ChartComponent = props => {
                             typeof item.open === 'number' && 
                             typeof item.high === 'number' && 
                             typeof item.low === 'number' && 
-                            typeof item.close === 'number'
+                            typeof item.close === 'number' &&
+                            !isNaN(item.time) && 
+                            !isNaN(item.open) && 
+                            !isNaN(item.high) && 
+                            !isNaN(item.low) && 
+                            !isNaN(item.close)
                         );
                         break;
                         
@@ -304,7 +319,9 @@ export const ChartComponent = props => {
                         validData = indicator.data.filter(item => 
                             item && 
                             typeof item.time === 'number' && 
-                            typeof item.value === 'number'
+                            typeof item.value === 'number' &&
+                            !isNaN(item.time) && 
+                            !isNaN(item.value)
                         );
                         break;
                         
@@ -312,10 +329,26 @@ export const ChartComponent = props => {
                         validData = indicator.data.filter(item => 
                             item && 
                             typeof item.time === 'number' && 
-                            typeof item.value === 'number'
+                            typeof item.value === 'number' &&
+                            !isNaN(item.time) && 
+                            !isNaN(item.value)
                         );
                         break;
                 }
+                
+                // Remove duplicates and sort by time (CRITICAL for lightweight-charts)
+                const originalLength = validData.length;
+                const timeMap = new Map();
+                validData.forEach(item => {
+                    // Keep the last occurrence of each timestamp
+                    timeMap.set(item.time, item);
+                });
+                validData = Array.from(timeMap.values()).sort((a, b) => a.time - b.time);
+                
+                if (originalLength !== validData.length) {
+                    console.warn(`${indicator.name}: Removed ${originalLength - validData.length} duplicate timestamps`);
+                }
+                console.log(`Validated data for ${indicator.name}: ${validData.length} unique points (sorted)`);
                 
                 if (validData.length === 0) {
                     console.warn(`No valid data points found for indicator: ${indicator.name} (type: ${indicator.type})`);
@@ -329,6 +362,7 @@ export const ChartComponent = props => {
                         return;
                     }
                     
+                    console.log(`Creating series for ${indicator.name} with type ${indicator.type}`);
                     let series;
                     
                     switch (indicator.type.toLowerCase()) {
@@ -338,6 +372,7 @@ export const ChartComponent = props => {
                                 lineWidth: indicator.config.lineWidth || 2,
                                 title: indicator.config.title
                             });
+                            console.log(`Line series created for ${indicator.name}:`, !!series);
                             break;
                             
                         case 'area':
@@ -403,7 +438,12 @@ export const ChartComponent = props => {
 
                     // Check if series was created successfully
                     if (!series) {
-                        console.error(`Failed to create series for ${indicator.name}`);
+                        console.error(`Failed to create series for ${indicator.name}`, {
+                            indicatorType: indicator.type,
+                            indicatorConfig: indicator.config,
+                            chartValid: !!chart,
+                            chartRefValid: !!chartRef.current
+                        });
                         return;
                     }
                     
@@ -425,7 +465,7 @@ export const ChartComponent = props => {
                             }
                             
                             console.log(`Setting data for ${indicator.name} with ${validData.length} points`);
-                            // series.setData(validData); TODO: Uncomment this
+                            series.setData(validData);
                             indicatorSeriesRef.current[indicator.name] = series;
                             console.log(`${indicator.name} series added successfully`);
                         } catch (e) {

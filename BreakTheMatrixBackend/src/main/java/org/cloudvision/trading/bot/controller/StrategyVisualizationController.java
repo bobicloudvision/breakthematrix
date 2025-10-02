@@ -166,6 +166,18 @@ public class StrategyVisualizationController {
             return Map.of("error", "No data available");
         }
         
+        // Sort by timestamp (ascending) to ensure correct order
+        data = data.stream()
+            .sorted((d1, d2) -> d1.getTimestamp().compareTo(d2.getTimestamp()))
+            .toList();
+        
+        // Remove duplicates by keeping only the last entry for each timestamp
+        Map<Long, StrategyVisualizationData> uniqueData = new java.util.LinkedHashMap<>();
+        for (StrategyVisualizationData d : data) {
+            uniqueData.put(d.getTimestamp().getEpochSecond(), d);
+        }
+        data = new java.util.ArrayList<>(uniqueData.values());
+        
         // Limit data points
         if (data.size() > limit) {
             data = data.subList(data.size() - limit, data.size());
@@ -194,6 +206,23 @@ public class StrategyVisualizationController {
         for (String indicatorName : indicatorNames) {
             List<Map<String, Object>> series = data.stream()
                 .filter(d -> d.getIndicators().containsKey(indicatorName))
+                .filter(d -> {
+                    // Validate value is not null and is a valid number
+                    Object value = d.getIndicators().get(indicatorName);
+                    if (value == null) return false;
+                    if (value instanceof BigDecimal) {
+                        return true; // BigDecimal is always valid if not null
+                    }
+                    if (value instanceof Double) {
+                        Double dValue = (Double) value;
+                        return !dValue.isNaN() && !dValue.isInfinite();
+                    }
+                    if (value instanceof Float) {
+                        Float fValue = (Float) value;
+                        return !fValue.isNaN() && !fValue.isInfinite();
+                    }
+                    return value instanceof Number;
+                })
                 .map(d -> {
                     Map<String, Object> point = new java.util.HashMap<>();
                     point.put("time", d.getTimestamp().getEpochSecond());
@@ -388,8 +417,18 @@ public class StrategyVisualizationController {
                 return Map.of("error", "No candlestick data available");
             }
             
+            // Remove duplicates by timestamp and sort
+            Map<Long, CandlestickData> uniqueCandlesticks = new java.util.LinkedHashMap<>();
+            candlesticks.stream()
+                .sorted((c1, c2) -> c1.getCloseTime().compareTo(c2.getCloseTime()))
+                .forEach(c -> uniqueCandlesticks.put(c.getCloseTime().getEpochSecond(), c));
+            
+            List<CandlestickData> cleanedCandlesticks = new java.util.ArrayList<>(uniqueCandlesticks.values());
+            
             // Format for TradingView Candlestick/Bar series
-            List<Map<String, Object>> ohlcSeries = candlesticks.stream()
+            List<Map<String, Object>> ohlcSeries = cleanedCandlesticks.stream()
+                .filter(c -> c.getOpen() != null && c.getHigh() != null && 
+                            c.getLow() != null && c.getClose() != null)
                 .map(c -> {
                     Map<String, Object> candle = new java.util.HashMap<>();
                     candle.put("time", c.getCloseTime().getEpochSecond());
@@ -402,7 +441,8 @@ public class StrategyVisualizationController {
                 .toList();
             
             // Format volume as histogram
-            List<Map<String, Object>> volumeSeries = candlesticks.stream()
+            List<Map<String, Object>> volumeSeries = cleanedCandlesticks.stream()
+                .filter(c -> c.getVolume() != null)
                 .map(c -> {
                     Map<String, Object> vol = new java.util.HashMap<>();
                     vol.put("time", c.getCloseTime().getEpochSecond());
@@ -448,10 +488,10 @@ public class StrategyVisualizationController {
             }
             
             response.put("metadata", Map.of(
-                "dataPoints", candlesticks.size(),
+                "dataPoints", cleanedCandlesticks.size(),
                 "timeRange", Map.of(
-                    "from", candlesticks.get(0).getCloseTime().getEpochSecond(),
-                    "to", candlesticks.get(candlesticks.size() - 1).getCloseTime().getEpochSecond()
+                    "from", cleanedCandlesticks.get(0).getCloseTime().getEpochSecond(),
+                    "to", cleanedCandlesticks.get(cleanedCandlesticks.size() - 1).getCloseTime().getEpochSecond()
                 )
             ));
             
