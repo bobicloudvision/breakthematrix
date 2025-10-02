@@ -103,10 +103,8 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
         // Check for actual crossunder using previous MA values
-        boolean deathCross = (prevShortMA != null && prevLongMA != null) && 
-                            TechnicalIndicators.isCrossunder(shortMA, longMA, prevShortMA, prevLongMA);
-        
-        else if (deathCross) {
+        else if ((prevShortMA != null && prevLongMA != null) && 
+                 TechnicalIndicators.isCrossunder(shortMA, longMA, prevShortMA, prevLongMA)) {
             // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
             BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
