@@ -154,8 +154,17 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         previousShortMA.put(symbol, shortMA);
         previousLongMA.put(symbol, longMA);
         
+        // Extract volume and open price from candlestick data if available
+        BigDecimal volume = null;
+        BigDecimal openPrice = null;
+        if (priceData.rawData != null && priceData.rawData.getCandlestickData() != null) {
+            CandlestickData candle = priceData.rawData.getCandlestickData();
+            volume = candle.getVolume();
+            openPrice = candle.getOpen();
+        }
+        
         // Generate visualization data
-        generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, priceData.timestamp);
+        generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, priceData.timestamp, volume, openPrice);
         
         return orders;
     }
@@ -232,12 +241,22 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             .paneOrder(0) // Main chart
             .build());
         
+        // Volume - Histogram in separate pane
+        metadata.put("volume", IndicatorMetadata.builder("volume")
+            .displayName("Volume")
+            .asHistogram("#26a69a")
+            .addConfig("priceFormat", Map.of("type", "volume"))
+            .addConfig("priceScaleId", "volume")
+            .separatePane(true)
+            .paneOrder(1)
+            .build());
+        
         // Spread - Histogram in separate pane
 //        metadata.put("spread", IndicatorMetadata.builder("spread")
 //            .displayName("MA Spread")
 //            .asHistogram("#26a69a")
 //            .separatePane(true)
-//            .paneOrder(1)
+//            .paneOrder(2)
 //            .build());
 //
 //        // Spread Percentage - Not displayed by default (but available)
@@ -245,7 +264,7 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
 //            .displayName("Spread %")
 //            .asLine("#95A5A6", 1)
 //            .separatePane(true)
-//            .paneOrder(1)
+//            .paneOrder(2)
 //            .build());
         
         return metadata;
@@ -346,7 +365,8 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     // Use closeTime to match real-time behavior - indicator is calculated at candle close
                     // This ensures historical and real-time visualization data are aligned
                     generateVisualizationData(symbol, currentCandle.getClose(), shortMA, longMA, 
-                                            action, currentCandle.getCloseTime());
+                                            action, currentCandle.getCloseTime(), 
+                                            currentCandle.getVolume(), currentCandle.getOpen());
                     generatedCount++;
                     
                     // Store current MAs as previous for next iteration
@@ -364,13 +384,17 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
      */
     private void generateVisualizationData(String symbol, BigDecimal price, 
                                          BigDecimal shortMA, BigDecimal longMA, 
-                                         String action, java.time.Instant timestamp) {
+                                         String action, java.time.Instant timestamp, 
+                                         BigDecimal volume, BigDecimal openPrice) {
         if (visualizationManager == null) return;
         
         // Prepare indicators
         Map<String, BigDecimal> indicators = new HashMap<>();
         indicators.put("shortMA", shortMA);
         indicators.put("longMA", longMA);
+        if (volume != null) {
+            indicators.put("volume", volume);
+        }
 //        indicators.put("spread", shortMA.subtract(longMA));
 //        indicators.put("spreadPercent", longMA.compareTo(BigDecimal.ZERO) > 0 ?
 //            shortMA.subtract(longMA).divide(longMA, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) :
@@ -382,6 +406,13 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         signals.put("deathCross", shortMA.compareTo(longMA) < 0);
         signals.put("trend", shortMA.compareTo(longMA) > 0 ? "BULLISH" : "BEARISH");
         signals.put("strength", shortMA.subtract(longMA).abs());
+        
+        // Add volume color information (for coloring volume bars)
+        if (volume != null && openPrice != null) {
+            // Green for bullish candles (close > open), red for bearish (close < open)
+            String volumeColor = price.compareTo(openPrice) >= 0 ? "#26a69a" : "#ef5350";
+            signals.put("volumeColor", volumeColor);
+        }
         
         // Prepare performance data
         Map<String, BigDecimal> performance = new HashMap<>();

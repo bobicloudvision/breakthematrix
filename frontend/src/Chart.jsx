@@ -322,7 +322,14 @@ export const ChartComponent = props => {
                             typeof item.value === 'number' &&
                             !isNaN(item.time) && 
                             !isNaN(item.value)
-                        );
+                        ).map(item => {
+                            // Preserve the individual bar color if provided
+                            const dataPoint = { time: item.time, value: item.value };
+                            if (item.color) {
+                                dataPoint.color = item.color;
+                            }
+                            return dataPoint;
+                        });
                         break;
                         
                     default: // line, area, baseline
@@ -465,14 +472,43 @@ export const ChartComponent = props => {
                             break;
                             
                         case 'histogram':
-                            series = chart.addHistogramSeries({
+                            const histogramOptions = {
                                 color: indicator.config.color,
                                 priceFormat: indicator.config.priceFormat || {
                                     type: 'volume',
                                 },
-                                priceScaleId: indicator.config.priceScaleId || '',
                                 title: indicator.config.title
-                            });
+                            };
+                            
+                            // Handle separate pane for indicators like volume
+                            if (indicator.separatePane) {
+                                // Create a unique price scale ID for this indicator
+                                const priceScaleId = indicator.config.priceScaleId || `${indicator.name}_scale`;
+                                histogramOptions.priceScaleId = priceScaleId;
+                                
+                                // Configure the separate price scale
+                                histogramOptions.priceScaleOptions = {
+                                    scaleMargins: {
+                                        top: 0.8,    // 80% of the chart height is for the main chart
+                                        bottom: 0,   // Volume starts at the bottom
+                                    },
+                                };
+                            } else {
+                                histogramOptions.priceScaleId = indicator.config.priceScaleId || '';
+                            }
+                            
+                            series = chart.addHistogramSeries(histogramOptions);
+                            
+                            // Apply price scale options if separate pane
+                            if (indicator.separatePane && series) {
+                                const priceScaleId = indicator.config.priceScaleId || `${indicator.name}_scale`;
+                                series.priceScale().applyOptions({
+                                    scaleMargins: {
+                                        top: 0.8,
+                                        bottom: 0,
+                                    },
+                                });
+                            }
                             break;
                             
                         default:

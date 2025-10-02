@@ -256,6 +256,13 @@ public class StrategyVisualizationController {
                     Map<String, Object> point = new java.util.HashMap<>();
                     point.put("time", d.getTimestamp().getEpochSecond());
                     point.put("value", d.getIndicators().get(indicatorName));
+                    
+                    // Add color for volume bars if available in signals
+                    if ("volume".equals(indicatorName) && d.getSignals() != null && 
+                        d.getSignals().containsKey("volumeColor")) {
+                        point.put("color", d.getSignals().get("volumeColor"));
+                    }
+                    
                     return point;
                 })
                 .toList();
