@@ -23,6 +23,10 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
     private int shortPeriod = 10;
     private int longPeriod = 20;
     
+    // Track previous MA values for crossover detection
+    private final Map<String, BigDecimal> previousShortMA = new HashMap<>();
+    private final Map<String, BigDecimal> previousLongMA = new HashMap<>();
+    
     @Override
     protected List<Order> analyzePrice(PriceData priceData) {
         String symbol = priceData.symbol;
@@ -39,13 +43,20 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
         BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
         
+        // Get previous MA values for crossover detection
+        BigDecimal prevShortMA = previousShortMA.get(symbol);
+        BigDecimal prevLongMA = previousLongMA.get(symbol);
+        
         // Generate signals
         List<Order> orders = new ArrayList<>();
-        BigDecimal previousSignal = lastSignal.get(symbol);
         String action = "HOLD";
         
         // Golden Cross: Short MA crosses above Long MA = BUY signal
-        if (shortMA.compareTo(longMA) > 0 && (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
+        // Check for actual crossover using previous MA values
+        boolean goldenCross = (prevShortMA != null && prevLongMA != null) && 
+                             TechnicalIndicators.isCrossover(shortMA, longMA, prevShortMA, prevLongMA);
+        
+        if (goldenCross) {
             // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
             BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
@@ -91,7 +102,11 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             }
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
-        else if (shortMA.compareTo(longMA) < 0 && (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
+        // Check for actual crossunder using previous MA values
+        boolean deathCross = (prevShortMA != null && prevLongMA != null) && 
+                            TechnicalIndicators.isCrossunder(shortMA, longMA, prevShortMA, prevLongMA);
+        
+        else if (deathCross) {
             // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
             BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
@@ -136,6 +151,10 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                 ));
             }
         }
+        
+        // Update previous MA values for next crossover detection
+        previousShortMA.put(symbol, shortMA);
+        previousLongMA.put(symbol, longMA);
         
         // Generate visualization data
         generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, priceData.timestamp);
@@ -224,7 +243,7 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
     
     @Override
     protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
-        // Calculate initial moving averages and set signal state
+        // Calculate initial moving averages and store them for crossover detection
         for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
             String symbol = entry.getKey();
             List<BigDecimal> prices = getPriceHistory(symbol);
@@ -232,6 +251,10 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             if (prices.size() >= longPeriod) {
                 BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
                 BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
+                
+                // Store initial MA values for crossover detection
+                previousShortMA.put(symbol, shortMA);
+                previousLongMA.put(symbol, longMA);
                 
                 // Set initial signal state (no orders, just establish baseline)
                 if (shortMA.compareTo(longMA) > 0) {
@@ -278,7 +301,8 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             
             // Build price history progressively - simulating how candles arrive in real-time
             int generatedCount = 0;
-            BigDecimal previousSignal = null;
+            BigDecimal prevShortMA = null;
+            BigDecimal prevLongMA = null;
             
             // For each candle, calculate indicators based ONLY on candles up to that point
             for (int i = 0; i < candles.size(); i++) {
@@ -296,18 +320,17 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     BigDecimal shortMA = TechnicalIndicators.calculateSMA(progressivePrices, shortPeriod);
                     BigDecimal longMA = TechnicalIndicators.calculateSMA(progressivePrices, longPeriod);
                     
-                    // Determine action based on crossover
+                    // Determine action based on ACTUAL crossover detection
                     String action = "HOLD";
-                    if (shortMA.compareTo(longMA) > 0 && 
-                        (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
-                        action = "BUY";
-                        previousSignal = BigDecimal.ONE;
-                    } else if (shortMA.compareTo(longMA) < 0 && 
-                               (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
-                        action = "SELL";
-                        previousSignal = BigDecimal.ONE.negate();
-                    } else if (previousSignal == null) {
-                        previousSignal = shortMA.compareTo(longMA) > 0 ? BigDecimal.ONE : BigDecimal.ONE.negate();
+                    if (prevShortMA != null && prevLongMA != null) {
+                        // Check for golden cross (short MA crosses above long MA)
+                        if (TechnicalIndicators.isCrossover(shortMA, longMA, prevShortMA, prevLongMA)) {
+                            action = "BUY";
+                        }
+                        // Check for death cross (short MA crosses below long MA)
+                        else if (TechnicalIndicators.isCrossunder(shortMA, longMA, prevShortMA, prevLongMA)) {
+                            action = "SELL";
+                        }
                     }
                     
                     // Use closeTime to match real-time behavior - indicator is calculated at candle close
@@ -315,6 +338,10 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     generateVisualizationData(symbol, currentCandle.getClose(), shortMA, longMA, 
                                             action, currentCandle.getCloseTime());
                     generatedCount++;
+                    
+                    // Store current MAs as previous for next iteration
+                    prevShortMA = shortMA;
+                    prevLongMA = longMA;
                 }
             }
             
