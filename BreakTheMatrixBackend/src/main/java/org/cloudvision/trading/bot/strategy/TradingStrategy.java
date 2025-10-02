@@ -77,4 +77,11 @@ public interface TradingStrategy {
      * @param historicalData Historical candlestick data
      */
     void generateHistoricalVisualizationData(List<CandlestickData> historicalData);
+    
+    /**
+     * Reset strategy state and clear all memory
+     * This clears historical data, signals, and any cached indicators
+     * Call when disabling/re-enabling strategy to start fresh
+     */
+    void reset();
 }

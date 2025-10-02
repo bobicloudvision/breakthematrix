@@ -201,6 +201,18 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public void reset() {
+        // Call parent reset to clear base state
+        super.reset();
+        
+        // Clear MA-specific state
+        previousShortMA.clear();
+        previousLongMA.clear();
+        
+        System.out.println("🔄 MA Strategy: Cleared previous MA values");
+    }
+    
+    @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         

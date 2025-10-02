@@ -177,6 +177,15 @@ public class RSIStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public void reset() {
+        // Call parent reset to clear base state
+        // RSI strategy doesn't have additional state to clear
+        super.reset();
+        
+        System.out.println("🔄 RSI Strategy: State reset");
+    }
+    
+    @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         

@@ -225,7 +225,7 @@ public class TradingBotController {
                 .toList();
     }
 
-    @Operation(summary = "Enable Strategy", description = "Enable a trading strategy. Only ONE strategy can be enabled per account at a time to prevent conflicts.")
+    @Operation(summary = "Enable Strategy", description = "Enable a trading strategy. Only ONE strategy can be enabled per account at a time to prevent conflicts. Strategy will start with a clean state (all memory cleared).")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Strategy enabled successfully"),
         @ApiResponse(responseCode = "400", description = "Cannot enable - another strategy is already active")
@@ -233,10 +233,16 @@ public class TradingBotController {
     @PostMapping("/strategies/{strategyId}/enable")
     public ResponseEntity<Map<String, Object>> enableStrategy(@PathVariable String strategyId) {
         try {
+            // Reset strategy state before enabling to ensure clean start
+            tradingBot.getStrategies().stream()
+                    .filter(s -> s.getStrategyId().equals(strategyId))
+                    .findFirst()
+                    .ifPresent(TradingStrategy::reset);
+            
             tradingBot.setStrategyEnabled(strategyId, true);
             return ResponseEntity.ok(Map.of(
                 "success", true,
-                "message", "Strategy enabled successfully",
+                "message", "Strategy enabled successfully with clean state",
                 "strategyId", strategyId
             ));
         } catch (IllegalStateException e) {
@@ -248,16 +254,23 @@ public class TradingBotController {
         }
     }
 
-    @Operation(summary = "Disable Strategy", description = "Disable a trading strategy")
+    @Operation(summary = "Disable Strategy", description = "Disable a trading strategy and reset its state (clears all memory)")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Strategy disabled successfully")
     })
     @PostMapping("/strategies/{strategyId}/disable")
     public ResponseEntity<Map<String, Object>> disableStrategy(@PathVariable String strategyId) {
         tradingBot.setStrategyEnabled(strategyId, false);
+        
+        // Reset strategy state after disabling to clear memory
+        tradingBot.getStrategies().stream()
+                .filter(s -> s.getStrategyId().equals(strategyId))
+                .findFirst()
+                .ifPresent(TradingStrategy::reset);
+        
         return ResponseEntity.ok(Map.of(
             "success", true,
-            "message", "Strategy disabled successfully",
+            "message", "Strategy disabled and state reset",
             "strategyId", strategyId
         ));
     }

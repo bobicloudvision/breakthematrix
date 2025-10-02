@@ -462,5 +462,24 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         // Subclasses should override to generate visualization data from historical candles
         System.out.println("⚠️ " + getStrategyName() + " does not implement historical visualization generation");
     }
+    
+    @Override
+    public void reset() {
+        // Clear all tracking maps
+        symbolProviders.clear();
+        symbolIntervals.clear();
+        lastSignal.clear();
+        lastUpdateTime.clear();
+        
+        // Reset bootstrapped flag
+        bootstrapped = false;
+        
+        // Reset stats if they exist
+        if (stats != null) {
+            stats = new StrategyStats();
+        }
+        
+        System.out.println("🔄 " + getStrategyName() + " state reset - all memory cleared");
+    }
 }
 

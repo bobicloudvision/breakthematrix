@@ -233,6 +233,20 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public void reset() {
+        // Call parent reset to clear base state
+        super.reset();
+        
+        // Clear SuperTrend-specific state
+        highHistory.clear();
+        lowHistory.clear();
+        previousSuperTrend.clear();
+        previousDirection.clear();
+        
+        System.out.println("🔄 SuperTrend Strategy: Cleared high/low history and previous SuperTrend values");
+    }
+    
+    @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         

@@ -532,6 +532,24 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     }
     
     @Override
+    public void reset() {
+        // Call parent reset to clear base state
+        super.reset();
+        
+        // Clear Order Block-specific state
+        bullishOrderBlocks.clear();
+        bearishOrderBlocks.clear();
+        highHistory.clear();
+        lowHistory.clear();
+        volumeHistory.clear();
+        timestampHistory.clear();
+        marketStructure.clear();
+        barIndexCounter.clear();
+        
+        System.out.println("🔄 Order Block Strategy: Cleared order blocks and all historical data");
+    }
+    
+    @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
