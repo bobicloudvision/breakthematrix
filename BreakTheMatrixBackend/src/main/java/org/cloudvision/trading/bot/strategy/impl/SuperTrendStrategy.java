@@ -234,10 +234,15 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
-        // SuperTrend Line - Changes color based on direction (green=bullish, red=bearish)
+        // SuperTrend Line - Dynamic color based on direction (green=bullish, red=bearish)
+        // We use addConfig to specify both colors for the frontend to handle
         metadata.put("superTrend", IndicatorMetadata.builder("superTrend")
             .displayName("SuperTrend (" + atrPeriod + ", " + atrMultiplier + ")")
-            .asLine("#00BCD4", 2)
+            .asLine("#26a69a", 3) // Default green for uptrend
+            .addConfig("upColor", "#26a69a")    // Green for uptrend
+            .addConfig("downColor", "#ef5350")  // Red for downtrend
+            .addConfig("lineStyle", 0)          // Solid line
+            .addConfig("dynamicColor", true)    // Flag for frontend to use dynamic coloring
             .separatePane(false)
             .paneOrder(0) // Main chart
             .build());
@@ -377,15 +382,18 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
         // indicators.put("atr", calculateCurrentATR(symbol)); 
         
         // Prepare signals
+        boolean isBullish = direction.compareTo(BigDecimal.ZERO) > 0;
         Map<String, Object> signals = new HashMap<>();
-        signals.put("trend", direction.compareTo(BigDecimal.ZERO) > 0 ? "BULLISH" : "BEARISH");
+        signals.put("trend", isBullish ? "BULLISH" : "BEARISH");
         signals.put("direction", direction);
-        signals.put("bullish", direction.compareTo(BigDecimal.ZERO) > 0);
-        signals.put("bearish", direction.compareTo(BigDecimal.ZERO) < 0);
+        signals.put("bullish", isBullish);
+        signals.put("bearish", !isBullish);
         signals.put("distance", price.subtract(superTrend).abs());
         signals.put("distancePercent", superTrend.compareTo(BigDecimal.ZERO) > 0 ?
             price.subtract(superTrend).divide(superTrend, 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) :
             BigDecimal.ZERO);
+        // Add color information for dynamic coloring on frontend
+        signals.put("superTrendColor", isBullish ? "#26a69a" : "#ef5350"); // Green for bullish, Red for bearish
         
         // Prepare performance data
         Map<String, BigDecimal> performance = new HashMap<>();

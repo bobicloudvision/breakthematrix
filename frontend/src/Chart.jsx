@@ -1,4 +1,4 @@
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, LineStyle } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 
 // Global variable for default zoom level (last N candles)
@@ -397,12 +397,26 @@ export const ChartComponent = props => {
                     
                     switch (indicator.type.toLowerCase()) {
                         case 'line':
-                            series = chart.addLineSeries({
+                            const lineOptions = {
                                 color: indicator.config.color,
                                 lineWidth: indicator.config.lineWidth || 2,
                                 title: indicator.config.title
-                            });
-                            console.log(`Line series created for ${indicator.name}:`, !!series);
+                            };
+                            
+                            // Map lineStyle from number to LineStyle enum
+                            if (indicator.config.lineStyle !== undefined) {
+                                const lineStyleMap = {
+                                    0: LineStyle.Solid,
+                                    1: LineStyle.Dotted,
+                                    2: LineStyle.Dashed,
+                                    3: LineStyle.LargeDashed,
+                                    4: LineStyle.SparseDotted
+                                };
+                                lineOptions.lineStyle = lineStyleMap[indicator.config.lineStyle] || LineStyle.Solid;
+                            }
+                            
+                            series = chart.addLineSeries(lineOptions);
+                            console.log(`Line series created for ${indicator.name}:`, !!series, 'with options:', lineOptions);
                             break;
                             
                         case 'area':
