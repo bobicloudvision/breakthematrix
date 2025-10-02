@@ -70,7 +70,11 @@ public class TradingBot {
                              " @ " + candlestick.getCloseTime());
             candlestickHistoryService.addCandlestick(candlestick);
         } else {
-            System.out.println("⚠️ Skipping storage: Not a KLINE or no candlestick data");
+            // This is normal for TICKER data - only log if it's unexpected
+            if (data.getType() != org.cloudvision.trading.model.TradingDataType.TICKER) {
+                System.out.println("ℹ️ Skipping storage: type=" + data.getType() + 
+                                 ", hasCandlestick=" + (data.getCandlestickData() != null));
+            }
         }
         
         // Update current prices for all accounts to calculate unrealized P&L
