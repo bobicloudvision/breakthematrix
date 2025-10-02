@@ -81,9 +81,10 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
         List<Order> orders = new ArrayList<>();
         String action = "HOLD";
         
-        // BULLISH: Price crosses above SuperTrend (direction changed from -1 to +1)
-        if (direction.compareTo(BigDecimal.ZERO) > 0 && 
-            (oldDirection == null || oldDirection.compareTo(BigDecimal.ZERO) < 0)) {
+        // BULLISH: Price crosses above SuperTrend (direction changed from +1 to -1 per Pine Script convention)
+        // In Pine Script: direction < 0 means UPTREND (green)
+        if (direction.compareTo(BigDecimal.ZERO) < 0 && 
+            (oldDirection == null || oldDirection.compareTo(BigDecimal.ZERO) > 0)) {
             
             // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
@@ -125,9 +126,10 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
                 ));
             }
         }
-        // BEARISH: Price crosses below SuperTrend (direction changed from +1 to -1)
-        else if (direction.compareTo(BigDecimal.ZERO) < 0 && 
-                 (oldDirection != null && oldDirection.compareTo(BigDecimal.ZERO) > 0)) {
+        // BEARISH: Price crosses below SuperTrend (direction changed from -1 to +1 per Pine Script convention)
+        // In Pine Script: direction > 0 means DOWNTREND (red)
+        else if (direction.compareTo(BigDecimal.ZERO) > 0 && 
+                 (oldDirection != null && oldDirection.compareTo(BigDecimal.ZERO) < 0)) {
             
             // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
@@ -270,8 +272,9 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
                     previousSuperTrend.put(symbol, result[0]);
                     previousDirection.put(symbol, result[1]);
                     
+                    // Pine Script convention: direction < 0 = uptrend (bullish), direction > 0 = downtrend (bearish)
                     System.out.println("📊 " + symbol + " initial SuperTrend: " + result[0] + 
-                                     " (" + (result[1].compareTo(BigDecimal.ZERO) > 0 ? "BULLISH" : "BEARISH") + ")");
+                                     " (" + (result[1].compareTo(BigDecimal.ZERO) < 0 ? "BULLISH" : "BEARISH") + ")");
                 }
             }
         }
@@ -324,14 +327,15 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
                         BigDecimal direction = result[1];
                         
                         // Determine action based on direction change
+                        // Pine Script convention: direction < 0 = uptrend, direction > 0 = downtrend
                         String action = "HOLD";
                         if (prevDir != null) {
-                            if (direction.compareTo(BigDecimal.ZERO) > 0 && 
-                                prevDir.compareTo(BigDecimal.ZERO) < 0) {
-                                action = "BUY";
-                            } else if (direction.compareTo(BigDecimal.ZERO) < 0 && 
-                                      prevDir.compareTo(BigDecimal.ZERO) > 0) {
-                                action = "SELL";
+                            if (direction.compareTo(BigDecimal.ZERO) < 0 && 
+                                prevDir.compareTo(BigDecimal.ZERO) > 0) {
+                                action = "BUY"; // Switched from downtrend to uptrend
+                            } else if (direction.compareTo(BigDecimal.ZERO) > 0 && 
+                                      prevDir.compareTo(BigDecimal.ZERO) < 0) {
+                                action = "SELL"; // Switched from uptrend to downtrend
                             }
                         }
                         
@@ -382,7 +386,8 @@ public class SuperTrendStrategy extends AbstractTradingStrategy {
         // indicators.put("atr", calculateCurrentATR(symbol)); 
         
         // Prepare signals
-        boolean isBullish = direction.compareTo(BigDecimal.ZERO) > 0;
+        // Pine Script convention: direction < 0 = UPTREND (bullish), direction > 0 = DOWNTREND (bearish)
+        boolean isBullish = direction.compareTo(BigDecimal.ZERO) < 0;
         Map<String, Object> signals = new HashMap<>();
         signals.put("trend", isBullish ? "BULLISH" : "BEARISH");
         signals.put("direction", direction);

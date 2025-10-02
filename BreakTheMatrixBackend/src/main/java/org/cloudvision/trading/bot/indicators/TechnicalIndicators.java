@@ -226,7 +226,11 @@ public class TechnicalIndicators {
     
     /**
      * Calculate SuperTrend indicator
-     * Returns [SuperTrend value, Direction (1=bullish, -1=bearish)]
+     * Returns [SuperTrend value, Direction (-1=uptrend, +1=downtrend)]
+     * 
+     * NOTE: Direction convention matches TradingView Pine Script:
+     *   direction < 0 (negative) = UPTREND (bullish, green)
+     *   direction > 0 (positive) = DOWNTREND (bearish, red)
      * 
      * @param highs List of high prices
      * @param lows List of low prices
@@ -289,6 +293,7 @@ public class TechnicalIndicators {
         }
         
         // Determine SuperTrend value and direction
+        // IMPORTANT: Using TradingView convention: -1 = uptrend, +1 = downtrend
         BigDecimal superTrend;
         BigDecimal direction;
         
@@ -296,28 +301,28 @@ public class TechnicalIndicators {
             // First calculation - determine initial direction
             if (currentClose.compareTo(finalUpperBand) <= 0) {
                 superTrend = finalUpperBand;
-                direction = BigDecimal.ONE.negate(); // Bearish
+                direction = BigDecimal.ONE; // Downtrend (Pine Script convention)
             } else {
                 superTrend = finalLowerBand;
-                direction = BigDecimal.ONE; // Bullish
+                direction = BigDecimal.ONE.negate(); // Uptrend (Pine Script convention)
             }
-        } else if (previousDirection.compareTo(BigDecimal.ZERO) > 0) {
-            // Previous direction was bullish
+        } else if (previousDirection.compareTo(BigDecimal.ZERO) < 0) {
+            // Previous direction was uptrend (negative)
             if (currentClose.compareTo(finalLowerBand) <= 0) {
                 superTrend = finalUpperBand;
-                direction = BigDecimal.ONE.negate(); // Switch to bearish
+                direction = BigDecimal.ONE; // Switch to downtrend
             } else {
                 superTrend = finalLowerBand;
-                direction = BigDecimal.ONE; // Stay bullish
+                direction = BigDecimal.ONE.negate(); // Stay uptrend
             }
         } else {
-            // Previous direction was bearish
+            // Previous direction was downtrend (positive)
             if (currentClose.compareTo(finalUpperBand) >= 0) {
                 superTrend = finalLowerBand;
-                direction = BigDecimal.ONE; // Switch to bullish
+                direction = BigDecimal.ONE.negate(); // Switch to uptrend
             } else {
                 superTrend = finalUpperBand;
-                direction = BigDecimal.ONE.negate(); // Stay bearish
+                direction = BigDecimal.ONE; // Stay downtrend
             }
         }
         
