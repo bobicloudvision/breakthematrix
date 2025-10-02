@@ -29,7 +29,7 @@
     "last 1 Chrome version"
   ],
   "dependencies": {
-    "lightweight-charts": "^3.8.0",
+    "lightweight-charts": "^5.0.9",
     "react": "^16.13.1",
     "react-dom": "^16.13.1"
   },

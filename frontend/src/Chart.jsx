@@ -1,5 +1,16 @@
-import { createChart, ColorType, LineStyle } from 'lightweight-charts';
+import { 
+    createChart, 
+    ColorType, 
+    LineStyle,
+    CandlestickSeries,
+    LineSeries,
+    AreaSeries,
+    BarSeries,
+    BaselineSeries,
+    HistogramSeries
+} from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
+import { BoxPrimitive } from './BoxPrimitive';
 
 // Global variable for default zoom level (last N candles)
 if (typeof window !== 'undefined' && !window.BTM_DEFAULT_ZOOM_CANDLES) {
@@ -33,7 +44,8 @@ export const ChartComponent = props => {
     const markersRef = useRef([]);
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
-    const boxesContainerRef = useRef(null);
+    const boxPrimitivesRef = useRef([]);
+    const boxesContainerRef = useRef(null); // Backup for HTML overlay
 
     useEffect(
         () => {
@@ -71,7 +83,7 @@ export const ChartComponent = props => {
                 },
             });
 
-            const candleSeries = chart.addCandlestickSeries({
+            const candleSeries = chart.addSeries(CandlestickSeries, {
                 upColor,
                 downColor,
                 wickUpColor,
@@ -176,8 +188,47 @@ export const ChartComponent = props => {
         }
     }, [strategyData, data]);
 
-    // Draw boxes/rectangles on chart
+    // Draw boxes/rectangles on chart using plugin system (lightweight-charts v4+)
     const drawBoxes = (chart, series, boxes) => {
+        console.log('drawBoxes called (plugin version v5):', { boxesCount: boxes.length });
+        
+        if (!chart || !series || !boxes || boxes.length === 0) {
+            console.log('Skipping boxes: missing chart, series, or boxes');
+            return;
+        }
+        
+        // Remove existing box primitives
+        boxPrimitivesRef.current.forEach(primitive => {
+            try {
+                series.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn('Error detaching box primitive:', e);
+            }
+        });
+        boxPrimitivesRef.current = [];
+        
+        // Create new box primitive with all boxes (pass data for logical coordinate fallback)
+        try {
+            const boxPrimitive = new BoxPrimitive(chart, series, boxes, data);
+            series.attachPrimitive(boxPrimitive);
+            boxPrimitivesRef.current.push(boxPrimitive);
+            console.log(`✅ Box primitive attached with ${boxes.length} boxes`);
+            
+            // Request animation frame to ensure chart is fully rendered
+            requestAnimationFrame(() => {
+                boxPrimitive.updateAllViews();
+                console.log('Box primitive updateAllViews() called after RAF');
+                
+                // Force chart redraw
+                chart.timeScale().applyOptions({});
+            });
+        } catch (e) {
+            console.error('Error creating box primitive:', e);
+        }
+    };
+    
+    // Old HTML-based drawBoxes (keeping as backup)
+    const drawBoxesHTML = (chart, series, boxes) => {
         // Get visible time range
         const timeRange = chart.timeScale().getVisibleRange();
         console.log('Chart visible time range:', {
@@ -268,7 +319,17 @@ export const ChartComponent = props => {
                         }
                     }
                     
-                    console.log(`Logical indices for box ${idx + 1}:`, { logical1, logical2 });
+                    // If time2 is beyond the last data point, use the last index
+                    if (logical2 === null && box.time2 > data[data.length - 1].time) {
+                        logical2 = data.length - 1;
+                    }
+                    
+                    // If time1 is before the first data point, use the first index
+                    if (logical1 === null && box.time1 < data[0].time) {
+                        logical1 = 0;
+                    }
+                    
+                    console.log(`Logical indices for box ${idx + 1}:`, { logical1, logical2, time1: box.time1, time2: box.time2, dataLast: data[data.length - 1].time });
                 }
                 
                 // Convert time to pixel coordinates
@@ -366,6 +427,16 @@ export const ChartComponent = props => {
                         logical2 = i;
                         break;
                     }
+                }
+                
+                // If time2 is beyond the last data point, use the last index
+                if (logical2 === null && box.time2 > data[data.length - 1].time) {
+                    logical2 = data.length - 1;
+                }
+                
+                // If time1 is before the first data point, use the first index
+                if (logical1 === null && box.time1 < data[0].time) {
+                    logical1 = 0;
                 }
             }
             
@@ -657,12 +728,12 @@ export const ChartComponent = props => {
                                 lineOptions.lineStyle = lineStyleMap[indicator.config.lineStyle] || LineStyle.Solid;
                             }
                             
-                            series = chart.addLineSeries(lineOptions);
+                            series = chart.addSeries(LineSeries, lineOptions);
                             console.log(`Line series created for ${indicator.name}:`, !!series, 'with options:', lineOptions);
                             break;
                             
                         case 'area':
-                            series = chart.addAreaSeries({
+                            series = chart.addSeries(AreaSeries, {
                                 lineColor: indicator.config.color,
                                 topColor: indicator.config.topColor || indicator.config.color + '40', // 25% opacity
                                 bottomColor: indicator.config.bottomColor || indicator.config.color + '10', // 6% opacity
@@ -672,7 +743,7 @@ export const ChartComponent = props => {
                             break;
                             
                         case 'bar':
-                            series = chart.addBarSeries({
+                            series = chart.addSeries(BarSeries, {
                                 upColor: indicator.config.upColor || indicator.config.color,
                                 downColor: indicator.config.downColor || indicator.config.color,
                                 openVisible: indicator.config.openVisible !== false,
@@ -682,7 +753,7 @@ export const ChartComponent = props => {
                             break;
                             
                         case 'baseline':
-                            series = chart.addBaselineSeries({
+                            series = chart.addSeries(BaselineSeries, {
                                 baseValue: indicator.config.baseValue || { type: 'price', price: 0 },
                                 lineColor: indicator.config.color,
                                 topFillColor1: indicator.config.topFillColor1 || indicator.config.color + '40',
@@ -695,7 +766,7 @@ export const ChartComponent = props => {
                             break;
                             
                         case 'candlestick':
-                            series = chart.addCandlestickSeries({
+                            series = chart.addSeries(CandlestickSeries, {
                                 upColor: indicator.config.upColor || '#4caf50',
                                 downColor: indicator.config.downColor || '#e91e63',
                                 wickUpColor: indicator.config.wickUpColor || indicator.config.upColor || '#4caf50',
@@ -732,7 +803,7 @@ export const ChartComponent = props => {
                                 histogramOptions.priceScaleId = indicator.config.priceScaleId || '';
                             }
                             
-                            series = chart.addHistogramSeries(histogramOptions);
+                            series = chart.addSeries(HistogramSeries, histogramOptions);
                             
                             // Apply price scale options if separate pane
                             if (indicator.separatePane && series) {
