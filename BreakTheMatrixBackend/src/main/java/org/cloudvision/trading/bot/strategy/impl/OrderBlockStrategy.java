@@ -587,7 +587,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                     // box.put("borderWidth", 1);
                     // box.put("borderStyle", "dashed");
                     box.put("text", "Bullish OB (Mitigated)");
-                    box.put("textColor", "#808080");
+                    box.put("textColor", "rgba(128, 128, 128, 0.08)");
                     mitigatedBullCount++;
                 } else {
                     // Active: Green with normal opacity
@@ -596,7 +596,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                     // box.put("borderWidth", 1);
                     // box.put("borderStyle", "solid");
                     box.put("text", ob.touched ? "Bullish OB ✓" : "Bullish OB");
-                    box.put("textColor", "#169400");
+                    box.put("textColor", "rgba(22, 148, 0, 0.15)");
                     activeBullCount++;
                 }
                 
@@ -653,7 +653,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                     // box.put("borderWidth", 1);
                     // box.put("borderStyle", "dashed");
                     box.put("text", "Bearish OB (Mitigated)");
-                    box.put("textColor", "#808080");
+                    box.put("textColor", "rgba(128, 128, 128, 0.08)");
                     mitigatedBearCount++;
                 } else {
                     // Active: Red with normal opacity
@@ -662,7 +662,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                     // box.put("borderWidth", 1);
                     // box.put("borderStyle", "solid");
                     box.put("text", ob.touched ? "Bearish OB ✓" : "Bearish OB");
-                    box.put("textColor", "#ff1100");
+                    box.put("textColor", "rgba(255, 17, 0, 0.15)");
                     activeBearCount++;
                 }
                 
