@@ -224,6 +224,106 @@ public class TechnicalIndicators {
         return sumTR.divide(new BigDecimal(period), 8, RoundingMode.HALF_UP);
     }
     
+    /**
+     * Calculate SuperTrend indicator
+     * Returns [SuperTrend value, Direction (1=bullish, -1=bearish)]
+     * 
+     * @param highs List of high prices
+     * @param lows List of low prices
+     * @param closes List of close prices
+     * @param period ATR period (typically 10)
+     * @param multiplier ATR multiplier (typically 3)
+     * @param previousSuperTrend Previous SuperTrend value (null for first calculation)
+     * @param previousDirection Previous direction (null for first calculation)
+     * @return Array [SuperTrend value, Direction]
+     */
+    public static BigDecimal[] calculateSuperTrend(List<BigDecimal> highs, List<BigDecimal> lows,
+                                                   List<BigDecimal> closes, int period, 
+                                                   BigDecimal multiplier,
+                                                   BigDecimal previousSuperTrend,
+                                                   BigDecimal previousDirection) {
+        if (highs == null || lows == null || closes == null || 
+            highs.size() < period + 1 || highs.size() != lows.size() || 
+            highs.size() != closes.size()) {
+            return null;
+        }
+        
+        int lastIndex = closes.size() - 1;
+        BigDecimal currentClose = closes.get(lastIndex);
+        BigDecimal currentHigh = highs.get(lastIndex);
+        BigDecimal currentLow = lows.get(lastIndex);
+        
+        // Calculate ATR
+        BigDecimal atr = calculateATR(highs, lows, closes, period);
+        
+        // Calculate basic upper and lower bands
+        BigDecimal hl2 = currentHigh.add(currentLow).divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
+        BigDecimal basicUpperBand = hl2.add(multiplier.multiply(atr));
+        BigDecimal basicLowerBand = hl2.subtract(multiplier.multiply(atr));
+        
+        // Calculate final upper and lower bands
+        BigDecimal finalUpperBand;
+        BigDecimal finalLowerBand;
+        
+        if (previousSuperTrend != null && lastIndex > 0) {
+            BigDecimal previousClose = closes.get(lastIndex - 1);
+            
+            // Final upper band logic
+            if (basicUpperBand.compareTo(previousSuperTrend) < 0 || 
+                previousClose.compareTo(previousSuperTrend) > 0) {
+                finalUpperBand = basicUpperBand;
+            } else {
+                finalUpperBand = previousSuperTrend;
+            }
+            
+            // Final lower band logic
+            if (basicLowerBand.compareTo(previousSuperTrend) > 0 || 
+                previousClose.compareTo(previousSuperTrend) < 0) {
+                finalLowerBand = basicLowerBand;
+            } else {
+                finalLowerBand = previousSuperTrend;
+            }
+        } else {
+            finalUpperBand = basicUpperBand;
+            finalLowerBand = basicLowerBand;
+        }
+        
+        // Determine SuperTrend value and direction
+        BigDecimal superTrend;
+        BigDecimal direction;
+        
+        if (previousDirection == null) {
+            // First calculation - determine initial direction
+            if (currentClose.compareTo(finalUpperBand) <= 0) {
+                superTrend = finalUpperBand;
+                direction = BigDecimal.ONE.negate(); // Bearish
+            } else {
+                superTrend = finalLowerBand;
+                direction = BigDecimal.ONE; // Bullish
+            }
+        } else if (previousDirection.compareTo(BigDecimal.ZERO) > 0) {
+            // Previous direction was bullish
+            if (currentClose.compareTo(finalLowerBand) <= 0) {
+                superTrend = finalUpperBand;
+                direction = BigDecimal.ONE.negate(); // Switch to bearish
+            } else {
+                superTrend = finalLowerBand;
+                direction = BigDecimal.ONE; // Stay bullish
+            }
+        } else {
+            // Previous direction was bearish
+            if (currentClose.compareTo(finalUpperBand) >= 0) {
+                superTrend = finalLowerBand;
+                direction = BigDecimal.ONE; // Switch to bullish
+            } else {
+                superTrend = finalUpperBand;
+                direction = BigDecimal.ONE.negate(); // Stay bearish
+            }
+        }
+        
+        return new BigDecimal[] { superTrend, direction };
+    }
+    
     private static BigDecimal calculateTrueRange(BigDecimal high, BigDecimal low, 
                                                 BigDecimal previousClose) {
         BigDecimal hl = high.subtract(low);

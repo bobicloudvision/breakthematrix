@@ -5,8 +5,11 @@ import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
 import org.cloudvision.trading.bot.strategy.impl.MovingAverageStrategy;
 import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
+import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.ApplicationContext;
 
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
@@ -28,6 +31,9 @@ public class TradingBotConfig {
     @Autowired
     private RSIStrategy rsiStrategy;
     
+    @Autowired
+    private ApplicationContext applicationContext;
+    
     // Option 1: Auto-register all strategies (uncomment to use)
     // @Autowired(required = false)
     // private List<TradingStrategy> allStrategies;
@@ -39,6 +45,11 @@ public class TradingBotConfig {
         // Option 1: Manual registration (more control)
         configureMovingAverageStrategy();
         configureRSIStrategy();
+        
+        // Configure SuperTrend strategies with different parameters
+        configureSuperTrendStrategy1(); // Conservative (10, 3)
+        configureSuperTrendStrategy2(); // Moderate (10, 2)
+        configureSuperTrendStrategy3(); // Aggressive (7, 3)
         
         // Option 2: Auto-register all strategies (uncomment to use)
         // autoRegisterAllStrategies();
@@ -95,6 +106,84 @@ public class TradingBotConfig {
         
         rsiStrategy.initialize(config);
         tradingBot.addStrategy(rsiStrategy);
+    }
+    
+    /**
+     * Configure SuperTrend Strategy #1 - Conservative
+     * ATR Period: 10, Multiplier: 3 (standard settings)
+     * Best for: Less frequent signals, higher confidence trades
+     */
+    private void configureSuperTrendStrategy1() {
+        SuperTrendStrategy strategy = applicationContext.getBean(SuperTrendStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "supertrend-conservative",
+            List.of("BTCUSDT", "ETHUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("4000")); // $4000 per position
+        config.setStopLossPercentage(new BigDecimal("0.025")); // 2.5% stop loss
+        config.setTakeProfitPercentage(new BigDecimal("0.05")); // 5% take profit (1:2 R:R)
+        
+        // Strategy-specific parameters
+        config.setParameter("atrPeriod", 10);           // 10-period ATR
+        config.setParameter("atrMultiplier", 3.0);      // Multiplier of 3 (conservative)
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure SuperTrend Strategy #2 - Moderate
+     * ATR Period: 10, Multiplier: 2 (more sensitive)
+     * Best for: More frequent signals, balanced approach
+     */
+    private void configureSuperTrendStrategy2() {
+        SuperTrendStrategy strategy = applicationContext.getBean(SuperTrendStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "supertrend-moderate",
+            List.of("BTCUSDT", "ETHUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("3000")); // $3000 per position
+        config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
+        config.setTakeProfitPercentage(new BigDecimal("0.04")); // 4% take profit
+        
+        // Strategy-specific parameters
+        config.setParameter("atrPeriod", 10);           // 10-period ATR
+        config.setParameter("atrMultiplier", 2.0);      // Multiplier of 2 (moderate)
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure SuperTrend Strategy #3 - Aggressive
+     * ATR Period: 7, Multiplier: 3 (faster response)
+     * Best for: Quick entries, shorter timeframes
+     */
+    private void configureSuperTrendStrategy3() {
+        SuperTrendStrategy strategy = applicationContext.getBean(SuperTrendStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "supertrend-aggressive",
+            List.of("BTCUSDT", "ETHUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("2500")); // $2500 per position (smaller size for aggressive)
+        config.setStopLossPercentage(new BigDecimal("0.015")); // 1.5% stop loss (tighter)
+        config.setTakeProfitPercentage(new BigDecimal("0.03")); // 3% take profit (1:2 R:R)
+        
+        // Strategy-specific parameters
+        config.setParameter("atrPeriod", 7);            // 7-period ATR (faster)
+        config.setParameter("atrMultiplier", 3.0);      // Multiplier of 3
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
     }
     
     /**
