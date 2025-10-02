@@ -7,7 +7,8 @@ import {
     AreaSeries,
     BarSeries,
     BaselineSeries,
-    HistogramSeries
+    HistogramSeries,
+    createSeriesMarkers
 } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { BoxPrimitive } from './BoxPrimitive';
@@ -42,6 +43,7 @@ export const ChartComponent = props => {
     const seriesRef = useRef();
     const indicatorSeriesRef = useRef({});
     const markersRef = useRef([]);
+    const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
     const boxPrimitivesRef = useRef([]);
@@ -879,15 +881,24 @@ export const ChartComponent = props => {
             // Start processing indicators
             processIndicator(0);
 
-            // Add markers for trading signals
+            // Add markers for trading signals (v5 API uses createSeriesMarkers)
             if (strategyData.markers && Array.isArray(strategyData.markers) && strategyData.markers.length > 0) {
                 console.log('Adding markers:', strategyData.markers.length, 'markers');
                 try {
-                    seriesRef.current.setMarkers(strategyData.markers);
+                    // Remove existing markers plugin if any
+                    if (markerPluginRef.current) {
+                        markerPluginRef.current.setMarkers([]);
+                    }
+                    
+                    // Create new markers plugin
+                    markerPluginRef.current = createSeriesMarkers(seriesRef.current, strategyData.markers);
                     console.log('Markers added successfully');
                 } catch (e) {
                     console.error('Error setting markers:', e);
                 }
+            } else if (markerPluginRef.current) {
+                // Clear markers if no markers in strategy data
+                markerPluginRef.current.setMarkers([]);
             }
             
             // Add boxes/rectangles if provided (with delay to ensure chart is ready)

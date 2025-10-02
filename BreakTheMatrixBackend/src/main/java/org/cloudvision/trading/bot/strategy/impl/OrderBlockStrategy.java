@@ -17,8 +17,12 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Order Block Detector Strategy
+ * Order Block Detector Strategy (Visualization Only)
  * Based on LuxAlgo's Order Block Detector
+ * 
+ * **PURPOSE**: This is a VISUALIZATION-ONLY strategy that displays institutional order blocks
+ * on the chart. It does NOT generate trading signals or create orders. Traders use this as a
+ * discretionary tool to identify key support/resistance zones for manual trading decisions.
  * 
  * Order blocks are zones where institutional traders have placed significant orders.
  * - Bullish Order Blocks: Form during downtrends at volume pivots (support zones)
@@ -26,21 +30,22 @@ import java.util.*;
  * 
  * ALGORITHM:
  * 1. Detect market structure (uptrend vs downtrend) by tracking higher highs/lower lows
- * 2. Identify volume pivots (local volume highs)
+ * 2. Identify volume pivots (local volume highs indicating institutional activity)
  * 3. Create order blocks at volume pivots:
  *    - Bullish OB in downtrend: support zone from low to HL2
  *    - Bearish OB in uptrend: resistance zone from HL2 to high
  * 4. Track volume strength (pivot volume / average volume)
- * 5. Generate signals when price returns to untouched OB zones
- * 6. Remove (mitigate) OBs when price breaks through them:
+ * 5. Mark OBs as "touched" when price returns to them (for visual reference)
+ * 6. Mark OBs as "mitigated" when price breaks through them:
  *    - Bullish OB: invalidated when low breaks below OB bottom
  *    - Bearish OB: invalidated when high breaks above OB top
  * 
- * IMPROVEMENTS OVER BASIC OB DETECTION:
- * - Volume strength weighting for better risk/reward ratios
- * - Only triggers on first touch (prevents over-trading)
- * - Separate mitigation logic for wicks vs closes
- * - Dynamic take-profit based on OB strength
+ * FEATURES:
+ * - Volume strength analysis for quality assessment
+ * - Touched indicator (✓) shows zones that have been tested
+ * - Mitigated boxes shown in gray (configurable)
+ * - Maximum width limit for historical boxes (prevents clutter)
+ * - Complete historical data preservation
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
@@ -54,6 +59,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     private int maxBullishOrderBlocks = 3;
     private int maxBearishOrderBlocks = 3;
     private String mitigationMethod = "Wick"; // "Wick" or "Close"
+    private int mitigatedBoxMaxWidthBars = 50; // Maximum width for mitigated boxes in number of candles
+    private boolean showMitigatedBoxes = false; // Show/hide mitigated (historical) order blocks
     
     // Order Block data class
     private static class OrderBlock {
@@ -64,6 +71,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         int barIndex;
         BigDecimal volumeStrength; // Volume at formation relative to recent average
         boolean touched; // Has price returned to this OB zone?
+        boolean mitigated; // Has this OB been invalidated?
+        Instant mitigationTime; // When was it mitigated?
         
         OrderBlock(BigDecimal top, BigDecimal bottom, Instant timestamp, int barIndex, BigDecimal volumeStrength) {
             this.top = top;
@@ -73,6 +82,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             this.barIndex = barIndex;
             this.volumeStrength = volumeStrength;
             this.touched = false;
+            this.mitigated = false;
+            this.mitigationTime = null;
         }
     }
     
@@ -167,8 +178,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             }
         }
         
-        // Check if price is touching any order blocks and generate trading signals
-        orders.addAll(checkOrderBlockTouch(symbol, currentPrice, candle));
+        // Mark touched order blocks (for visualization purposes only)
+        markTouchedOrderBlocks(symbol, currentPrice, candle);
         
         // Remove mitigated order blocks
         // For bullish OBs: check if low broke below the block
@@ -353,16 +364,17 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     }
     
     /**
-     * Check if price is touching any order blocks and generate signals
-     * Only generates signals when price returns to an untouched OB zone
+     * Mark order blocks as touched when price returns to them (for visualization purposes only)
+     * Does not generate trading signals
      */
-    private List<Order> checkOrderBlockTouch(String symbol, BigDecimal currentPrice, CandlestickData candle) {
-        List<Order> orders = new ArrayList<>();
-        
+    private void markTouchedOrderBlocks(String symbol, BigDecimal currentPrice, CandlestickData candle) {
         // Check bullish order blocks
         LinkedList<OrderBlock> bullBlocks = bullishOrderBlocks.get(symbol);
         if (bullBlocks != null) {
             for (OrderBlock ob : bullBlocks) {
+                // Skip mitigated order blocks
+                if (ob.mitigated) continue;
+                
                 // Check if price is within or touching the OB zone
                 boolean touching = currentPrice.compareTo(ob.bottom) >= 0 && currentPrice.compareTo(ob.top) <= 0;
                 
@@ -373,31 +385,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 
                 if (touching && !ob.touched) {
                     ob.touched = true;
-                    
                     System.out.println("📍 Order Block: Price touched Bullish OB for " + symbol + 
                         " | Price: " + currentPrice + " | OB Zone: [" + ob.bottom + " - " + ob.top + "]" +
                         " | Volume Strength: " + ob.volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
-                    
-                    // Generate buy signal
-                    Order buyOrder = createBuyOrder(symbol, currentPrice);
-                    
-                    // Set stop loss below the order block
-                    BigDecimal stopLoss = ob.bottom.multiply(new BigDecimal("0.998")); // 0.2% below bottom
-                    buyOrder.setSuggestedStopLoss(stopLoss);
-                    
-                    // Set take profit with 2:1 risk/reward (can be adjusted based on volume strength)
-                    BigDecimal riskDistance = currentPrice.subtract(stopLoss);
-                    BigDecimal rewardMultiplier = new BigDecimal("2.0");
-                    
-                    // Increase reward if volume strength is high
-                    if (ob.volumeStrength.compareTo(new BigDecimal("2.0")) > 0) {
-                        rewardMultiplier = new BigDecimal("3.0"); // 3:1 for strong OBs
-                    }
-                    
-                    BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(rewardMultiplier));
-                    buyOrder.setSuggestedTakeProfit(takeProfit);
-                    
-                    orders.add(buyOrder);
                 }
             }
         }
@@ -406,6 +396,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         LinkedList<OrderBlock> bearBlocks = bearishOrderBlocks.get(symbol);
         if (bearBlocks != null) {
             for (OrderBlock ob : bearBlocks) {
+                // Skip mitigated order blocks
+                if (ob.mitigated) continue;
+                
                 // Check if price is within or touching the OB zone
                 boolean touching = currentPrice.compareTo(ob.bottom) >= 0 && currentPrice.compareTo(ob.top) <= 0;
                 
@@ -416,108 +409,116 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 
                 if (touching && !ob.touched) {
                     ob.touched = true;
-                    
                     System.out.println("📍 Order Block: Price touched Bearish OB for " + symbol + 
                         " | Price: " + currentPrice + " | OB Zone: [" + ob.bottom + " - " + ob.top + "]" +
                         " | Volume Strength: " + ob.volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
-                    
-                    // Generate sell signal
-                    Order shortOrder = createShortOrder(symbol, currentPrice);
-                    
-                    // Set stop loss above the order block
-                    BigDecimal stopLoss = ob.top.multiply(new BigDecimal("1.002")); // 0.2% above top
-                    shortOrder.setSuggestedStopLoss(stopLoss);
-                    
-                    // Set take profit with 2:1 risk/reward (can be adjusted based on volume strength)
-                    BigDecimal riskDistance = stopLoss.subtract(currentPrice);
-                    BigDecimal rewardMultiplier = new BigDecimal("2.0");
-                    
-                    // Increase reward if volume strength is high
-                    if (ob.volumeStrength.compareTo(new BigDecimal("2.0")) > 0) {
-                        rewardMultiplier = new BigDecimal("3.0"); // 3:1 for strong OBs
-                    }
-                    
-                    BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(rewardMultiplier));
-                    shortOrder.setSuggestedTakeProfit(takeProfit);
-                    
-                    orders.add(shortOrder);
                 }
             }
         }
-        
-        return orders;
     }
     
     /**
      * Add bullish order block
+     * Limits only ACTIVE (non-mitigated) order blocks, keeps all mitigated ones for history
      */
     private void addBullishOrderBlock(String symbol, OrderBlock ob) {
         LinkedList<OrderBlock> blocks = bullishOrderBlocks.computeIfAbsent(symbol, k -> new LinkedList<>());
         blocks.addFirst(ob);
         
-        // Keep only the most recent blocks
-        while (blocks.size() > maxBullishOrderBlocks) {
-            blocks.removeLast();
+        // Count active (non-mitigated) blocks
+        long activeCount = blocks.stream().filter(block -> !block.mitigated).count();
+        
+        // Remove oldest ACTIVE blocks if we exceed the limit (keep all mitigated for history)
+        if (activeCount > maxBullishOrderBlocks) {
+            Iterator<OrderBlock> iterator = blocks.descendingIterator();
+            while (iterator.hasNext() && activeCount > maxBullishOrderBlocks) {
+                OrderBlock block = iterator.next();
+                if (!block.mitigated) {
+                    iterator.remove();
+                    activeCount--;
+                }
+            }
         }
     }
     
     /**
      * Add bearish order block
+     * Limits only ACTIVE (non-mitigated) order blocks, keeps all mitigated ones for history
      */
     private void addBearishOrderBlock(String symbol, OrderBlock ob) {
         LinkedList<OrderBlock> blocks = bearishOrderBlocks.computeIfAbsent(symbol, k -> new LinkedList<>());
         blocks.addFirst(ob);
         
-        // Keep only the most recent blocks
-        while (blocks.size() > maxBearishOrderBlocks) {
-            blocks.removeLast();
+        // Count active (non-mitigated) blocks
+        long activeCount = blocks.stream().filter(block -> !block.mitigated).count();
+        
+        // Remove oldest ACTIVE blocks if we exceed the limit (keep all mitigated for history)
+        if (activeCount > maxBearishOrderBlocks) {
+            Iterator<OrderBlock> iterator = blocks.descendingIterator();
+            while (iterator.hasNext() && activeCount > maxBearishOrderBlocks) {
+                OrderBlock block = iterator.next();
+                if (!block.mitigated) {
+                    iterator.remove();
+                    activeCount--;
+                }
+            }
         }
     }
     
     /**
-     * Remove mitigated bullish order blocks
+     * Mark mitigated bullish order blocks as invalid
      * Bullish OB is mitigated (invalidated) when price breaks below the support zone.
      * This means the institutions' buy orders have been filled or the support has failed.
+     * Keep ALL mitigated OBs for complete historical visualization.
      */
     private boolean removeMitigatedBullishOrderBlocks(String symbol, BigDecimal targetPrice) {
         LinkedList<OrderBlock> blocks = bullishOrderBlocks.get(symbol);
         if (blocks == null || blocks.isEmpty()) return false;
         
-        boolean mitigated = false;
-        Iterator<OrderBlock> iterator = blocks.iterator();
-        while (iterator.hasNext()) {
-            OrderBlock ob = iterator.next();
-            // Remove if price broke below the OB bottom (support failed)
-            if (targetPrice.compareTo(ob.bottom) < 0) {
-                iterator.remove();
-                mitigated = true;
+        boolean newMitigation = false;
+        for (OrderBlock ob : blocks) {
+            // Mark as mitigated if price broke below the OB bottom (support failed)
+            if (!ob.mitigated && targetPrice.compareTo(ob.bottom) < 0) {
+                ob.mitigated = true;
+                ob.mitigationTime = Instant.now();
+                newMitigation = true;
+                System.out.println("💔 Order Block: Bullish OB mitigated for " + symbol + 
+                    " | OB Zone: [" + ob.bottom + " - " + ob.top + "]");
             }
         }
         
-        return mitigated;
+        // Keep ALL mitigated order blocks for complete historical context
+        // No removal of mitigated OBs - they stay for the entire dataset
+        
+        return newMitigation;
     }
     
     /**
-     * Remove mitigated bearish order blocks
+     * Mark mitigated bearish order blocks as invalid
      * Bearish OB is mitigated (invalidated) when price breaks above the resistance zone.
      * This means the institutions' sell orders have been filled or the resistance has failed.
+     * Keep ALL mitigated OBs for complete historical visualization.
      */
     private boolean removeMitigatedBearishOrderBlocks(String symbol, BigDecimal targetPrice) {
         LinkedList<OrderBlock> blocks = bearishOrderBlocks.get(symbol);
         if (blocks == null || blocks.isEmpty()) return false;
         
-        boolean mitigated = false;
-        Iterator<OrderBlock> iterator = blocks.iterator();
-        while (iterator.hasNext()) {
-            OrderBlock ob = iterator.next();
-            // Remove if price broke above the OB top (resistance failed)
-            if (targetPrice.compareTo(ob.top) > 0) {
-                iterator.remove();
-                mitigated = true;
+        boolean newMitigation = false;
+        for (OrderBlock ob : blocks) {
+            // Mark as mitigated if price broke above the OB top (resistance failed)
+            if (!ob.mitigated && targetPrice.compareTo(ob.top) > 0) {
+                ob.mitigated = true;
+                ob.mitigationTime = Instant.now();
+                newMitigation = true;
+                System.out.println("💔 Order Block: Bearish OB mitigated for " + symbol + 
+                    " | OB Zone: [" + ob.bottom + " - " + ob.top + "]");
             }
         }
         
-        return mitigated;
+        // Keep ALL mitigated order blocks for complete historical context
+        // No removal of mitigated OBs - they stay for the entire dataset
+        
+        return newMitigation;
     }
     
     /**
@@ -534,61 +535,155 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         
         LinkedList<OrderBlock> bullBlocks = bullishOrderBlocks.get(symbol);
         int bullCount = (bullBlocks != null) ? bullBlocks.size() : 0;
+        int activeBullCount = 0;
+        int mitigatedBullCount = 0;
         
         if (bullBlocks != null && !bullBlocks.isEmpty()) {
             for (OrderBlock ob : bullBlocks) {
+                // Skip mitigated boxes if showMitigatedBoxes is false
+                if (ob.mitigated && !showMitigatedBoxes) {
+                    mitigatedBullCount++;
+                    continue;
+                }
+                
                 Map<String, Object> box = new HashMap<>();
                 box.put("time1", ob.timestamp.getEpochSecond());
-                box.put("time2", timestamp.getEpochSecond()); // Extend to current time
-                box.put("price1", ob.top.doubleValue()); // Convert to double for JSON serialization
+                
+                // Calculate end time
+                long endTime;
+                if (ob.mitigated && ob.mitigationTime != null) {
+                    // For mitigated blocks: use mitigation time but cap at max width
+                    long mitigationEndTime = ob.mitigationTime.getEpochSecond();
+                    long duration = mitigationEndTime - ob.timestamp.getEpochSecond();
+                    
+                    // Assume 1-minute candles (60 seconds) - can be made configurable
+                    long maxDuration = mitigatedBoxMaxWidthBars * 60L;
+                    
+                    if (duration > maxDuration) {
+                        // Cap the width to maximum
+                        endTime = ob.timestamp.getEpochSecond() + maxDuration;
+                    } else {
+                        endTime = mitigationEndTime;
+                    }
+                } else {
+                    // Active blocks: extend to current time
+                    endTime = timestamp.getEpochSecond();
+                }
+                box.put("time2", endTime);
+                
+                box.put("price1", ob.top.doubleValue());
                 box.put("price2", ob.bottom.doubleValue());
-                box.put("backgroundColor", "rgba(22, 148, 0, 0.15)"); // Green with transparency
-                box.put("borderColor", "#169400");
-                box.put("borderWidth", 1);
-                box.put("borderStyle", "solid");
-                box.put("text", "Bullish OB");
-                box.put("textColor", "#169400");
+                
+                // Style based on mitigation status
+                if (ob.mitigated) {
+                    // Mitigated: Gray with very low opacity
+                    box.put("backgroundColor", "rgba(128, 128, 128, 0.08)"); // Gray, very transparent
+                    box.put("borderColor", "#808080");
+                    box.put("borderWidth", 1);
+                    box.put("borderStyle", "dashed");
+                    box.put("text", "Bullish OB (Mitigated)");
+                    box.put("textColor", "#808080");
+                    mitigatedBullCount++;
+                } else {
+                    // Active: Green with normal opacity
+                    box.put("backgroundColor", "rgba(22, 148, 0, 0.15)"); // Green with transparency
+                    box.put("borderColor", "#169400");
+                    box.put("borderWidth", 1);
+                    box.put("borderStyle", "solid");
+                    box.put("text", ob.touched ? "Bullish OB ✓" : "Bullish OB");
+                    box.put("textColor", "#169400");
+                    activeBullCount++;
+                }
+                
                 boxes.add(box);
             }
         }
         
         LinkedList<OrderBlock> bearBlocks = bearishOrderBlocks.get(symbol);
         int bearCount = (bearBlocks != null) ? bearBlocks.size() : 0;
+        int activeBearCount = 0;
+        int mitigatedBearCount = 0;
         
         if (bearBlocks != null && !bearBlocks.isEmpty()) {
             for (OrderBlock ob : bearBlocks) {
+                // Skip mitigated boxes if showMitigatedBoxes is false
+                if (ob.mitigated && !showMitigatedBoxes) {
+                    mitigatedBearCount++;
+                    continue;
+                }
+                
                 Map<String, Object> box = new HashMap<>();
                 box.put("time1", ob.timestamp.getEpochSecond());
-                box.put("time2", timestamp.getEpochSecond()); // Extend to current time
-                box.put("price1", ob.top.doubleValue()); // Convert to double for JSON serialization
+                
+                // Calculate end time
+                long endTime;
+                if (ob.mitigated && ob.mitigationTime != null) {
+                    // For mitigated blocks: use mitigation time but cap at max width
+                    long mitigationEndTime = ob.mitigationTime.getEpochSecond();
+                    long duration = mitigationEndTime - ob.timestamp.getEpochSecond();
+                    
+                    // Assume 1-minute candles (60 seconds) - can be made configurable
+                    long maxDuration = mitigatedBoxMaxWidthBars * 60L;
+                    
+                    if (duration > maxDuration) {
+                        // Cap the width to maximum
+                        endTime = ob.timestamp.getEpochSecond() + maxDuration;
+                    } else {
+                        endTime = mitigationEndTime;
+                    }
+                } else {
+                    // Active blocks: extend to current time
+                    endTime = timestamp.getEpochSecond();
+                }
+                box.put("time2", endTime);
+                
+                box.put("price1", ob.top.doubleValue());
                 box.put("price2", ob.bottom.doubleValue());
-                box.put("backgroundColor", "rgba(255, 17, 0, 0.15)"); // Red with transparency
-                box.put("borderColor", "#ff1100");
-                box.put("borderWidth", 1);
-                box.put("borderStyle", "solid");
-                box.put("text", "Bearish OB");
-                box.put("textColor", "#ff1100");
+                
+                // Style based on mitigation status
+                if (ob.mitigated) {
+                    // Mitigated: Gray with very low opacity
+                    box.put("backgroundColor", "rgba(128, 128, 128, 0.08)"); // Gray, very transparent
+                    box.put("borderColor", "#808080");
+                    box.put("borderWidth", 1);
+                    box.put("borderStyle", "dashed");
+                    box.put("text", "Bearish OB (Mitigated)");
+                    box.put("textColor", "#808080");
+                    mitigatedBearCount++;
+                } else {
+                    // Active: Red with normal opacity
+                    box.put("backgroundColor", "rgba(255, 17, 0, 0.15)"); // Red with transparency
+                    box.put("borderColor", "#ff1100");
+                    box.put("borderWidth", 1);
+                    box.put("borderStyle", "solid");
+                    box.put("text", ob.touched ? "Bearish OB ✓" : "Bearish OB");
+                    box.put("textColor", "#ff1100");
+                    activeBearCount++;
+                }
+                
                 boxes.add(box);
             }
         }
         
         // Debug log to verify boxes are being generated
-        System.out.println(String.format("📦 Order Block [%s]: Bull OBs=%d, Bear OBs=%d, Total Boxes=%d", 
-            symbol, bullCount, bearCount, boxes.size()));
+        System.out.println(String.format("📦 Order Block [%s]: Active Bull=%d, Mitigated Bull=%d, Active Bear=%d, Mitigated Bear=%d, Total Boxes=%d", 
+            symbol, activeBullCount, mitigatedBullCount, activeBearCount, mitigatedBearCount, boxes.size()));
         
         // Prepare signals
         Map<String, Object> signals = new HashMap<>();
         signals.put("marketStructure", marketStructure.getOrDefault(symbol, 0) == 0 ? "UPTREND" : "DOWNTREND");
-        signals.put("bullishOrderBlocks", bullBlocks != null ? bullBlocks.size() : 0);
-        signals.put("bearishOrderBlocks", bearBlocks != null ? bearBlocks.size() : 0);
+        signals.put("bullishOrderBlocks", activeBullCount);
+        signals.put("bearishOrderBlocks", activeBearCount);
+        signals.put("mitigatedBullishOrderBlocks", mitigatedBullCount);
+        signals.put("mitigatedBearishOrderBlocks", mitigatedBearCount);
         
-        // Check if price is near any order block
+        // Check if price is near any active (non-mitigated) order block
         boolean nearBullOB = false;
         boolean nearBearOB = false;
         
         if (bullBlocks != null) {
             for (OrderBlock ob : bullBlocks) {
-                if (price.compareTo(ob.bottom) >= 0 && price.compareTo(ob.top) <= 0) {
+                if (!ob.mitigated && price.compareTo(ob.bottom) >= 0 && price.compareTo(ob.top) <= 0) {
                     nearBullOB = true;
                     break;
                 }
@@ -597,7 +692,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         
         if (bearBlocks != null) {
             for (OrderBlock ob : bearBlocks) {
-                if (price.compareTo(ob.bottom) >= 0 && price.compareTo(ob.top) <= 0) {
+                if (!ob.mitigated && price.compareTo(ob.bottom) >= 0 && price.compareTo(ob.top) <= 0) {
                     nearBearOB = true;
                     break;
                 }
@@ -616,6 +711,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             performance.put("profitFactor", stats.getProfitFactor() != null ? stats.getProfitFactor() : BigDecimal.ZERO);
         }
         
+        // No trading signals - always HOLD (visualization only)
+        String signal = "HOLD";
+        
         // Create visualization data with boxes
         StrategyVisualizationData vizData = new StrategyVisualizationData(
             getStrategyId(),
@@ -625,7 +723,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             indicators,
             signals,
             performance,
-            "HOLD",
+            signal,
             boxes
         );
         
@@ -670,6 +768,12 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         if (config.getParameter("mitigationMethod") != null) {
             this.mitigationMethod = (String) config.getParameter("mitigationMethod");
         }
+        if (config.getParameter("mitigatedBoxMaxWidthBars") != null) {
+            this.mitigatedBoxMaxWidthBars = (Integer) config.getParameter("mitigatedBoxMaxWidthBars");
+        }
+        if (config.getParameter("showMitigatedBoxes") != null) {
+            this.showMitigatedBoxes = (Boolean) config.getParameter("showMitigatedBoxes");
+        }
         
         // Register with visualization manager
         if (visualizationManager != null) {
@@ -680,7 +784,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             ": Volume Pivot Length=" + volumePivotLength + 
             ", Max Bull OBs=" + maxBullishOrderBlocks + 
             ", Max Bear OBs=" + maxBearishOrderBlocks +
-            ", Mitigation=" + mitigationMethod);
+            ", Mitigation=" + mitigationMethod +
+            ", Mitigated Box Max Width=" + mitigatedBoxMaxWidthBars + " bars" +
+            ", Show Mitigated=" + showMitigatedBoxes);
     }
     
     @Override
