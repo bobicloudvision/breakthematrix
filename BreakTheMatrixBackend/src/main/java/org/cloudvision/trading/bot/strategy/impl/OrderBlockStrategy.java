@@ -23,6 +23,24 @@ import java.util.*;
  * Order blocks are zones where institutional traders have placed significant orders.
  * - Bullish Order Blocks: Form during downtrends at volume pivots (support zones)
  * - Bearish Order Blocks: Form during uptrends at volume pivots (resistance zones)
+ * 
+ * ALGORITHM:
+ * 1. Detect market structure (uptrend vs downtrend) by tracking higher highs/lower lows
+ * 2. Identify volume pivots (local volume highs)
+ * 3. Create order blocks at volume pivots:
+ *    - Bullish OB in downtrend: support zone from low to HL2
+ *    - Bearish OB in uptrend: resistance zone from HL2 to high
+ * 4. Track volume strength (pivot volume / average volume)
+ * 5. Generate signals when price returns to untouched OB zones
+ * 6. Remove (mitigate) OBs when price breaks through them:
+ *    - Bullish OB: invalidated when low breaks below OB bottom
+ *    - Bearish OB: invalidated when high breaks above OB top
+ * 
+ * IMPROVEMENTS OVER BASIC OB DETECTION:
+ * - Volume strength weighting for better risk/reward ratios
+ * - Only triggers on first touch (prevents over-trading)
+ * - Separate mitigation logic for wicks vs closes
+ * - Dynamic take-profit based on OB strength
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
@@ -44,13 +62,17 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         BigDecimal average;
         Instant timestamp;
         int barIndex;
+        BigDecimal volumeStrength; // Volume at formation relative to recent average
+        boolean touched; // Has price returned to this OB zone?
         
-        OrderBlock(BigDecimal top, BigDecimal bottom, Instant timestamp, int barIndex) {
+        OrderBlock(BigDecimal top, BigDecimal bottom, Instant timestamp, int barIndex, BigDecimal volumeStrength) {
             this.top = top;
             this.bottom = bottom;
             this.average = top.add(bottom).divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
             this.timestamp = timestamp;
             this.barIndex = barIndex;
+            this.volumeStrength = volumeStrength;
+            this.touched = false;
         }
     }
     
@@ -112,6 +134,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             int os = marketStructure.getOrDefault(symbol, 0);
             int pivotIndex = volumePivotLength; // Pivot is at the center
             
+            // Calculate volume strength (ratio of pivot volume to average volume)
+            BigDecimal volumeStrength = calculateVolumeStrength(volumes, pivotIndex);
+            
             // Bullish Order Block (downtrend + volume pivot)
             if (os == 1) {
                 BigDecimal top = getHL2(highs, lows, pivotIndex);
@@ -119,26 +144,12 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 Instant obTimestamp = timestamps.get(timestamps.size() - 1 - pivotIndex);
                 
                 // Create new bullish order block
-                OrderBlock bullOB = new OrderBlock(top, bottom, obTimestamp, barIndex - pivotIndex);
+                OrderBlock bullOB = new OrderBlock(top, bottom, obTimestamp, barIndex - pivotIndex, volumeStrength);
                 addBullishOrderBlock(symbol, bullOB);
                 
                 System.out.println("🟢 Order Block: Bullish OB detected for " + symbol + 
-                    " | Top: " + top + " | Bottom: " + bottom + " | Avg: " + bullOB.average);
-                
-                // Trading signal: Enter LONG when bullish OB forms (or wait for price to return to OB zone)
-                // For this implementation, we'll signal when OB forms
-                Order buyOrder = createBuyOrder(symbol, currentPrice);
-                
-                // Set stop loss below the order block
-                BigDecimal stopLoss = bottom.multiply(new BigDecimal("0.998")); // 0.2% below bottom
-                buyOrder.setSuggestedStopLoss(stopLoss);
-                
-                // Set take profit with 2:1 risk/reward
-                BigDecimal riskDistance = currentPrice.subtract(stopLoss);
-                BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(new BigDecimal("2")));
-                buyOrder.setSuggestedTakeProfit(takeProfit);
-                
-                orders.add(buyOrder);
+                    " | Top: " + top + " | Bottom: " + bottom + " | Avg: " + bullOB.average + 
+                    " | Volume Strength: " + volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
             }
             // Bearish Order Block (uptrend + volume pivot)
             else if (os == 0) {
@@ -147,32 +158,26 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 Instant obTimestamp = timestamps.get(timestamps.size() - 1 - pivotIndex);
                 
                 // Create new bearish order block
-                OrderBlock bearOB = new OrderBlock(top, bottom, obTimestamp, barIndex - pivotIndex);
+                OrderBlock bearOB = new OrderBlock(top, bottom, obTimestamp, barIndex - pivotIndex, volumeStrength);
                 addBearishOrderBlock(symbol, bearOB);
                 
                 System.out.println("🔴 Order Block: Bearish OB detected for " + symbol + 
-                    " | Top: " + top + " | Bottom: " + bottom + " | Avg: " + bearOB.average);
-                
-                // Trading signal: Enter SHORT when bearish OB forms
-                Order shortOrder = createShortOrder(symbol, currentPrice);
-                
-                // Set stop loss above the order block
-                BigDecimal stopLoss = top.multiply(new BigDecimal("1.002")); // 0.2% above top
-                shortOrder.setSuggestedStopLoss(stopLoss);
-                
-                // Set take profit with 2:1 risk/reward
-                BigDecimal riskDistance = stopLoss.subtract(currentPrice);
-                BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(new BigDecimal("2")));
-                shortOrder.setSuggestedTakeProfit(takeProfit);
-                
-                orders.add(shortOrder);
+                    " | Top: " + top + " | Bottom: " + bottom + " | Avg: " + bearOB.average +
+                    " | Volume Strength: " + volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
             }
         }
         
+        // Check if price is touching any order blocks and generate trading signals
+        orders.addAll(checkOrderBlockTouch(symbol, currentPrice, candle));
+        
         // Remove mitigated order blocks
-        BigDecimal targetPrice = getMitigationTarget(candle);
-        boolean bullMitigated = removeMitigatedBullishOrderBlocks(symbol, targetPrice);
-        boolean bearMitigated = removeMitigatedBearishOrderBlocks(symbol, targetPrice);
+        // For bullish OBs: check if low broke below the block
+        // For bearish OBs: check if high broke above the block
+        BigDecimal lowPrice = "Wick".equals(mitigationMethod) ? candle.getLow() : candle.getClose();
+        BigDecimal highPrice = "Wick".equals(mitigationMethod) ? candle.getHigh() : candle.getClose();
+        
+        boolean bullMitigated = removeMitigatedBullishOrderBlocks(symbol, lowPrice);
+        boolean bearMitigated = removeMitigatedBearishOrderBlocks(symbol, highPrice);
         
         if (bullMitigated) {
             System.out.println("⚠️ Order Block: Bullish OB mitigated for " + symbol);
@@ -215,56 +220,64 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
      * Update market structure oscillator
      * os = 0 (uptrend) when high breaks above highest high
      * os = 1 (downtrend) when low breaks below lowest low
+     * 
+     * This creates a simple trend filter that switches between bullish and bearish bias.
+     * The lookback excludes recent bars to avoid look-ahead bias during pivot detection.
      */
     private void updateMarketStructure(String symbol, List<BigDecimal> highs, List<BigDecimal> lows) {
         int size = highs.size();
         if (size < volumePivotLength + 1) return;
         
-        // Get current values
+        // Get values at the pivot point (looking back to avoid look-ahead bias)
         BigDecimal currentHigh = highs.get(size - 1 - volumePivotLength);
         BigDecimal currentLow = lows.get(size - 1 - volumePivotLength);
         
-        // Calculate highest high and lowest low over the period
+        // Calculate highest high and lowest low over the historical period
         BigDecimal upper = calculateHighest(highs, volumePivotLength);
         BigDecimal lower = calculateLowest(lows, volumePivotLength);
         
-        // Update market structure
+        // Update market structure based on breakouts
         int os = marketStructure.getOrDefault(symbol, 0);
         if (currentHigh.compareTo(upper) > 0) {
-            os = 0; // Uptrend
+            os = 0; // Uptrend: making higher highs
         } else if (currentLow.compareTo(lower) < 0) {
-            os = 1; // Downtrend
+            os = 1; // Downtrend: making lower lows
         }
+        // Otherwise maintain current structure
         marketStructure.put(symbol, os);
     }
     
     /**
      * Detect volume pivot high
      * Returns volume value if pivot is detected, null otherwise
+     * 
+     * A volume pivot is a local maximum in volume - the center bar must have higher
+     * volume than all bars within 'length' bars on both sides.
+     * This identifies significant volume spikes where institutions likely placed orders.
      */
     private BigDecimal detectVolumePivot(List<BigDecimal> volumes, int length) {
         int size = volumes.size();
         if (size < length * 2 + 1) return null;
         
-        // Check if center point is pivot high
+        // Check if center point is pivot high (looking back to maintain causality)
         int centerIndex = size - 1 - length;
         BigDecimal centerVolume = volumes.get(centerIndex);
         
-        // Check left side
+        // Check left side: all bars before center must have lower volume
         for (int i = 1; i <= length; i++) {
             if (volumes.get(centerIndex - i).compareTo(centerVolume) >= 0) {
                 return null; // Not a pivot high
             }
         }
         
-        // Check right side
+        // Check right side: all bars after center must have lower volume
         for (int i = 1; i <= length; i++) {
             if (volumes.get(centerIndex + i).compareTo(centerVolume) >= 0) {
                 return null; // Not a pivot high
             }
         }
         
-        return centerVolume;
+        return centerVolume; // Valid pivot detected
     }
     
     /**
@@ -279,12 +292,15 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     /**
      * Calculate highest value over period
+     * Looks back from the pivot point (excludes the most recent 'volumePivotLength' bars)
      */
     private BigDecimal calculateHighest(List<BigDecimal> values, int period) {
         int size = values.size();
-        BigDecimal max = values.get(size - 1 - period);
-        for (int i = 1; i <= period; i++) {
-            BigDecimal val = values.get(size - 1 - i);
+        int startIdx = size - 1 - volumePivotLength - period;
+        BigDecimal max = values.get(startIdx);
+        
+        for (int i = 0; i < period; i++) {
+            BigDecimal val = values.get(startIdx + i);
             if (val.compareTo(max) > 0) {
                 max = val;
             }
@@ -294,12 +310,15 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     /**
      * Calculate lowest value over period
+     * Looks back from the pivot point (excludes the most recent 'volumePivotLength' bars)
      */
     private BigDecimal calculateLowest(List<BigDecimal> values, int period) {
         int size = values.size();
-        BigDecimal min = values.get(size - 1 - period);
-        for (int i = 1; i <= period; i++) {
-            BigDecimal val = values.get(size - 1 - i);
+        int startIdx = size - 1 - volumePivotLength - period;
+        BigDecimal min = values.get(startIdx);
+        
+        for (int i = 0; i < period; i++) {
+            BigDecimal val = values.get(startIdx + i);
             if (val.compareTo(min) < 0) {
                 min = val;
             }
@@ -308,15 +327,125 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     }
     
     /**
-     * Get mitigation target based on method
+     * Calculate volume strength at pivot point relative to recent average
+     * Returns ratio of pivot volume to average volume over the period
      */
-    private BigDecimal getMitigationTarget(CandlestickData candle) {
-        if ("Close".equals(mitigationMethod)) {
-            return candle.getClose();
-        } else {
-            // "Wick" method - use high or low depending on direction
-            return candle.getHigh(); // We'll check both high and low in mitigation logic
+    private BigDecimal calculateVolumeStrength(List<BigDecimal> volumes, int pivotIndex) {
+        int size = volumes.size();
+        int pivotIdx = size - 1 - pivotIndex;
+        BigDecimal pivotVolume = volumes.get(pivotIdx);
+        
+        // Calculate average volume over the lookback period
+        BigDecimal sumVolume = BigDecimal.ZERO;
+        int period = Math.min(20, size - 1); // Use up to 20 bars or available data
+        
+        for (int i = 0; i < period; i++) {
+            sumVolume = sumVolume.add(volumes.get(size - 1 - i));
         }
+        
+        BigDecimal avgVolume = sumVolume.divide(new BigDecimal(period), 8, RoundingMode.HALF_UP);
+        
+        // Return ratio (strength)
+        if (avgVolume.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ONE;
+        }
+        return pivotVolume.divide(avgVolume, 8, RoundingMode.HALF_UP);
+    }
+    
+    /**
+     * Check if price is touching any order blocks and generate signals
+     * Only generates signals when price returns to an untouched OB zone
+     */
+    private List<Order> checkOrderBlockTouch(String symbol, BigDecimal currentPrice, CandlestickData candle) {
+        List<Order> orders = new ArrayList<>();
+        
+        // Check bullish order blocks
+        LinkedList<OrderBlock> bullBlocks = bullishOrderBlocks.get(symbol);
+        if (bullBlocks != null) {
+            for (OrderBlock ob : bullBlocks) {
+                // Check if price is within or touching the OB zone
+                boolean touching = currentPrice.compareTo(ob.bottom) >= 0 && currentPrice.compareTo(ob.top) <= 0;
+                
+                // Also check if wick touched the zone
+                if (!touching && candle != null) {
+                    touching = candle.getLow().compareTo(ob.bottom) <= 0 && candle.getHigh().compareTo(ob.bottom) >= 0;
+                }
+                
+                if (touching && !ob.touched) {
+                    ob.touched = true;
+                    
+                    System.out.println("📍 Order Block: Price touched Bullish OB for " + symbol + 
+                        " | Price: " + currentPrice + " | OB Zone: [" + ob.bottom + " - " + ob.top + "]" +
+                        " | Volume Strength: " + ob.volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
+                    
+                    // Generate buy signal
+                    Order buyOrder = createBuyOrder(symbol, currentPrice);
+                    
+                    // Set stop loss below the order block
+                    BigDecimal stopLoss = ob.bottom.multiply(new BigDecimal("0.998")); // 0.2% below bottom
+                    buyOrder.setSuggestedStopLoss(stopLoss);
+                    
+                    // Set take profit with 2:1 risk/reward (can be adjusted based on volume strength)
+                    BigDecimal riskDistance = currentPrice.subtract(stopLoss);
+                    BigDecimal rewardMultiplier = new BigDecimal("2.0");
+                    
+                    // Increase reward if volume strength is high
+                    if (ob.volumeStrength.compareTo(new BigDecimal("2.0")) > 0) {
+                        rewardMultiplier = new BigDecimal("3.0"); // 3:1 for strong OBs
+                    }
+                    
+                    BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(rewardMultiplier));
+                    buyOrder.setSuggestedTakeProfit(takeProfit);
+                    
+                    orders.add(buyOrder);
+                }
+            }
+        }
+        
+        // Check bearish order blocks
+        LinkedList<OrderBlock> bearBlocks = bearishOrderBlocks.get(symbol);
+        if (bearBlocks != null) {
+            for (OrderBlock ob : bearBlocks) {
+                // Check if price is within or touching the OB zone
+                boolean touching = currentPrice.compareTo(ob.bottom) >= 0 && currentPrice.compareTo(ob.top) <= 0;
+                
+                // Also check if wick touched the zone
+                if (!touching && candle != null) {
+                    touching = candle.getHigh().compareTo(ob.top) >= 0 && candle.getLow().compareTo(ob.top) <= 0;
+                }
+                
+                if (touching && !ob.touched) {
+                    ob.touched = true;
+                    
+                    System.out.println("📍 Order Block: Price touched Bearish OB for " + symbol + 
+                        " | Price: " + currentPrice + " | OB Zone: [" + ob.bottom + " - " + ob.top + "]" +
+                        " | Volume Strength: " + ob.volumeStrength.setScale(2, RoundingMode.HALF_UP) + "x");
+                    
+                    // Generate sell signal
+                    Order shortOrder = createShortOrder(symbol, currentPrice);
+                    
+                    // Set stop loss above the order block
+                    BigDecimal stopLoss = ob.top.multiply(new BigDecimal("1.002")); // 0.2% above top
+                    shortOrder.setSuggestedStopLoss(stopLoss);
+                    
+                    // Set take profit with 2:1 risk/reward (can be adjusted based on volume strength)
+                    BigDecimal riskDistance = stopLoss.subtract(currentPrice);
+                    BigDecimal rewardMultiplier = new BigDecimal("2.0");
+                    
+                    // Increase reward if volume strength is high
+                    if (ob.volumeStrength.compareTo(new BigDecimal("2.0")) > 0) {
+                        rewardMultiplier = new BigDecimal("3.0"); // 3:1 for strong OBs
+                    }
+                    
+                    BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(rewardMultiplier));
+                    shortOrder.setSuggestedTakeProfit(takeProfit);
+                    
+                    orders.add(shortOrder);
+                }
+            }
+        }
+        
+        return orders;
     }
     
     /**
@@ -347,7 +476,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     /**
      * Remove mitigated bullish order blocks
-     * Bullish OB is mitigated when price goes below the bottom
+     * Bullish OB is mitigated (invalidated) when price breaks below the support zone.
+     * This means the institutions' buy orders have been filled or the support has failed.
      */
     private boolean removeMitigatedBullishOrderBlocks(String symbol, BigDecimal targetPrice) {
         LinkedList<OrderBlock> blocks = bullishOrderBlocks.get(symbol);
@@ -357,6 +487,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         Iterator<OrderBlock> iterator = blocks.iterator();
         while (iterator.hasNext()) {
             OrderBlock ob = iterator.next();
+            // Remove if price broke below the OB bottom (support failed)
             if (targetPrice.compareTo(ob.bottom) < 0) {
                 iterator.remove();
                 mitigated = true;
@@ -368,7 +499,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     /**
      * Remove mitigated bearish order blocks
-     * Bearish OB is mitigated when price goes above the top
+     * Bearish OB is mitigated (invalidated) when price breaks above the resistance zone.
+     * This means the institutions' sell orders have been filled or the resistance has failed.
      */
     private boolean removeMitigatedBearishOrderBlocks(String symbol, BigDecimal targetPrice) {
         LinkedList<OrderBlock> blocks = bearishOrderBlocks.get(symbol);
@@ -378,6 +510,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         Iterator<OrderBlock> iterator = blocks.iterator();
         while (iterator.hasNext()) {
             OrderBlock ob = iterator.next();
+            // Remove if price broke above the OB top (resistance failed)
             if (targetPrice.compareTo(ob.top) > 0) {
                 iterator.remove();
                 mitigated = true;
