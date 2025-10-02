@@ -35,10 +35,11 @@ public class TradingBotController {
     @Operation(summary = "Enable Bot", description = "Enable the trading bot in analysis mode. Bot will analyze market data and generate signals but won't execute trades.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Bot enabled successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid parameters"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @PostMapping("/enable")
-    public String enable(
+    public ResponseEntity<Map<String, Object>> enable(
             @RequestParam(required = false, defaultValue = "false") boolean bootstrap,
             @RequestParam(required = false, defaultValue = "1m") String interval,
             @RequestParam(required = false, defaultValue = "100") int historicalLimit) {
@@ -46,14 +47,28 @@ public class TradingBotController {
             if (bootstrap) {
                 TimeInterval timeInterval = TimeInterval.fromString(interval);
                 tradingBot.enable(true, timeInterval, historicalLimit);
-                return "Bot enabled with historical bootstrapping - Analysis mode active (" + 
-                       historicalLimit + " candles, " + interval + " interval)";
+                return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Bot enabled with historical bootstrapping",
+                    "mode", "analysis",
+                    "bootstrap", true,
+                    "historicalLimit", historicalLimit,
+                    "interval", interval
+                ));
             } else {
                 tradingBot.enable();
-                return "Bot enabled - Analysis mode active";
+                return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Bot enabled - Analysis mode active",
+                    "mode", "analysis",
+                    "bootstrap", false
+                ));
             }
         } catch (IllegalArgumentException e) {
-            return "Invalid interval: " + interval;
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", "Invalid interval: " + interval
+            ));
         }
     }
     
@@ -183,12 +198,20 @@ public class TradingBotController {
         @ApiResponse(responseCode = "400", description = "Cannot enable - another strategy is already active")
     })
     @PostMapping("/strategies/{strategyId}/enable")
-    public ResponseEntity<String> enableStrategy(@PathVariable String strategyId) {
+    public ResponseEntity<Map<String, Object>> enableStrategy(@PathVariable String strategyId) {
         try {
             tradingBot.setStrategyEnabled(strategyId, true);
-            return ResponseEntity.ok("Strategy " + strategyId + " enabled successfully");
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Strategy enabled successfully",
+                "strategyId", strategyId
+            ));
         } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", e.getMessage(),
+                "strategyId", strategyId
+            ));
         }
     }
 
@@ -197,9 +220,13 @@ public class TradingBotController {
         @ApiResponse(responseCode = "200", description = "Strategy disabled successfully")
     })
     @PostMapping("/strategies/{strategyId}/disable")
-    public String disableStrategy(@PathVariable String strategyId) {
+    public ResponseEntity<Map<String, Object>> disableStrategy(@PathVariable String strategyId) {
         tradingBot.setStrategyEnabled(strategyId, false);
-        return "Strategy " + strategyId + " disabled";
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Strategy disabled successfully",
+            "strategyId", strategyId
+        ));
     }
 
     // Order Management
