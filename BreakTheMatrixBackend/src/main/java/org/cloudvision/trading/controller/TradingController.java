@@ -76,13 +76,16 @@ public class TradingController {
      * Get candlestick data from in-memory storage
      * Returns the EXACT same data that trading strategies are using
      * Only returns data for actively subscribed symbols/intervals
+     * 
+     * @param limit Number of candles to return (default 1000 to match stored history)
+     *              Set to 0 or negative to return ALL available candles
      */
     @GetMapping("/historical/{provider}/{symbol}/{interval}")
     public List<CandlestickData> getHistoricalKlines(
             @PathVariable String provider,
             @PathVariable String symbol,
             @PathVariable String interval,
-            @RequestParam(defaultValue = "100") int limit) {
+            @RequestParam(defaultValue = "1000") int limit) {
         
         if (candlestickHistoryService == null) {
             System.err.println("⚠️ CandlestickHistoryService not available");
@@ -91,9 +94,16 @@ public class TradingController {
         
         try {
             // Read from in-memory storage (same data strategies use)
-            List<CandlestickData> data = candlestickHistoryService.getLastNCandlesticks(
-                provider, symbol, interval, limit
-            );
+            List<CandlestickData> data;
+            if (limit <= 0) {
+                // Return ALL available candles
+                data = candlestickHistoryService.getCandlesticks(provider, symbol, interval);
+            } else {
+                // Return last N candles
+                data = candlestickHistoryService.getLastNCandlesticks(
+                    provider, symbol, interval, limit
+                );
+            }
             
             if (data.isEmpty()) {
                 System.out.println("⚠️ No cached data for " + provider + "_" + symbol + "_" + interval + 
