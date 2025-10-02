@@ -469,7 +469,7 @@ export const BotControl = ({ interval, historicalLimit = 100 }) => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-5-8a3 3 0 110 6 3 3 0 010-6z" />
                                         )}
                                     </svg>
-                                    <span>{isEnabled ? 'Stop Bot' : 'Start Bot'}</span>
+                                    <span>{isEnabled ? 'Disable Bot' : 'Enable Bot'}</span>
                                 </div>
                             )}
                         </button>
