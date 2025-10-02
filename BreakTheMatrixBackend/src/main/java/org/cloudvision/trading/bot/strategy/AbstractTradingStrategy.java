@@ -179,7 +179,7 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
     
     /**
-     * Calculate sell quantity - returns the actual position held
+     * FUTURES: Calculate sell quantity - returns the total quantity of open positions
      */
     protected BigDecimal calculateSellQuantity(String symbol) {
         if (accountManager == null) {
@@ -194,17 +194,23 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
                 return BigDecimal.ZERO;
             }
             
-            // Extract base asset from symbol (e.g., BTCUSDT -> BTC)
-            String baseAsset = extractBaseAsset(symbol);
-            BigDecimal position = activeAccount.getAssetBalance(baseAsset);
+            // FUTURES: Get total quantity from open positions
+            List<org.cloudvision.trading.bot.account.Position> openPositions = 
+                activeAccount.getOpenPositionsBySymbol(symbol);
             
-            if (position.compareTo(BigDecimal.ZERO) > 0) {
-                System.out.println("📊 Current " + baseAsset + " position: " + position);
-                return position;
-            } else {
-                System.out.println("⚠️ No " + baseAsset + " position to sell");
+            if (openPositions.isEmpty()) {
+                System.out.println("⚠️ No open positions for " + symbol);
                 return BigDecimal.ZERO;
             }
+            
+            // Sum up all position quantities for this symbol
+            BigDecimal totalQuantity = openPositions.stream()
+                .map(org.cloudvision.trading.bot.account.Position::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            System.out.println("📊 Total open position for " + symbol + ": " + totalQuantity);
+            return totalQuantity;
+            
         } catch (Exception e) {
             System.err.println("❌ Error calculating sell quantity: " + e.getMessage());
             return BigDecimal.ZERO;

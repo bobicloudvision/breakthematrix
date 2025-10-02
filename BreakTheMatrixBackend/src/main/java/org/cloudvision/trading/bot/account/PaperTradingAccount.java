@@ -20,7 +20,8 @@ public class PaperTradingAccount implements TradingAccount {
     private final String accountId;
     private final String accountName;
     private final BigDecimal initialBalance;
-    private final Map<String, BigDecimal> balances; // Asset -> Balance
+    private BigDecimal balance; // FUTURES: Single USDT balance
+    private BigDecimal lockedMargin; // Margin locked in open positions
     private final Map<String, Order> orders; // OrderId -> Order
     private final List<Trade> tradeHistory;
     private final PositionManager positionManager; // Position tracking
@@ -49,7 +50,8 @@ public class PaperTradingAccount implements TradingAccount {
         this.accountId = accountId;
         this.accountName = accountName;
         this.initialBalance = initialBalance;
-        this.balances = new ConcurrentHashMap<>();
+        this.balance = initialBalance; // FUTURES: All money in USDT
+        this.lockedMargin = BigDecimal.ZERO;
         this.orders = new ConcurrentHashMap<>();
         this.tradeHistory = Collections.synchronizedList(new ArrayList<>());
         this.positionManager = new PositionManager(); // Initialize position manager
@@ -58,17 +60,14 @@ public class PaperTradingAccount implements TradingAccount {
         this.dailyStartBalance = initialBalance;
         this.currentDay = java.time.LocalDate.now();
         
-        // Initialize with USDT balance
-        balances.put("USDT", initialBalance);
-        
         // Register listener for automatic position closes (stop loss/take profit)
         this.positionManager.setPositionCloseListener((position, pnl, closePrice, closedQuantity) -> {
             updateAccountStatsOnClose(pnl);
-            updateBalancesOnAutoClose(position.getSymbol(), closePrice, closedQuantity);
+            unlockMarginAndApplyPnL(position, pnl);
         });
         
-        System.out.println("💰 Paper Trading Account created: " + accountName + 
-                         " with $" + initialBalance);
+        System.out.println("💰 Futures Trading Account created: " + accountName + 
+                         " with $" + initialBalance + " USDT");
     }
     
     @Override
@@ -100,26 +99,22 @@ public class PaperTradingAccount implements TradingAccount {
                              " " + order.getSide() + " " + order.getQuantity() + 
                              " @ " + order.getPrice());
             
-            // Extract base and quote assets (e.g., BTCUSDT -> BTC, USDT)
-            String baseAsset = extractBaseAsset(order.getSymbol());
-            String quoteAsset = extractQuoteAsset(order.getSymbol());
+            // FUTURES TRADING: Calculate position value (margin required)
+            BigDecimal positionValue = order.getPrice().multiply(order.getQuantity());
             
-            BigDecimal orderValue = order.getPrice().multiply(order.getQuantity());
-            
-            // Check if we have sufficient balance
             switch (order.getSide()) {
                 case BUY:
-                    BigDecimal quoteBalance = balances.getOrDefault(quoteAsset, BigDecimal.ZERO);
-                    if (quoteBalance.compareTo(orderValue) < 0) {
+                    // FUTURES: Open LONG position - Lock margin
+                    BigDecimal availableBalance = balance.subtract(lockedMargin);
+                    if (availableBalance.compareTo(positionValue) < 0) {
                         order.setStatus(OrderStatus.REJECTED);
-                        System.err.println("❌ Insufficient " + quoteAsset + " balance");
+                        System.err.println("❌ Insufficient available balance (margin)");
+                        System.err.println("   Available: $" + availableBalance + " | Required: $" + positionValue);
                         return order;
                     }
                     
-                    // Execute buy
-                    balances.put(quoteAsset, quoteBalance.subtract(orderValue));
-                    balances.put(baseAsset, 
-                        balances.getOrDefault(baseAsset, BigDecimal.ZERO).add(order.getQuantity()));
+                    // Lock margin for this position
+                    lockedMargin = lockedMargin.add(positionValue);
                     
                     // Open LONG position
                     Position longPosition = positionManager.openPosition(order.getSymbol(), PositionSide.LONG, 
@@ -136,35 +131,46 @@ public class PaperTradingAccount implements TradingAccount {
                     }
                     
                     longPosition.setStrategyId(order.getStrategyId());
+                    
+                    System.out.println("💰 Margin locked: $" + positionValue + " | Total locked: $" + lockedMargin);
                     break;
                     
                 case SELL:
-                    BigDecimal baseBalance = balances.getOrDefault(baseAsset, BigDecimal.ZERO);
-                    if (baseBalance.compareTo(order.getQuantity()) < 0) {
+                    // FUTURES: Close LONG position - Unlock margin and apply P&L
+                    List<Position> openPositions = positionManager.getOpenPositionsBySymbol(order.getSymbol());
+                    if (openPositions.isEmpty()) {
                         order.setStatus(OrderStatus.REJECTED);
-                        System.err.println("❌ Insufficient " + baseAsset + " balance");
+                        System.err.println("❌ No open positions to close for " + order.getSymbol());
                         return order;
                     }
                     
-                    // Execute sell
-                    balances.put(baseAsset, baseBalance.subtract(order.getQuantity()));
-                    balances.put(quoteAsset, 
-                        balances.getOrDefault(quoteAsset, BigDecimal.ZERO).add(orderValue));
-                    
                     // Close positions (FIFO - close oldest first)
-                    List<Position> openPositions = positionManager.getOpenPositionsBySymbol(order.getSymbol());
                     BigDecimal remainingQty = order.getQuantity();
                     for (Position position : openPositions) {
                         if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
                         
                         BigDecimal closeQty = remainingQty.min(position.getQuantity());
                         BigDecimal pnlBeforeClose = position.getRealizedPnL();
+                        BigDecimal originalPositionQty = position.getQuantity();
                         
+                        // Close the position
                         positionManager.closePosition(position.getPositionId(), order.getPrice(), closeQty);
                         
-                        // Update account statistics when position is closed
+                        // Calculate P&L from this close
                         BigDecimal positionPnL = position.getRealizedPnL().subtract(pnlBeforeClose);
+                        
+                        // Unlock margin proportionally
+                        BigDecimal marginToUnlock = position.getEntryPrice().multiply(closeQty);
+                        lockedMargin = lockedMargin.subtract(marginToUnlock);
+                        
+                        // Apply P&L to balance
+                        balance = balance.add(positionPnL);
+                        
+                        // Update account statistics
                         updateAccountStatsOnClose(positionPnL);
+                        
+                        System.out.println("💰 Margin unlocked: $" + marginToUnlock + 
+                            " | P&L: $" + positionPnL + " | New balance: $" + balance);
                         
                         remainingQty = remainingQty.subtract(closeQty);
                     }
@@ -211,32 +217,39 @@ public class PaperTradingAccount implements TradingAccount {
     
     @Override
     public BigDecimal getBalance() {
-        return balances.getOrDefault("USDT", BigDecimal.ZERO);
+        // FUTURES: Total balance in USDT
+        return balance;
     }
     
     @Override
     public BigDecimal getAvailableBalance() {
-        // Available balance is the USDT balance (free cash)
-        return balances.getOrDefault("USDT", BigDecimal.ZERO);
+        // FUTURES: Available balance = Total - Locked margin
+        return balance.subtract(lockedMargin);
     }
     
     @Override
     public BigDecimal getAssetBalance(String asset) {
-        return balances.getOrDefault(asset, BigDecimal.ZERO);
+        // FUTURES: Only USDT balance exists
+        if ("USDT".equalsIgnoreCase(asset)) {
+            return balance;
+        }
+        return BigDecimal.ZERO;
     }
     
     @Override
     public Map<String, BigDecimal> getAllBalances() {
-        return new HashMap<>(balances);
+        // FUTURES: Return balance breakdown
+        Map<String, BigDecimal> balances = new HashMap<>();
+        balances.put("USDT", balance);
+        balances.put("available", getAvailableBalance());
+        balances.put("locked", lockedMargin);
+        return balances;
     }
     
     @Override
     public BigDecimal getTotalExposure() {
-        // Total exposure is the sum of all non-USDT positions
-        // Note: For accurate calculation, we'd need current market prices
-        // For now, return 0 as positions are tracked in crypto amounts
-        // In a real implementation, this would multiply each asset balance by current price
-        return BigDecimal.ZERO;
+        // FUTURES: Total exposure is the locked margin (value of all open positions)
+        return lockedMargin;
     }
     
     @Override
@@ -318,9 +331,9 @@ public class PaperTradingAccount implements TradingAccount {
     
     @Override
     public void reset() {
-        System.out.println("🔄 Resetting paper trading account: " + accountName);
-        balances.clear();
-        balances.put("USDT", initialBalance);
+        System.out.println("🔄 Resetting futures trading account: " + accountName);
+        balance = initialBalance;
+        lockedMargin = BigDecimal.ZERO;
         orders.clear();
         tradeHistory.clear();
         positionManager.reset(); // Reset positions
@@ -332,7 +345,7 @@ public class PaperTradingAccount implements TradingAccount {
         largestWin = BigDecimal.ZERO;
         largestLoss = BigDecimal.ZERO;
         lastTradeAt = null;
-        System.out.println("✅ Account reset complete");
+        System.out.println("✅ Account reset complete - Balance: $" + balance);
     }
     
     @Override
@@ -399,42 +412,25 @@ public class PaperTradingAccount implements TradingAccount {
     }
     
     /**
-     * Update balances when position is automatically closed (stop loss/take profit)
+     * FUTURES: Unlock margin and apply P&L when position is automatically closed (stop loss/take profit)
      */
-    private void updateBalancesOnAutoClose(String symbol, BigDecimal closePrice, BigDecimal closedQuantity) {
-        String baseAsset = extractBaseAsset(symbol);
-        String quoteAsset = extractQuoteAsset(symbol);
-        
-        BigDecimal saleValue = closePrice.multiply(closedQuantity);
-        
-        // Remove the base asset (e.g., BTC)
-        BigDecimal currentBaseBalance = balances.getOrDefault(baseAsset, BigDecimal.ZERO);
-        balances.put(baseAsset, currentBaseBalance.subtract(closedQuantity));
-        
-        // Add the quote asset (e.g., USDT from the sale)
-        BigDecimal currentQuoteBalance = balances.getOrDefault(quoteAsset, BigDecimal.ZERO);
-        balances.put(quoteAsset, currentQuoteBalance.add(saleValue));
-        
-        System.out.println("💰 Balance updated on auto-close: +" + saleValue + " " + quoteAsset + 
-            " | -" + closedQuantity + " " + baseAsset);
-    }
-    
-    private String extractBaseAsset(String symbol) {
-        // BTCUSDT -> BTC
-        if (symbol.endsWith("USDT")) {
-            return symbol.substring(0, symbol.length() - 4);
+    private void unlockMarginAndApplyPnL(Position position, BigDecimal pnl) {
+        if (position.isOpen()) {
+            return; // Only process fully closed positions
         }
-        // Add more logic for other quote assets if needed
-        return symbol.substring(0, symbol.length() / 2);
-    }
-    
-    private String extractQuoteAsset(String symbol) {
-        // BTCUSDT -> USDT
-        if (symbol.endsWith("USDT")) {
-            return "USDT";
-        }
-        // Add more logic for other quote assets if needed
-        return "USDT";
+        
+        // Get the original position value (margin that was locked)
+        BigDecimal marginToUnlock = position.getEntryValue();
+        
+        // Unlock the margin
+        lockedMargin = lockedMargin.subtract(marginToUnlock);
+        
+        // Apply P&L to balance
+        balance = balance.add(pnl);
+        
+        System.out.println("🔓 Auto-close: Unlocked margin $" + marginToUnlock + 
+            " | P&L: $" + pnl + " | New balance: $" + balance + 
+            " | Available: $" + getAvailableBalance());
     }
     
     /**
