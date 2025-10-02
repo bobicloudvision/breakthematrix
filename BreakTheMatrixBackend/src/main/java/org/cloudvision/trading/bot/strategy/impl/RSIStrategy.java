@@ -52,41 +52,89 @@ public class RSIStrategy extends AbstractTradingStrategy {
         if (rsi.compareTo(new BigDecimal(oversoldThreshold)) < 0 && 
             (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
             
-            Order buyOrder = createBuyOrder(symbol, currentPrice);
+            // Check existing positions
+            BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
             
-            // SET STOP LOSS: For RSI oversold, use 3% stop loss
-            // RSI strategies typically need tighter stops since they trade reversals
-            BigDecimal stopLoss = currentPrice.multiply(new BigDecimal("0.97")); // 3% stop
-            buyOrder.setSuggestedStopLoss(stopLoss);
-            
-            // SET TAKE PROFIT: RSI target is the overbought level
-            // Estimate ~5% move from oversold to neutral (risk:reward ~1.7:1)
-            BigDecimal takeProfit = currentPrice.multiply(new BigDecimal("1.05")); // 5% target
-            buyOrder.setSuggestedTakeProfit(takeProfit);
-            
-            orders.add(buyOrder);
-            lastSignal.put(symbol, BigDecimal.ONE); // Bullish
-            
-            System.out.println(String.format(
-                "🟢 RSI Strategy: BUY signal for %s at %s (RSI: %.2f) | Stop Loss: %s (-3%%) | Take Profit: %s (+5%%)",
-                symbol, currentPrice, rsi, stopLoss, takeProfit
-            ));
+            // If we have LONG position → Skip (wait for TP/SL)
+            if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("⏸️ RSI Strategy: Already have LONG position for " + symbol + 
+                    " (Quantity: " + longPositionQuantity + ") - skipping until TP/SL hit");
+                lastSignal.put(symbol, BigDecimal.ONE); // Keep bullish signal
+            }
+            // If we have SHORT position → Close it ONLY (don't open LONG yet)
+            else if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order closeShortOrder = createCloseShortOrder(symbol, currentPrice);
+                orders.add(closeShortOrder);
+                lastSignal.put(symbol, BigDecimal.ONE); // Update to bullish signal
+                System.out.println("🔄 RSI Strategy: Closing SHORT position for " + symbol + 
+                    " at " + currentPrice + " (RSI: " + rsi + ") | Quantity: " + shortPositionQuantity);
+            }
+            // No position → Open LONG
+            else {
+                Order buyOrder = createBuyOrder(symbol, currentPrice);
+                
+                // SET STOP LOSS: For RSI oversold, use 3% stop loss
+                // RSI strategies typically need tighter stops since they trade reversals
+                BigDecimal stopLoss = currentPrice.multiply(new BigDecimal("0.97")); // 3% stop
+                buyOrder.setSuggestedStopLoss(stopLoss);
+                
+                // SET TAKE PROFIT: RSI target is the overbought level
+                // Estimate ~5% move from oversold to neutral (risk:reward ~1.7:1)
+                BigDecimal takeProfit = currentPrice.multiply(new BigDecimal("1.05")); // 5% target
+                buyOrder.setSuggestedTakeProfit(takeProfit);
+                
+                orders.add(buyOrder);
+                lastSignal.put(symbol, BigDecimal.ONE); // Bullish
+                
+                System.out.println(String.format(
+                    "🟢 RSI Strategy: Opening LONG position for %s at %s (RSI: %.2f) | Stop Loss: %s (-3%%) | Take Profit: %s (+5%%)",
+                    symbol, currentPrice, rsi, stopLoss, takeProfit
+                ));
+            }
         }
         // Overbought - SELL signal
         else if (rsi.compareTo(new BigDecimal(overboughtThreshold)) > 0 && 
                  (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
             
-            // FUTURES: Only create sell order if we have open LONG positions
-            BigDecimal positionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            // Check existing positions
+            BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
             
-            if (positionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                Order sellOrder = createSellOrder(symbol, currentPrice);
-                orders.add(sellOrder);
+            // If we have SHORT position → Skip (wait for TP/SL)
+            if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("⏸️ RSI Strategy: Already have SHORT position for " + symbol + 
+                    " (Quantity: " + shortPositionQuantity + ") - skipping until TP/SL hit");
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Keep bearish signal
+            }
+            // If we have LONG position → Close it ONLY (don't open SHORT yet)
+            else if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order closeLongOrder = createCloseLongOrder(symbol, currentPrice);
+                orders.add(closeLongOrder);
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Update to bearish signal
+                System.out.println("🔄 RSI Strategy: Closing LONG position for " + symbol + 
+                    " at " + currentPrice + " (RSI: " + rsi + ") | Quantity: " + longPositionQuantity);
+            }
+            // No position → Open SHORT
+            else {
+                Order shortOrder = createShortOrder(symbol, currentPrice);
+                
+                // SET STOP LOSS: For RSI overbought, use 3% stop loss above
+                BigDecimal stopLoss = currentPrice.multiply(new BigDecimal("1.03")); // 3% stop
+                shortOrder.setSuggestedStopLoss(stopLoss);
+                
+                // SET TAKE PROFIT: RSI target is the oversold level
+                // Estimate ~5% move from overbought to neutral
+                BigDecimal takeProfit = currentPrice.multiply(new BigDecimal("0.95")); // 5% target
+                shortOrder.setSuggestedTakeProfit(takeProfit);
+                
+                orders.add(shortOrder);
                 lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish
-                System.out.println("🔴 RSI Strategy: SELL signal for " + symbol + 
-                                 " at " + currentPrice + " (RSI: " + rsi + ") | Closing position: " + positionQuantity);
-            } else {
-                System.out.println("⚠️ RSI Strategy: SELL signal for " + symbol + " (RSI: " + rsi + ") but no open position to close");
+                
+                System.out.println(String.format(
+                    "🔴 RSI Strategy: Opening SHORT position for %s at %s (RSI: %.2f) | Stop Loss: %s (+3%%) | Take Profit: %s (-5%%)",
+                    symbol, currentPrice, rsi, stopLoss, takeProfit
+                ));
             }
         }
         

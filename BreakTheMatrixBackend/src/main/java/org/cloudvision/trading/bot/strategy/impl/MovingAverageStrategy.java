@@ -46,81 +46,101 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         
         // Golden Cross: Short MA crosses above Long MA = BUY signal
         if (shortMA.compareTo(longMA) > 0 && (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
-            // First, check if we have any SHORT positions and close them
+            // Check existing positions
+            BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
             BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
             
-            if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                // Close SHORT position first
-                Order closeShortOrder = createBuyOrder(symbol, currentPrice);
+            // If we have LONG position → Skip (wait for TP/SL)
+            if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("⏸️ MA Strategy: Already have LONG position for " + symbol + 
+                    " (Quantity: " + longPositionQuantity + ") - skipping until TP/SL hit");
+                lastSignal.put(symbol, BigDecimal.ONE); // Keep bullish signal
+            }
+            // If we have SHORT position → Close it ONLY (don't open LONG yet)
+            else if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order closeShortOrder = createCloseShortOrder(symbol, currentPrice);
                 orders.add(closeShortOrder);
+                lastSignal.put(symbol, BigDecimal.ONE); // Update to bullish signal
+                action = "CLOSE_SHORT";
                 System.out.println("🔄 MA Strategy: Closing SHORT position for " + symbol + 
                     " at " + currentPrice + " | Quantity: " + shortPositionQuantity);
             }
-            
-            // Then create LONG order (open new position)
-            Order buyOrder = createBuyOrder(symbol, currentPrice);
-            
-            // SET STOP LOSS: Place stop loss below long MA (support level)
-            // Use 98% of long MA to give it a buffer
-            BigDecimal stopLoss = longMA.multiply(new BigDecimal("0.98"));
-            buyOrder.setSuggestedStopLoss(stopLoss);
-            
-            // SET TAKE PROFIT: Risk:Reward ratio of 1:2
-            BigDecimal riskDistance = currentPrice.subtract(stopLoss);
-            BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(new BigDecimal("2")));
-            buyOrder.setSuggestedTakeProfit(takeProfit);
-            
-            orders.add(buyOrder);
-            lastSignal.put(symbol, BigDecimal.ONE); // Bullish signal
-            action = "BUY";
-            
-            // Enhanced logging with stop loss info
-            BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
-                .divide(currentPrice, 4, RoundingMode.HALF_UP)
-                .multiply(new BigDecimal("100"));
-            System.out.println(String.format(
-                "🟢 MA Strategy: BUY signal for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
-                symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
-            ));
+            // No position → Open LONG
+            else {
+                Order buyOrder = createBuyOrder(symbol, currentPrice);
+                
+                // SET STOP LOSS: Place stop loss below long MA (support level)
+                // Use 98% of long MA to give it a buffer
+                BigDecimal stopLoss = longMA.multiply(new BigDecimal("0.98"));
+                buyOrder.setSuggestedStopLoss(stopLoss);
+                
+                // SET TAKE PROFIT: Risk:Reward ratio of 1:2
+                BigDecimal riskDistance = currentPrice.subtract(stopLoss);
+                BigDecimal takeProfit = currentPrice.add(riskDistance.multiply(new BigDecimal("2")));
+                buyOrder.setSuggestedTakeProfit(takeProfit);
+                
+                orders.add(buyOrder);
+                lastSignal.put(symbol, BigDecimal.ONE); // Bullish signal
+                action = "BUY";
+                
+                // Enhanced logging with stop loss info
+                BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
+                    .divide(currentPrice, 4, RoundingMode.HALF_UP)
+                    .multiply(new BigDecimal("100"));
+                System.out.println(String.format(
+                    "🟢 MA Strategy: Opening LONG position for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
+                    symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
+                ));
+            }
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
         else if (shortMA.compareTo(longMA) < 0 && (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
-            // First, check if we have any LONG positions and close them
+            // Check existing positions
             BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
             
-            if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                // Close LONG position first
-                Order closeLongOrder = createSellOrder(symbol, currentPrice);
+            // If we have SHORT position → Skip (wait for TP/SL)
+            if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                System.out.println("⏸️ MA Strategy: Already have SHORT position for " + symbol + 
+                    " (Quantity: " + shortPositionQuantity + ") - skipping until TP/SL hit");
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Keep bearish signal
+            }
+            // If we have LONG position → Close it ONLY (don't open SHORT yet)
+            else if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                Order closeLongOrder = createCloseLongOrder(symbol, currentPrice);
                 orders.add(closeLongOrder);
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Update to bearish signal
+                action = "CLOSE_LONG";
                 System.out.println("🔄 MA Strategy: Closing LONG position for " + symbol + 
                     " at " + currentPrice + " | Quantity: " + longPositionQuantity);
             }
-            
-            // Then create SHORT order (open new position)
-            Order sellOrder = createSellOrder(symbol, currentPrice);
-            
-            // SET STOP LOSS: Place stop loss above long MA (resistance level)
-            // Use 102% of long MA to give it a buffer
-            BigDecimal stopLoss = longMA.multiply(new BigDecimal("1.02"));
-            sellOrder.setSuggestedStopLoss(stopLoss);
-            
-            // SET TAKE PROFIT: Risk:Reward ratio of 1:2
-            BigDecimal riskDistance = stopLoss.subtract(currentPrice);
-            BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(new BigDecimal("2")));
-            sellOrder.setSuggestedTakeProfit(takeProfit);
-            
-            orders.add(sellOrder);
-            lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
-            action = "SELL";
-            
-            // Enhanced logging with stop loss info
-            BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
-                .divide(currentPrice, 4, RoundingMode.HALF_UP)
-                .multiply(new BigDecimal("100"));
-            System.out.println(String.format(
-                "🔴 MA Strategy: SELL signal for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
-                symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
-            ));
+            // No position → Open SHORT
+            else {
+                Order shortOrder = createShortOrder(symbol, currentPrice);
+                
+                // SET STOP LOSS: Place stop loss above long MA (resistance level)
+                // Use 102% of long MA to give it a buffer
+                BigDecimal stopLoss = longMA.multiply(new BigDecimal("1.02"));
+                shortOrder.setSuggestedStopLoss(stopLoss);
+                
+                // SET TAKE PROFIT: Risk:Reward ratio of 1:2
+                BigDecimal riskDistance = stopLoss.subtract(currentPrice);
+                BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(new BigDecimal("2")));
+                shortOrder.setSuggestedTakeProfit(takeProfit);
+                
+                orders.add(shortOrder);
+                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
+                action = "SELL";
+                
+                // Enhanced logging with stop loss info
+                BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
+                    .divide(currentPrice, 4, RoundingMode.HALF_UP)
+                    .multiply(new BigDecimal("100"));
+                System.out.println(String.format(
+                    "🔴 MA Strategy: Opening SHORT position for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
+                    symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
+                ));
+            }
         }
         
         // Generate visualization data

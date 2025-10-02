@@ -148,15 +148,6 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         order.setPositionSide(org.cloudvision.trading.bot.account.PositionSide.LONG);
         return order;
     }
-
-    /**
-     * DEPRECATED: Use createCloseLongOrder() instead for clarity
-     * Create a sell order to close LONG position
-     */
-    @Deprecated
-    protected Order createSellOrder(String symbol, BigDecimal price) {
-        return createCloseLongOrder(symbol, price);
-    }
     
     /**
      * Create a sell order to close LONG position

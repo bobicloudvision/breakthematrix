@@ -20,7 +20,7 @@ public class RiskManager {
     private BigDecimal maxPositionSize = new BigDecimal("10000"); // $10,000 max per position
     private BigDecimal maxTotalExposure = new BigDecimal("50000"); // $50,000 max total exposure
     private BigDecimal maxSymbolExposure = new BigDecimal("20000"); // $20,000 max per symbol
-    private BigDecimal maxDailyLoss = new BigDecimal("5000"); // $5,000 max daily loss
+    private BigDecimal maxDailyLoss = new BigDecimal("500000"); // $5,000 max daily loss
     
     // Trade frequency limits
     private int maxDailyTrades = 50; // Max 50 trades per day
