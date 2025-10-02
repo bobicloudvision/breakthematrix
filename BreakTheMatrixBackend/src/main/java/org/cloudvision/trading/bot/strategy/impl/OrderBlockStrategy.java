@@ -591,8 +591,8 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             String symbol = entry.getKey();
             List<CandlestickData> candles = entry.getValue();
             
-            // Sort chronologically
-            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            // Sort chronologically by openTime (matches CandlestickHistoryService order)
+            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
             
             // Process each candle
             for (CandlestickData candle : candles) {

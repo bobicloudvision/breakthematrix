@@ -267,18 +267,32 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             String symbol = entry.getKey();
             List<CandlestickData> candles = entry.getValue();
             
-            // Sort chronologically
-            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            // Sort chronologically by openTime to ensure proper order
+            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
             
-            // Build price history progressively and calculate indicators
-            List<BigDecimal> progressivePrices = new ArrayList<>();
+            // Track provider and interval for this symbol
+            if (!candles.isEmpty()) {
+                symbolProviders.put(symbol, candles.get(0).getProvider());
+                symbolIntervals.put(symbol, candles.get(0).getInterval());
+            }
+            
+            // Build price history progressively - simulating how candles arrive in real-time
+            int generatedCount = 0;
             BigDecimal previousSignal = null;
             
-            for (CandlestickData candle : candles) {
-                progressivePrices.add(candle.getClose());
+            // For each candle, calculate indicators based ONLY on candles up to that point
+            for (int i = 0; i < candles.size(); i++) {
+                CandlestickData currentCandle = candles.get(i);
+                
+                // Get all close prices from start up to current candle (inclusive)
+                List<BigDecimal> progressivePrices = new ArrayList<>();
+                for (int j = 0; j <= i; j++) {
+                    progressivePrices.add(candles.get(j).getClose());
+                }
                 
                 // Only calculate indicators once we have enough data
                 if (progressivePrices.size() >= longPeriod) {
+                    // Calculate indicators using the same method as real-time
                     BigDecimal shortMA = TechnicalIndicators.calculateSMA(progressivePrices, shortPeriod);
                     BigDecimal longMA = TechnicalIndicators.calculateSMA(progressivePrices, longPeriod);
                     
@@ -296,13 +310,15 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                         previousSignal = shortMA.compareTo(longMA) > 0 ? BigDecimal.ONE : BigDecimal.ONE.negate();
                     }
                     
-                    // Generate visualization data
-                    generateVisualizationData(symbol, candle.getClose(), shortMA, longMA, action, candle.getCloseTime());
+                    // Use closeTime to match real-time behavior - indicator is calculated at candle close
+                    // This ensures historical and real-time visualization data are aligned
+                    generateVisualizationData(symbol, currentCandle.getClose(), shortMA, longMA, 
+                                            action, currentCandle.getCloseTime());
+                    generatedCount++;
                 }
             }
             
-            System.out.println("✅ Generated " + (candles.size() - longPeriod + 1) + 
-                             " visualization points for " + symbol);
+            System.out.println("✅ Generated " + generatedCount + " visualization points for " + symbol);
         }
     }
     

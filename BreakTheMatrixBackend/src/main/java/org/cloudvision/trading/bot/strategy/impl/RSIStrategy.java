@@ -211,8 +211,8 @@ public class RSIStrategy extends AbstractTradingStrategy {
             String symbol = entry.getKey();
             List<CandlestickData> candles = entry.getValue();
             
-            // Sort chronologically
-            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            // Sort chronologically by openTime (matches CandlestickHistoryService order)
+            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
             
             // Build price history progressively and calculate RSI
             List<BigDecimal> progressivePrices = new ArrayList<>();

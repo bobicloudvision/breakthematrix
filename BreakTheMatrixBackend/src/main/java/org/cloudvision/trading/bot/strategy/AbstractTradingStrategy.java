@@ -360,8 +360,8 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             String symbol = entry.getKey();
             List<CandlestickData> candles = entry.getValue();
             
-            // Sort by timestamp to ensure chronological order
-            candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
+            // Sort by openTime to match CandlestickHistoryService storage order
+            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
             
             // Track provider and interval for this symbol
             if (!candles.isEmpty()) {
