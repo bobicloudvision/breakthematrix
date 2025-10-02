@@ -16,11 +16,17 @@ public class RiskManager {
     private final Map<String, BigDecimal> symbolExposure = new ConcurrentHashMap<>();
     private final AccountManager accountManager;
     
-    // Risk parameters
+    // Risk parameters - Position limits
     private BigDecimal maxPositionSize = new BigDecimal("10000"); // $10,000 max per position
     private BigDecimal maxTotalExposure = new BigDecimal("50000"); // $50,000 max total exposure
     private BigDecimal maxSymbolExposure = new BigDecimal("20000"); // $20,000 max per symbol
     private BigDecimal maxDailyLoss = new BigDecimal("5000"); // $5,000 max daily loss
+    
+    // Trade frequency limits
+    private int maxDailyTrades = 50; // Max 50 trades per day
+    private int maxConcurrentPositions = 10; // Max 10 open positions at once
+    private int dailyTradeCount = 0;
+    private java.time.LocalDate currentTradeDay = java.time.LocalDate.now();
 
     public RiskManager(AccountManager accountManager) {
         this.accountManager = accountManager;
@@ -35,6 +41,26 @@ public class RiskManager {
             if (activeAccount == null) {
                 System.out.println("❌ Risk: No active account");
                 return false;
+            }
+            
+            // Reset daily counter if new day
+            resetDailyCounterIfNewDay();
+            
+            // Check daily trade limit (only for BUY orders that open new positions)
+            if (order.getSide() == OrderSide.BUY) {
+                if (dailyTradeCount >= maxDailyTrades) {
+                    System.out.println("❌ Risk: Daily trade limit reached (" + maxDailyTrades + " trades)");
+                    return false;
+                }
+            }
+            
+            // Check concurrent position limit (only for BUY orders)
+            if (order.getSide() == OrderSide.BUY) {
+                int openPositions = activeAccount.getOpenPositions().size();
+                if (openPositions >= maxConcurrentPositions) {
+                    System.out.println("❌ Risk: Max concurrent positions reached (" + maxConcurrentPositions + " positions)");
+                    return false;
+                }
             }
             
             // Check position size limit
@@ -79,11 +105,29 @@ public class RiskManager {
             // Update symbol exposure tracking
             symbolExposure.put(order.getSymbol(), newSymbolExposure);
             
+            // Increment daily trade counter for BUY orders (new positions)
+            if (order.getSide() == OrderSide.BUY) {
+                dailyTradeCount++;
+                System.out.println("📊 Daily trades: " + dailyTradeCount + "/" + maxDailyTrades);
+            }
+            
             return true;
             
         } catch (Exception e) {
             System.err.println("Risk validation error: " + e.getMessage());
             return false;
+        }
+    }
+    
+    /**
+     * Reset daily trade counter if it's a new day
+     */
+    private void resetDailyCounterIfNewDay() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (!today.equals(currentTradeDay)) {
+            dailyTradeCount = 0;
+            currentTradeDay = today;
+            System.out.println("🔄 Daily trade counter reset for new day: " + today);
         }
     }
 
@@ -227,6 +271,17 @@ public class RiskManager {
     
     public BigDecimal getMaxDailyLoss() { return maxDailyLoss; }
     public void setMaxDailyLoss(BigDecimal maxDailyLoss) { this.maxDailyLoss = maxDailyLoss; }
+    
+    public int getMaxDailyTrades() { return maxDailyTrades; }
+    public void setMaxDailyTrades(int maxDailyTrades) { this.maxDailyTrades = maxDailyTrades; }
+    
+    public int getMaxConcurrentPositions() { return maxConcurrentPositions; }
+    public void setMaxConcurrentPositions(int maxConcurrentPositions) { this.maxConcurrentPositions = maxConcurrentPositions; }
+    
+    public int getDailyTradeCount() { 
+        resetDailyCounterIfNewDay();
+        return dailyTradeCount; 
+    }
 
     public Map<String, BigDecimal> getSymbolExposures() {
         return Map.copyOf(symbolExposure);
@@ -237,13 +292,19 @@ public class RiskManager {
         
         BigDecimal totalExposure = activeAccount != null ? activeAccount.getTotalExposure() : BigDecimal.ZERO;
         BigDecimal dailyPnL = activeAccount != null ? activeAccount.getDailyPnL() : BigDecimal.ZERO;
+        int openPositions = activeAccount != null ? activeAccount.getOpenPositions().size() : 0;
+        
+        resetDailyCounterIfNewDay();
         
         return new RiskMetrics(
             totalExposure,
             maxTotalExposure,
             dailyPnL,
             maxDailyLoss,
-            symbolExposure.size()
+            openPositions,
+            dailyTradeCount,
+            maxDailyTrades,
+            maxConcurrentPositions
         );
     }
 
@@ -253,14 +314,21 @@ public class RiskManager {
         private final BigDecimal dailyPnL;
         private final BigDecimal maxDailyLoss;
         private final int activePositions;
+        private final int dailyTradeCount;
+        private final int maxDailyTrades;
+        private final int maxConcurrentPositions;
 
         public RiskMetrics(BigDecimal currentExposure, BigDecimal maxExposure, 
-                          BigDecimal dailyPnL, BigDecimal maxDailyLoss, int activePositions) {
+                          BigDecimal dailyPnL, BigDecimal maxDailyLoss, int activePositions,
+                          int dailyTradeCount, int maxDailyTrades, int maxConcurrentPositions) {
             this.currentExposure = currentExposure;
             this.maxExposure = maxExposure;
             this.dailyPnL = dailyPnL;
             this.maxDailyLoss = maxDailyLoss;
             this.activePositions = activePositions;
+            this.dailyTradeCount = dailyTradeCount;
+            this.maxDailyTrades = maxDailyTrades;
+            this.maxConcurrentPositions = maxConcurrentPositions;
         }
 
         public BigDecimal getCurrentExposure() { return currentExposure; }
@@ -268,6 +336,9 @@ public class RiskManager {
         public BigDecimal getDailyPnL() { return dailyPnL; }
         public BigDecimal getMaxDailyLoss() { return maxDailyLoss; }
         public int getActivePositions() { return activePositions; }
+        public int getDailyTradeCount() { return dailyTradeCount; }
+        public int getMaxDailyTrades() { return maxDailyTrades; }
+        public int getMaxConcurrentPositions() { return maxConcurrentPositions; }
 
         public BigDecimal getExposureUtilization() {
             if (maxExposure.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
