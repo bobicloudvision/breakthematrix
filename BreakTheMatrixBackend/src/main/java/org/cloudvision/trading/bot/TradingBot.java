@@ -23,7 +23,6 @@ public class TradingBot {
     private final OrderManager orderManager;
     private final RiskManager riskManager;
     private final org.cloudvision.trading.bot.account.AccountManager accountManager;
-    private final org.cloudvision.trading.service.CandlestickHistoryService candlestickHistoryService;
     
     private final List<TradingStrategy> strategies = new CopyOnWriteArrayList<>();
     private final Map<String, Boolean> strategyStatus = new ConcurrentHashMap<>();
@@ -36,13 +35,11 @@ public class TradingBot {
     public TradingBot(UniversalTradingDataService tradingDataService,
                      OrderManager orderManager,
                      RiskManager riskManager,
-                     org.cloudvision.trading.bot.account.AccountManager accountManager,
-                     org.cloudvision.trading.service.CandlestickHistoryService candlestickHistoryService) {
+                     org.cloudvision.trading.bot.account.AccountManager accountManager) {
         this.tradingDataService = tradingDataService;
         this.orderManager = orderManager;
         this.riskManager = riskManager;
         this.accountManager = accountManager;
-        this.candlestickHistoryService = candlestickHistoryService;
         
         // Set up data handler to process incoming market data
         this.tradingDataService.setGlobalDataHandler(this::processMarketData);
@@ -60,22 +57,8 @@ public class TradingBot {
      * Process incoming market data and execute strategies
      */
     private void processMarketData(TradingData data) {
-        System.out.println("🤖 TradingBot processing market data: " + data.getSymbol() + " (type: " + data.getType() + ")");
-        
-        // Store candlestick data in centralized history (if applicable)
-        if (data.getType() == org.cloudvision.trading.model.TradingDataType.KLINE && data.getCandlestickData() != null) {
-            CandlestickData candlestick = data.getCandlestickData();
-            System.out.println("💾 Storing candlestick: " + candlestick.getProvider() + "_" + 
-                             candlestick.getSymbol() + "_" + candlestick.getInterval() + 
-                             " @ " + candlestick.getCloseTime());
-            candlestickHistoryService.addCandlestick(candlestick);
-        } else {
-            // This is normal for TICKER data - only log if it's unexpected
-            if (data.getType() != org.cloudvision.trading.model.TradingDataType.TICKER) {
-                System.out.println("ℹ️ Skipping storage: type=" + data.getType() + 
-                                 ", hasCandlestick=" + (data.getCandlestickData() != null));
-            }
-        }
+        // Note: Candlestick storage is now handled by UniversalTradingDataService
+        // TradingBot focuses only on trading logic
         
         // Update current prices for all accounts to calculate unrealized P&L
         updateAccountPrices(data);
@@ -449,17 +432,10 @@ public class TradingBot {
     }
     
     /**
-     * Get the centralized candlestick history service
-     * Strategies should use this to access historical data
-     */
-    public org.cloudvision.trading.service.CandlestickHistoryService getCandlestickHistoryService() {
-        return candlestickHistoryService;
-    }
-    
-    /**
-     * Print storage statistics
+     * Print storage statistics for debugging
+     * Delegates to UniversalTradingDataService which manages CandlestickHistoryService
      */
     public void printStorageStats() {
-        candlestickHistoryService.printStorageSummary();
+        tradingDataService.printStorageStats();
     }
 }

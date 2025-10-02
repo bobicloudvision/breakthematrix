@@ -2,8 +2,10 @@ package org.cloudvision.trading.service;
 
 import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
+import org.cloudvision.trading.model.TradingDataType;
 import org.cloudvision.trading.model.TimeInterval;
 import org.cloudvision.trading.provider.TradingDataProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -16,6 +18,9 @@ import java.util.function.Consumer;
 public class UniversalTradingDataService {
     private final Map<String, TradingDataProvider> providers = new ConcurrentHashMap<>();
     private Consumer<TradingData> globalDataHandler;
+    
+    @Autowired(required = false)
+    private CandlestickHistoryService candlestickHistoryService;
 
     public void registerProvider(TradingDataProvider provider) {
         providers.put(provider.getProviderName(), provider);
@@ -60,7 +65,16 @@ public class UniversalTradingDataService {
     }
 
     private void handleData(TradingData data) {
-        // Forward data to global handler (TradingBot) - no logging to avoid console spam
+        // Store candlestick data in centralized history service (before forwarding to TradingBot)
+        if (candlestickHistoryService != null && 
+            data.getType() == TradingDataType.KLINE && 
+            data.getCandlestickData() != null) {
+            
+            CandlestickData candlestick = data.getCandlestickData();
+            candlestickHistoryService.addCandlestick(candlestick);
+        }
+        
+        // Forward data to global handler (TradingBot) for strategy execution
         if (globalDataHandler != null) {
             try {
                 globalDataHandler.accept(data);
@@ -113,5 +127,16 @@ public class UniversalTradingDataService {
             return provider.getHistoricalKlines(symbol, interval, startTime, endTime);
         }
         return List.of();
+    }
+    
+    /**
+     * Print storage statistics from CandlestickHistoryService
+     */
+    public void printStorageStats() {
+        if (candlestickHistoryService != null) {
+            candlestickHistoryService.printStorageSummary();
+        } else {
+            System.out.println("⚠️ CandlestickHistoryService not available");
+        }
     }
 }

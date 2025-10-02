@@ -2,7 +2,9 @@ package org.cloudvision.trading.controller;
 
 import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TimeInterval;
+import org.cloudvision.trading.service.CandlestickHistoryService;
 import org.cloudvision.trading.service.UniversalTradingDataService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -12,6 +14,9 @@ import java.util.List;
 @RequestMapping("/api/trading")
 public class TradingController {
     private final UniversalTradingDataService tradingService;
+    
+    @Autowired(required = false)
+    private CandlestickHistoryService candlestickHistoryService;
 
     public TradingController(UniversalTradingDataService tradingService) {
         this.tradingService = tradingService;
@@ -67,28 +72,41 @@ public class TradingController {
         }
     }
 
+    /**
+     * Get candlestick data from in-memory storage
+     * Returns the EXACT same data that trading strategies are using
+     * Only returns data for actively subscribed symbols/intervals
+     */
     @GetMapping("/historical/{provider}/{symbol}/{interval}")
     public List<CandlestickData> getHistoricalKlines(
             @PathVariable String provider,
             @PathVariable String symbol,
             @PathVariable String interval,
-            @RequestParam(defaultValue = "100") int limit,
-            @RequestParam(required = false) Long startTime,
-            @RequestParam(required = false) Long endTime) {
+            @RequestParam(defaultValue = "100") int limit) {
+        
+        if (candlestickHistoryService == null) {
+            System.err.println("⚠️ CandlestickHistoryService not available");
+            return List.of();
+        }
+        
         try {
-            TimeInterval timeInterval = TimeInterval.fromString(interval);
+            // Read from in-memory storage (same data strategies use)
+            List<CandlestickData> data = candlestickHistoryService.getLastNCandlesticks(
+                provider, symbol, interval, limit
+            );
             
-            // If startTime and endTime are provided, use time range query
-            if (startTime != null && endTime != null) {
-                Instant start = Instant.ofEpochMilli(startTime);
-                Instant end = Instant.ofEpochMilli(endTime);
-                return tradingService.getHistoricalKlines(provider, symbol, timeInterval, start, end);
+            if (data.isEmpty()) {
+                System.out.println("⚠️ No cached data for " + provider + "_" + symbol + "_" + interval + 
+                                 " (not subscribed or no data yet)");
+            } else {
+                System.out.println("✅ Retrieved " + data.size() + " candles from memory for " + 
+                                 provider + "_" + symbol + "_" + interval);
             }
             
-            // Otherwise use limit-based query
-            return tradingService.getHistoricalKlines(provider, symbol, timeInterval, limit);
-        } catch (IllegalArgumentException e) {
-            System.err.println("Invalid interval: " + interval);
+            return data;
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error retrieving data: " + e.getMessage());
             return List.of();
         }
     }
