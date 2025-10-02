@@ -4,6 +4,7 @@ import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
 import org.cloudvision.trading.bot.strategy.impl.MovingAverageStrategy;
+import org.cloudvision.trading.bot.strategy.impl.OrderBlockStrategy;
 import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
 import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,10 @@ public class TradingBotConfig {
         configureSuperTrendStrategy1(); // Conservative (10, 3)
         configureSuperTrendStrategy2(); // Moderate (10, 2)
         configureSuperTrendStrategy3(); // Aggressive (7, 3)
+        
+        // Configure Order Block strategies with different parameters
+        configureOrderBlockStrategy1(); // Standard (pivot: 5)
+        configureOrderBlockStrategy2(); // Scalping (pivot: 3)
         
         // Option 2: Auto-register all strategies (uncomment to use)
         // autoRegisterAllStrategies();
@@ -181,6 +186,62 @@ public class TradingBotConfig {
         // Strategy-specific parameters
         config.setParameter("atrPeriod", 7);            // 7-period ATR (faster)
         config.setParameter("atrMultiplier", 3.0);      // Multiplier of 3
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure Order Block Strategy #1 - Standard
+     * Volume Pivot Length: 5, Max OBs: 3 (standard settings)
+     * Best for: Swing trading, identifying institutional zones
+     */
+    private void configureOrderBlockStrategy1() {
+        OrderBlockStrategy strategy = applicationContext.getBean(OrderBlockStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "orderblock-standard",
+            List.of("BTCUSDT", "ETHUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("3500")); // $3500 per position
+        config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
+        config.setTakeProfitPercentage(new BigDecimal("0.04")); // 4% take profit (1:2 R:R)
+        
+        // Strategy-specific parameters
+        config.setParameter("volumePivotLength", 5);        // 5-period pivot detection
+        config.setParameter("maxBullishOrderBlocks", 3);    // Track 3 bullish OBs
+        config.setParameter("maxBearishOrderBlocks", 3);    // Track 3 bearish OBs
+        config.setParameter("mitigationMethod", "Wick");    // Wick-based mitigation
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure Order Block Strategy #2 - Scalping
+     * Volume Pivot Length: 3, Max OBs: 2 (faster signals)
+     * Best for: Scalping, quick entries on lower timeframes
+     */
+    private void configureOrderBlockStrategy2() {
+        OrderBlockStrategy strategy = applicationContext.getBean(OrderBlockStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "orderblock-scalping",
+            List.of("BTCUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("2000")); // $2000 per position (smaller for scalping)
+        config.setStopLossPercentage(new BigDecimal("0.015")); // 1.5% stop loss (tighter)
+        config.setTakeProfitPercentage(new BigDecimal("0.03")); // 3% take profit
+        
+        // Strategy-specific parameters
+        config.setParameter("volumePivotLength", 3);        // 3-period pivot (faster signals)
+        config.setParameter("maxBullishOrderBlocks", 2);    // Track only 2 most recent OBs
+        config.setParameter("maxBearishOrderBlocks", 2);
+        config.setParameter("mitigationMethod", "Close");   // Close-based mitigation (more conservative)
         
         strategy.initialize(config);
         tradingBot.addStrategy(strategy);
