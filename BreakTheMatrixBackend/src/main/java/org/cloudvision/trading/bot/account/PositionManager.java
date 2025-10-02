@@ -13,6 +13,7 @@ public class PositionManager {
     
     private final Map<String, Position> openPositions = new ConcurrentHashMap<>();
     private final List<Position> positionHistory = Collections.synchronizedList(new ArrayList<>());
+    private PositionCloseListener closeListener;
     
     /**
      * Open a new position
@@ -37,11 +38,19 @@ public class PositionManager {
             return;
         }
         
+        BigDecimal pnlBefore = position.getRealizedPnL();
         position.close(closePrice, quantity);
+        BigDecimal pnlAfter = position.getRealizedPnL();
+        BigDecimal pnlFromThisClose = pnlAfter.subtract(pnlBefore);
         
         System.out.println("🔒 Closed position: " + position.getSymbol() + 
             " @ " + closePrice + " qty: " + quantity + 
             " | Realized P&L: " + position.getRealizedPnL());
+        
+        // Notify listener about the close (for both partial and full closes)
+        if (closeListener != null) {
+            closeListener.onPositionClosed(position, pnlFromThisClose, closePrice, quantity);
+        }
         
         // If fully closed, move to history
         if (!position.isOpen()) {
@@ -185,12 +194,26 @@ public class PositionManager {
     }
     
     /**
+     * Set position close listener
+     */
+    public void setPositionCloseListener(PositionCloseListener listener) {
+        this.closeListener = listener;
+    }
+    
+    /**
      * Clear all positions (for testing/reset)
      */
     public void reset() {
         openPositions.clear();
         positionHistory.clear();
         System.out.println("🗑️ Position manager reset");
+    }
+    
+    /**
+     * Listener interface for position close events
+     */
+    public interface PositionCloseListener {
+        void onPositionClosed(Position position, BigDecimal realizedPnL, BigDecimal closePrice, BigDecimal closedQuantity);
     }
 }
 

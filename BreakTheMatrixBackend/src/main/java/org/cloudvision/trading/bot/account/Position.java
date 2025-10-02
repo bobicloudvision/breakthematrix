@@ -14,6 +14,7 @@ public class Position {
     private final String symbol;
     private final PositionSide side;
     private final BigDecimal entryPrice;
+    private final BigDecimal originalQuantity; // Store original quantity for P&L calculation
     private BigDecimal quantity;
     private final Instant entryTime;
     private Instant exitTime;
@@ -36,6 +37,7 @@ public class Position {
         this.symbol = symbol;
         this.side = side;
         this.entryPrice = entryPrice;
+        this.originalQuantity = quantity;
         this.quantity = quantity;
         this.entryTime = Instant.now();
         this.isOpen = true;
@@ -85,10 +87,34 @@ public class Position {
     }
     
     /**
-     * Get P&L percentage
+     * Get P&L percentage based on original entry value
      */
     public BigDecimal getPnLPercentage() {
-        BigDecimal entryValue = entryPrice.multiply(quantity);
+        BigDecimal quantityToUse = originalQuantity;
+        
+        // Backward compatibility: if originalQuantity is null/zero (old positions), 
+        // try to reverse-calculate from realized P&L
+        if ((quantityToUse == null || quantityToUse.compareTo(BigDecimal.ZERO) == 0) && 
+            !isOpen && exitPrice != null && realizedPnL.compareTo(BigDecimal.ZERO) != 0) {
+            
+            // For closed positions: calculate original quantity from realized P&L
+            // LONG: realizedPnL = (exitPrice - entryPrice) * quantity
+            // SHORT: realizedPnL = (entryPrice - exitPrice) * quantity
+            BigDecimal priceDiff = side == PositionSide.LONG 
+                ? exitPrice.subtract(entryPrice)
+                : entryPrice.subtract(exitPrice);
+            
+            if (priceDiff.compareTo(BigDecimal.ZERO) != 0) {
+                quantityToUse = realizedPnL.divide(priceDiff, 8, RoundingMode.HALF_UP);
+            }
+        }
+        
+        // If still no quantity, use current quantity (for open positions)
+        if (quantityToUse == null || quantityToUse.compareTo(BigDecimal.ZERO) == 0) {
+            quantityToUse = quantity;
+        }
+            
+        BigDecimal entryValue = entryPrice.multiply(quantityToUse);
         if (entryValue.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
@@ -97,10 +123,30 @@ public class Position {
     }
     
     /**
-     * Get position value at entry
+     * Get position value at entry (based on original quantity)
      */
     public BigDecimal getEntryValue() {
-        return entryPrice.multiply(quantity).setScale(8, RoundingMode.HALF_UP);
+        BigDecimal quantityToUse = originalQuantity;
+        
+        // Backward compatibility: reverse-calculate from realized P&L for old closed positions
+        if ((quantityToUse == null || quantityToUse.compareTo(BigDecimal.ZERO) == 0) && 
+            !isOpen && exitPrice != null && realizedPnL.compareTo(BigDecimal.ZERO) != 0) {
+            
+            BigDecimal priceDiff = side == PositionSide.LONG 
+                ? exitPrice.subtract(entryPrice)
+                : entryPrice.subtract(exitPrice);
+            
+            if (priceDiff.compareTo(BigDecimal.ZERO) != 0) {
+                quantityToUse = realizedPnL.divide(priceDiff, 8, RoundingMode.HALF_UP);
+            }
+        }
+        
+        // If still no quantity, use current quantity
+        if (quantityToUse == null || quantityToUse.compareTo(BigDecimal.ZERO) == 0) {
+            quantityToUse = quantity;
+        }
+        
+        return entryPrice.multiply(quantityToUse).setScale(8, RoundingMode.HALF_UP);
     }
     
     /**
@@ -160,6 +206,10 @@ public class Position {
     
     public BigDecimal getQuantity() {
         return quantity;
+    }
+    
+    public BigDecimal getOriginalQuantity() {
+        return originalQuantity;
     }
     
     public Instant getEntryTime() {

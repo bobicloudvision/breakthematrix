@@ -241,7 +241,7 @@ public class PositionsWebSocketHandler extends TextWebSocketHandler {
                 positionData.put("unrealizedPnL", position.getUnrealizedPnL());
                 positionData.put("realizedPnL", position.getRealizedPnL());
                 positionData.put("totalPnL", position.getTotalPnL());
-                positionData.put("pnlPercentage", position.getPnLPercentage());
+                positionData.put("pnLPercentage", position.getPnLPercentage());
                 positionData.put("stopLoss", position.getStopLoss());
                 positionData.put("takeProfit", position.getTakeProfit());
                 positionData.put("strategyId", position.getStrategyId());

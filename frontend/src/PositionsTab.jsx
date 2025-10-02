@@ -244,7 +244,7 @@ export function PositionsTab() {
         </div>
         <div className={`text-right ${getPnLColorClass(position.totalPnL)}`}>
           <div className="text-lg font-semibold">{formatCurrency(position.totalPnL)}</div>
-          <div className="text-sm">{formatPercentage(position.pnlPercentage)}</div>
+          <div className="text-sm">{formatPercentage(position.pnLPercentage)}</div>
         </div>
       </div>
 

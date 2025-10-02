@@ -61,6 +61,12 @@ public class PaperTradingAccount implements TradingAccount {
         // Initialize with USDT balance
         balances.put("USDT", initialBalance);
         
+        // Register listener for automatic position closes (stop loss/take profit)
+        this.positionManager.setPositionCloseListener((position, pnl, closePrice, closedQuantity) -> {
+            updateAccountStatsOnClose(pnl);
+            updateBalancesOnAutoClose(position.getSymbol(), closePrice, closedQuantity);
+        });
+        
         System.out.println("💰 Paper Trading Account created: " + accountName + 
                          " with $" + initialBalance);
     }
@@ -152,7 +158,14 @@ public class PaperTradingAccount implements TradingAccount {
                         if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
                         
                         BigDecimal closeQty = remainingQty.min(position.getQuantity());
+                        BigDecimal pnlBeforeClose = position.getRealizedPnL();
+                        
                         positionManager.closePosition(position.getPositionId(), order.getPrice(), closeQty);
+                        
+                        // Update account statistics when position is closed
+                        BigDecimal positionPnL = position.getRealizedPnL().subtract(pnlBeforeClose);
+                        updateAccountStatsOnClose(positionPnL);
+                        
                         remainingQty = remainingQty.subtract(closeQty);
                     }
                     break;
@@ -266,9 +279,9 @@ public class PaperTradingAccount implements TradingAccount {
     
     @Override
     public BigDecimal getTotalPnL() {
-        // Calculate current balance vs initial balance
-        BigDecimal currentValue = getBalance();
-        return currentValue.subtract(initialBalance);
+        // Total P&L = Realized P&L (from closed positions) + Unrealized P&L (from open positions)
+        BigDecimal unrealizedPnL = positionManager.getTotalUnrealizedPnL();
+        return realizedPnL.add(unrealizedPnL);
     }
     
     @Override
@@ -362,6 +375,50 @@ public class PaperTradingAccount implements TradingAccount {
     }
     
     // Helper methods
+    
+    /**
+     * Update account statistics when a position is closed
+     */
+    private void updateAccountStatsOnClose(BigDecimal positionPnL) {
+        realizedPnL = realizedPnL.add(positionPnL);
+        
+        if (positionPnL.compareTo(BigDecimal.ZERO) > 0) {
+            winningTrades++;
+            if (positionPnL.compareTo(largestWin) > 0) {
+                largestWin = positionPnL;
+            }
+        } else if (positionPnL.compareTo(BigDecimal.ZERO) < 0) {
+            losingTrades++;
+            if (positionPnL.compareTo(largestLoss) < 0) {
+                largestLoss = positionPnL;
+            }
+        }
+        
+        System.out.println("📊 Account stats updated - Realized P&L: " + realizedPnL + 
+            " | Win/Loss: " + winningTrades + "/" + losingTrades);
+    }
+    
+    /**
+     * Update balances when position is automatically closed (stop loss/take profit)
+     */
+    private void updateBalancesOnAutoClose(String symbol, BigDecimal closePrice, BigDecimal closedQuantity) {
+        String baseAsset = extractBaseAsset(symbol);
+        String quoteAsset = extractQuoteAsset(symbol);
+        
+        BigDecimal saleValue = closePrice.multiply(closedQuantity);
+        
+        // Remove the base asset (e.g., BTC)
+        BigDecimal currentBaseBalance = balances.getOrDefault(baseAsset, BigDecimal.ZERO);
+        balances.put(baseAsset, currentBaseBalance.subtract(closedQuantity));
+        
+        // Add the quote asset (e.g., USDT from the sale)
+        BigDecimal currentQuoteBalance = balances.getOrDefault(quoteAsset, BigDecimal.ZERO);
+        balances.put(quoteAsset, currentQuoteBalance.add(saleValue));
+        
+        System.out.println("💰 Balance updated on auto-close: +" + saleValue + " " + quoteAsset + 
+            " | -" + closedQuantity + " " + baseAsset);
+    }
+    
     private String extractBaseAsset(String symbol) {
         // BTCUSDT -> BTC
         if (symbol.endsWith("USDT")) {
