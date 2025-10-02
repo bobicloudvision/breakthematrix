@@ -46,6 +46,18 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         
         // Golden Cross: Short MA crosses above Long MA = BUY signal
         if (shortMA.compareTo(longMA) > 0 && (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
+            // First, check if we have any SHORT positions and close them
+            BigDecimal shortPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.SHORT);
+            
+            if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                // Close SHORT position first
+                Order closeShortOrder = createBuyOrder(symbol, currentPrice);
+                orders.add(closeShortOrder);
+                System.out.println("🔄 MA Strategy: Closing SHORT position for " + symbol + 
+                    " at " + currentPrice + " | Quantity: " + shortPositionQuantity);
+            }
+            
+            // Then create LONG order (open new position)
             Order buyOrder = createBuyOrder(symbol, currentPrice);
             
             // SET STOP LOSS: Place stop loss below long MA (support level)
@@ -73,20 +85,42 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         }
         // Death Cross: Short MA crosses below Long MA = SELL signal
         else if (shortMA.compareTo(longMA) < 0 && (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
-            // FUTURES: Only create sell order if we have open LONG positions
-            BigDecimal positionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
+            // First, check if we have any LONG positions and close them
+            BigDecimal longPositionQuantity = calculateCloseQuantity(symbol, org.cloudvision.trading.bot.account.PositionSide.LONG);
             
-            if (positionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                Order sellOrder = createSellOrder(symbol, currentPrice);
-                orders.add(sellOrder);
-                lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
-                action = "SELL";
-                System.out.println("🔴 MA Strategy: SELL signal for " + symbol + " at " + currentPrice + 
-                    " | Closing position: " + positionQuantity);
-            } else {
-                System.out.println("⚠️ MA Strategy: SELL signal for " + symbol + " but no open position to close");
-                // Keep previous signal state - don't change it
+            if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                // Close LONG position first
+                Order closeLongOrder = createSellOrder(symbol, currentPrice);
+                orders.add(closeLongOrder);
+                System.out.println("🔄 MA Strategy: Closing LONG position for " + symbol + 
+                    " at " + currentPrice + " | Quantity: " + longPositionQuantity);
             }
+            
+            // Then create SHORT order (open new position)
+            Order sellOrder = createSellOrder(symbol, currentPrice);
+            
+            // SET STOP LOSS: Place stop loss above long MA (resistance level)
+            // Use 102% of long MA to give it a buffer
+            BigDecimal stopLoss = longMA.multiply(new BigDecimal("1.02"));
+            sellOrder.setSuggestedStopLoss(stopLoss);
+            
+            // SET TAKE PROFIT: Risk:Reward ratio of 1:2
+            BigDecimal riskDistance = stopLoss.subtract(currentPrice);
+            BigDecimal takeProfit = currentPrice.subtract(riskDistance.multiply(new BigDecimal("2")));
+            sellOrder.setSuggestedTakeProfit(takeProfit);
+            
+            orders.add(sellOrder);
+            lastSignal.put(symbol, BigDecimal.ONE.negate()); // Bearish signal
+            action = "SELL";
+            
+            // Enhanced logging with stop loss info
+            BigDecimal stopLossPercent = stopLoss.subtract(currentPrice)
+                .divide(currentPrice, 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"));
+            System.out.println(String.format(
+                "🔴 MA Strategy: SELL signal for %s at %s | Stop Loss: %s (%.2f%%) | Take Profit: %s",
+                symbol, currentPrice, stopLoss, stopLossPercent, takeProfit
+            ));
         }
         
         // Generate visualization data
