@@ -39,17 +39,28 @@ public class BinanceTradingProvider implements TradingDataProvider {
     private final Map<String, List<TimeInterval>> subscribedKlines = new ConcurrentHashMap<>();
     private final Set<String> activeStreams = ConcurrentHashMap.newKeySet();
     
+    // Number of historical candles to fetch on reconnect
+    private static final int HISTORICAL_CANDLES_ON_RECONNECT = 500;
+    
     private WebSocketClient webSocketClient;
     private final ObjectMapper objectMapper;
     private final AtomicInteger requestId = new AtomicInteger(1);
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient;
+    
+    // Flag to prevent manual disconnect from triggering reconnect
+    private volatile boolean manualDisconnect = false;
     
     public BinanceTradingProvider() {
         // Configure ObjectMapper for Java 8 time support
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        
+        // Configure HttpClient with timeout
+        this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
     }
 
     @Override
@@ -87,10 +98,13 @@ public class BinanceTradingProvider implements TradingDataProvider {
                     connected = false;
                     System.out.println("🔌 Binance WebSocket closed. Code: " + code + ", Reason: " + reason + ", Remote: " + remote);
                     
-                    // Auto-reconnect after 5 seconds if not manually disconnected
-                    if (remote && code != 1000) {
-                        System.out.println("🔄 Attempting to reconnect in 5 seconds...");
+                    // Auto-reconnect for any abnormal closure (not 1000 = normal close)
+                    // This includes code 1006 (abnormal closure, pong timeout, etc.)
+                    if (!manualDisconnect && code != 1000) {
+                        System.out.println("🔄 Connection lost abnormally. Attempting to reconnect in 5 seconds...");
                         executorService.schedule(() -> reconnect(), 5, java.util.concurrent.TimeUnit.SECONDS);
+                    } else if (code == 1000) {
+                        System.out.println("✅ WebSocket closed normally");
                     }
                 }
 
@@ -120,6 +134,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
     
     private void reconnect() {
         System.out.println("🔄 Attempting to reconnect to Binance...");
+        manualDisconnect = false; // Reset flag for reconnection
         connect();
         
         // Re-subscribe to all previously subscribed streams
@@ -134,13 +149,110 @@ public class BinanceTradingProvider implements TradingDataProvider {
             for (String stream : streamsToResubscribe) {
                 sendSubscriptionMessage(stream, true);
             }
+            
+            // Load historical data for all subscribed klines
+            System.out.println("📊 Loading historical data on reconnect...");
+            loadHistoricalDataOnReconnect();
         }
+    }
+    
+    /**
+     * Load historical candlestick data after reconnection
+     * Simple approach: fetch last N candles for each subscribed symbol+interval
+     */
+    private void loadHistoricalDataOnReconnect() {
+        System.out.println("🔄 Fetching " + HISTORICAL_CANDLES_ON_RECONNECT + " historical candles for each subscription...");
+        
+        int successCount = 0;
+        int failureCount = 0;
+        
+        // For each subscribed symbol+interval, fetch historical data
+        for (Map.Entry<String, List<TimeInterval>> entry : subscribedKlines.entrySet()) {
+            String symbol = entry.getKey();
+            
+            for (TimeInterval interval : entry.getValue()) {
+                try {
+                    System.out.println("📊 Fetching historical data for " + symbol + " (" + interval.getValue() + ")");
+                    
+                    // Fetch historical data with retry on failure
+                    List<CandlestickData> historicalData = fetchHistoricalDataWithRetry(symbol, interval, HISTORICAL_CANDLES_ON_RECONNECT, 2);
+                    
+                    if (!historicalData.isEmpty()) {
+                        System.out.println("✅ Retrieved " + historicalData.size() + " historical candles for " + 
+                                         symbol + " (" + interval.getValue() + ")");
+                        
+                        // Send historical data through the data handler
+                        for (CandlestickData candlestick : historicalData) {
+                            TradingData tradingData = new TradingData(
+                                symbol,
+                                candlestick.getCloseTime(),
+                                getProviderName(),
+                                TradingDataType.KLINE,
+                                candlestick
+                            );
+                            
+                            if (dataHandler != null) {
+                                dataHandler.accept(tradingData);
+                            }
+                        }
+                        
+                        System.out.println("✅ Historical data loaded for " + symbol + " (" + interval.getValue() + ")");
+                        successCount++;
+                    } else {
+                        System.out.println("⚠️ No historical data retrieved for " + symbol + " (" + interval.getValue() + ")");
+                        failureCount++;
+                    }
+                    
+                } catch (Exception e) {
+                    System.err.println("❌ Error loading historical data for " + symbol + " (" + interval.getValue() + "): " + e.getMessage());
+                    failureCount++;
+                    // Continue with next symbol/interval
+                }
+            }
+        }
+        
+        System.out.println("✅ Historical data loading completed: " + successCount + " succeeded, " + failureCount + " failed");
+    }
+    
+    /**
+     * Fetch historical data with retry logic
+     */
+    private List<CandlestickData> fetchHistoricalDataWithRetry(String symbol, TimeInterval interval, int limit, int maxRetries) {
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                List<CandlestickData> data = getHistoricalKlines(symbol, interval, limit);
+                if (!data.isEmpty()) {
+                    return data;
+                }
+                
+                if (attempt < maxRetries) {
+                    System.out.println("⚠️ Empty result, retrying... (attempt " + attempt + "/" + maxRetries + ")");
+                    Thread.sleep(2000); // Wait 2 seconds before retry
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                if (attempt < maxRetries) {
+                    System.out.println("⚠️ Failed, retrying... (attempt " + attempt + "/" + maxRetries + ")");
+                    try {
+                        Thread.sleep(2000); // Wait 2 seconds before retry
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return new ArrayList<>();
     }
 
     @Override
     public void disconnect() {
         System.out.println("🔌 Disconnecting from Binance WebSocket...");
         
+        manualDisconnect = true; // Prevent auto-reconnect
         connected = false;
         activeStreams.clear();
         subscribedSymbols.clear();
@@ -403,6 +515,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
             
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(15)) // Request timeout
                 .GET()
                 .build();
             
@@ -416,6 +529,9 @@ public class BinanceTradingProvider implements TradingDataProvider {
             
             return parseKlineResponse(response.body(), symbol, interval.getValue());
             
+        } catch (java.net.http.HttpTimeoutException e) {
+            System.err.println("❌ Timeout fetching historical klines for " + symbol + ": Request took longer than 15 seconds");
+            return new ArrayList<>();
         } catch (Exception e) {
             System.err.println("❌ Error fetching historical klines: " + e.getMessage());
             e.printStackTrace();
@@ -439,6 +555,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
             
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(15)) // Request timeout
                 .GET()
                 .build();
             
@@ -452,6 +569,9 @@ public class BinanceTradingProvider implements TradingDataProvider {
             
             return parseKlineResponse(response.body(), symbol, interval.getValue());
             
+        } catch (java.net.http.HttpTimeoutException e) {
+            System.err.println("❌ Timeout fetching historical klines for " + symbol + ": Request took longer than 15 seconds");
+            return new ArrayList<>();
         } catch (Exception e) {
             System.err.println("❌ Error fetching historical klines: " + e.getMessage());
             e.printStackTrace();
