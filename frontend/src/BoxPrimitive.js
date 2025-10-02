@@ -39,24 +39,26 @@ class BoxRenderer {
                     verticalPositions.length
                 );
 
-                // Draw border
-                ctx.strokeStyle = box.borderColor || '#2196F3';
-                ctx.lineWidth = (box.borderWidth || 1) * scope.horizontalPixelRatio;
-                
-                if (box.borderStyle === 'dashed') {
-                    ctx.setLineDash([5 * scope.horizontalPixelRatio, 5 * scope.horizontalPixelRatio]);
-                } else if (box.borderStyle === 'dotted') {
-                    ctx.setLineDash([2 * scope.horizontalPixelRatio, 2 * scope.horizontalPixelRatio]);
-                } else {
-                    ctx.setLineDash([]);
+                // Draw border only if border color or width is explicitly provided
+                if (box.borderColor || box.borderWidth) {
+                    ctx.strokeStyle = box.borderColor || '#2196F3';
+                    ctx.lineWidth = (box.borderWidth || 1) * scope.horizontalPixelRatio;
+                    
+                    if (box.borderStyle === 'dashed') {
+                        ctx.setLineDash([5 * scope.horizontalPixelRatio, 5 * scope.horizontalPixelRatio]);
+                    } else if (box.borderStyle === 'dotted') {
+                        ctx.setLineDash([2 * scope.horizontalPixelRatio, 2 * scope.horizontalPixelRatio]);
+                    } else {
+                        ctx.setLineDash([]);
+                    }
+                    
+                    ctx.strokeRect(
+                        horizontalPositions.position,
+                        verticalPositions.position,
+                        horizontalPositions.length,
+                        verticalPositions.length
+                    );
                 }
-                
-                ctx.strokeRect(
-                    horizontalPositions.position,
-                    verticalPositions.position,
-                    horizontalPositions.length,
-                    verticalPositions.length
-                );
 
                 // Draw text
                 if (box.text) {

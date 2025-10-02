@@ -449,6 +449,76 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             this.rawData = rawData;
         }
     }
+    
+    /**
+     * Extract volume and open price from PriceData (if available)
+     * Returns a map with "volume" and "openPrice" keys (may be null)
+     */
+    protected Map<String, BigDecimal> extractVolumeAndOpen(PriceData priceData) {
+        Map<String, BigDecimal> result = new HashMap<>();
+        
+        if (priceData.rawData != null && priceData.rawData.getCandlestickData() != null) {
+            CandlestickData candle = priceData.rawData.getCandlestickData();
+            result.put("volume", candle.getVolume());
+            result.put("openPrice", candle.getOpen());
+        } else {
+            result.put("volume", null);
+            result.put("openPrice", null);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Get standard volume indicator metadata for visualization
+     * Returns volume as a histogram in a separate pane
+     * 
+     * @param paneOrder The pane order for the volume indicator (default: 1)
+     */
+    protected IndicatorMetadata getVolumeIndicatorMetadata(int paneOrder) {
+        return IndicatorMetadata.builder("volume")
+            .displayName("Volume")
+            .asHistogram("#26a69a")
+            .addConfig("priceFormat", Map.of("type", "volume"))
+            .addConfig("priceScaleId", "volume")
+            .separatePane(true)
+            .paneOrder(paneOrder)
+            .build();
+    }
+    
+    /**
+     * Get standard volume indicator metadata (with default pane order = 1)
+     */
+    protected IndicatorMetadata getVolumeIndicatorMetadata() {
+        return getVolumeIndicatorMetadata(1);
+    }
+    
+    /**
+     * Add volume to indicators map with proper coloring based on candle direction
+     * Green for bullish candles (close >= open), red for bearish
+     * 
+     * @param indicators The indicators map to add volume to
+     * @param signals The signals map to add volume color information to
+     * @param volume The volume value
+     * @param currentPrice The closing price
+     * @param openPrice The opening price
+     */
+    protected void addVolumeIndicator(Map<String, BigDecimal> indicators, 
+                                     Map<String, Object> signals,
+                                     BigDecimal volume, 
+                                     BigDecimal currentPrice, 
+                                     BigDecimal openPrice) {
+        if (volume != null) {
+            indicators.put("volume", volume);
+            
+            // Add volume color information (for coloring volume bars)
+            if (openPrice != null) {
+                // Green for bullish candles (close >= open), red for bearish (close < open)
+                String volumeColor = currentPrice.compareTo(openPrice) >= 0 ? "#26a69a" : "#ef5350";
+                signals.put("volumeColor", volumeColor);
+            }
+        }
+    }
 
     @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {

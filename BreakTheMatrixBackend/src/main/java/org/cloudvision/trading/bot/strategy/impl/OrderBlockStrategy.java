@@ -197,8 +197,12 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
             System.out.println("⚠️ Order Block: Bearish OB mitigated for " + symbol);
         }
         
+        // Extract volume and open price using base class helper method
+        Map<String, BigDecimal> volumeData = extractVolumeAndOpen(priceData);
+        
         // Generate visualization data
-        generateVisualizationData(symbol, currentPrice, priceData.timestamp);
+        generateVisualizationData(symbol, currentPrice, priceData.timestamp, 
+                                volumeData.get("volume"), volumeData.get("openPrice"));
         
         return orders;
     }
@@ -524,10 +528,11 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     /**
      * Generate visualization data
      */
-    private void generateVisualizationData(String symbol, BigDecimal price, Instant timestamp) {
+    private void generateVisualizationData(String symbol, BigDecimal price, Instant timestamp,
+                                         BigDecimal volume, BigDecimal openPrice) {
         if (visualizationManager == null) return;
         
-        // Prepare indicators (empty for now since we're using boxes)
+        // Prepare indicators
         Map<String, BigDecimal> indicators = new HashMap<>();
         
         // Prepare boxes for order blocks
@@ -578,18 +583,18 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 if (ob.mitigated) {
                     // Mitigated: Gray with very low opacity
                     box.put("backgroundColor", "rgba(128, 128, 128, 0.08)"); // Gray, very transparent
-                    box.put("borderColor", "#808080");
-                    box.put("borderWidth", 1);
-                    box.put("borderStyle", "dashed");
+                    // box.put("borderColor", "#808080");
+                    // box.put("borderWidth", 1);
+                    // box.put("borderStyle", "dashed");
                     box.put("text", "Bullish OB (Mitigated)");
                     box.put("textColor", "#808080");
                     mitigatedBullCount++;
                 } else {
                     // Active: Green with normal opacity
                     box.put("backgroundColor", "rgba(22, 148, 0, 0.15)"); // Green with transparency
-                    box.put("borderColor", "#169400");
-                    box.put("borderWidth", 1);
-                    box.put("borderStyle", "solid");
+                    // box.put("borderColor", "#169400");
+                    // box.put("borderWidth", 1);
+                    // box.put("borderStyle", "solid");
                     box.put("text", ob.touched ? "Bullish OB ✓" : "Bullish OB");
                     box.put("textColor", "#169400");
                     activeBullCount++;
@@ -644,18 +649,18 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                 if (ob.mitigated) {
                     // Mitigated: Gray with very low opacity
                     box.put("backgroundColor", "rgba(128, 128, 128, 0.08)"); // Gray, very transparent
-                    box.put("borderColor", "#808080");
-                    box.put("borderWidth", 1);
-                    box.put("borderStyle", "dashed");
+                    // box.put("borderColor", "#808080");
+                    // box.put("borderWidth", 1);
+                    // box.put("borderStyle", "dashed");
                     box.put("text", "Bearish OB (Mitigated)");
                     box.put("textColor", "#808080");
                     mitigatedBearCount++;
                 } else {
                     // Active: Red with normal opacity
                     box.put("backgroundColor", "rgba(255, 17, 0, 0.15)"); // Red with transparency
-                    box.put("borderColor", "#ff1100");
-                    box.put("borderWidth", 1);
-                    box.put("borderStyle", "solid");
+                    // box.put("borderColor", "#ff1100");
+                    // box.put("borderWidth", 1);
+                    // box.put("borderStyle", "solid");
                     box.put("text", ob.touched ? "Bearish OB ✓" : "Bearish OB");
                     box.put("textColor", "#ff1100");
                     activeBearCount++;
@@ -701,6 +706,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         
         signals.put("nearBullishOB", nearBullOB);
         signals.put("nearBearishOB", nearBearOB);
+        
+        // Add volume indicator using reusable base class method
+        addVolumeIndicator(indicators, signals, volume, price, openPrice);
         
         // Prepare performance data
         Map<String, BigDecimal> performance = new HashMap<>();
@@ -814,9 +822,13 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
     
     @Override
     public Map<String, IndicatorMetadata> getIndicatorMetadata() {
-        // Order blocks are now visualized using boxes instead of indicators
-        // Return empty metadata since we don't need any line/histogram indicators
-        return new HashMap<>();
+        Map<String, IndicatorMetadata> metadata = new HashMap<>();
+        
+        // Volume - Use reusable base class method
+        // Place it in pane 1 (main chart is 0, volume will be in separate pane below)
+        metadata.put("volume", getVolumeIndicatorMetadata(1));
+        
+        return metadata;
     }
     
     @Override
@@ -868,7 +880,7 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
                     tradingData
                 );
                 
-                // This will update internal state and generate viz data
+                // This will update internal state and generate viz data (including volume)
                 analyzePrice(priceData);
             }
             
