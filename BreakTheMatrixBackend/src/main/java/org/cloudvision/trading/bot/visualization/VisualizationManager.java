@@ -14,7 +14,7 @@ public class VisualizationManager {
     private final Map<String, List<StrategyVisualizationData>> strategyData = new ConcurrentHashMap<>();
     private final Map<String, Consumer<StrategyVisualizationData>> dataHandlers = new ConcurrentHashMap<>();
     private final Map<String, List<String>> registeredStrategies = new ConcurrentHashMap<>(); // strategyId -> symbols
-    private final int maxDataPoints = 1000; // Keep last 1000 data points per strategy
+    private final int maxDataPoints = 5000; // Keep last 5000 data points per strategy (supports ~3.5 days of 1m data)
 
     /**
      * Add visualization data for a strategy

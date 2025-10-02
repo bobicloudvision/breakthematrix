@@ -350,6 +350,36 @@ export const ChartComponent = props => {
                 }
                 console.log(`Validated data for ${indicator.name}: ${validData.length} unique points (sorted)`);
                 
+                // Debug: Check timestamp alignment with main chart data
+                if (validData.length > 0 && data && data.length > 0) {
+                    const indicatorFirst = validData[0].time;
+                    const indicatorLast = validData[validData.length - 1].time;
+                    const chartFirst = data[0].time;
+                    const chartLast = data[data.length - 1].time;
+                    
+                    console.log(`${indicator.name} time range:`, {
+                        first: indicatorFirst,
+                        last: indicatorLast,
+                        firstDate: new Date(indicatorFirst * 1000).toISOString(),
+                        lastDate: new Date(indicatorLast * 1000).toISOString(),
+                        duration: `${((indicatorLast - indicatorFirst) / 60).toFixed(1)} minutes`
+                    });
+                    console.log(`Main chart time range:`, {
+                        first: chartFirst,
+                        last: chartLast,
+                        firstDate: new Date(chartFirst * 1000).toISOString(),
+                        lastDate: new Date(chartLast * 1000).toISOString(),
+                        duration: `${((chartLast - chartFirst) / 3600).toFixed(1)} hours`
+                    });
+                    
+                    // Warn if time ranges don't overlap properly
+                    if (indicatorFirst > chartLast || indicatorLast < chartFirst) {
+                        console.error(`⚠️ ${indicator.name}: Time range does NOT overlap with chart data!`);
+                    } else if (indicatorLast - indicatorFirst < (chartLast - chartFirst) * 0.5) {
+                        console.warn(`⚠️ ${indicator.name}: Indicator covers only ${(((indicatorLast - indicatorFirst) / (chartLast - chartFirst)) * 100).toFixed(1)}% of chart time range. Backend should calculate indicators for the full range!`);
+                    }
+                }
+                
                 if (validData.length === 0) {
                     console.warn(`No valid data points found for indicator: ${indicator.name} (type: ${indicator.type})`);
                     return;

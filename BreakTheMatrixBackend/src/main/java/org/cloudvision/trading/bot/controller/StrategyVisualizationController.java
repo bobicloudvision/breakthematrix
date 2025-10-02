@@ -68,12 +68,26 @@ public class StrategyVisualizationController {
     public List<StrategyVisualizationData> getStrategySymbolData(
             @PathVariable String strategyId,
             @PathVariable String symbol,
-            @RequestParam(defaultValue = "100") int limit) {
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Long from,
+            @RequestParam(required = false) Long to) {
         
         List<StrategyVisualizationData> data = visualizationManager.getVisualizationData(strategyId, symbol);
         
-        // Return last 'limit' data points
-        if (data.size() > limit) {
+        // Filter by time range if specified
+        if (from != null || to != null) {
+            final long fromTime = from != null ? from : 0;
+            final long toTime = to != null ? to : Long.MAX_VALUE;
+            data = data.stream()
+                .filter(d -> {
+                    long timestamp = d.getTimestamp().getEpochSecond();
+                    return timestamp >= fromTime && timestamp <= toTime;
+                })
+                .toList();
+        }
+        
+        // Return last 'limit' data points only if specified
+        if (limit != null && from == null && to == null && data.size() > limit) {
             return data.subList(data.size() - limit, data.size());
         }
         
@@ -153,12 +167,15 @@ public class StrategyVisualizationController {
      * - markers: Buy/sell signals
      */
     @Operation(summary = "Get TradingView Chart Data", 
-               description = "Get strategy data formatted for TradingView Lightweight Charts with multiple series types")
+               description = "Get strategy data formatted for TradingView Lightweight Charts with multiple series types. " +
+                           "Use 'from' and 'to' parameters to specify time range in seconds (epoch), or 'limit' for last N points.")
     @GetMapping("/strategies/{strategyId}/symbols/{symbol}/tradingview")
     public Map<String, Object> getTradingViewData(
             @PathVariable String strategyId,
             @PathVariable String symbol,
-            @RequestParam(defaultValue = "200") int limit) {
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Long from,
+            @RequestParam(required = false) Long to) {
         
         List<StrategyVisualizationData> data = visualizationManager.getVisualizationData(strategyId, symbol);
         
@@ -178,8 +195,20 @@ public class StrategyVisualizationController {
         }
         data = new java.util.ArrayList<>(uniqueData.values());
         
-        // Limit data points
-        if (data.size() > limit) {
+        // Filter by time range if specified
+        if (from != null || to != null) {
+            final long fromTime = from != null ? from : 0;
+            final long toTime = to != null ? to : Long.MAX_VALUE;
+            data = data.stream()
+                .filter(d -> {
+                    long timestamp = d.getTimestamp().getEpochSecond();
+                    return timestamp >= fromTime && timestamp <= toTime;
+                })
+                .toList();
+        }
+        
+        // Limit data points only if specified and no time range filtering was done
+        if (limit != null && from == null && to == null && data.size() > limit) {
             data = data.subList(data.size() - limit, data.size());
         }
         
