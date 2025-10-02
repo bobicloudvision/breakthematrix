@@ -29,8 +29,14 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     @Autowired(required = false)
     protected AccountManager accountManager;
     
-    // Price history for each symbol
-    protected final Map<String, List<BigDecimal>> priceHistory = new HashMap<>();
+    @Autowired(required = false)
+    protected org.cloudvision.trading.service.CandlestickHistoryService candlestickHistoryService;
+    
+    // Track which provider each symbol uses (for reading from history service)
+    protected final Map<String, String> symbolProviders = new HashMap<>();
+    
+    // Track which interval each symbol uses
+    protected final Map<String, String> symbolIntervals = new HashMap<>();
     
     // Signal tracking (1 = bullish, -1 = bearish, 0 = neutral)
     protected final Map<String, BigDecimal> lastSignal = new HashMap<>();
@@ -50,8 +56,12 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             return Collections.emptyList();
         }
 
-        // Update price history
-        updatePriceHistory(priceData.symbol, priceData.price);
+        // Track provider and interval for this symbol (for reading from history service)
+        if (data.getCandlestickData() != null) {
+            symbolProviders.put(priceData.symbol, data.getProvider());
+            symbolIntervals.put(priceData.symbol, data.getCandlestickData().getInterval());
+        }
+        
         lastUpdateTime.put(priceData.symbol, priceData.timestamp);
 
         // Call strategy-specific analysis
@@ -103,32 +113,73 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
 
     /**
-     * Update price history for a symbol
+     * Get price history for a symbol from centralized storage
+     * Reads close prices from the last N candlesticks
      */
-    protected void updatePriceHistory(String symbol, BigDecimal price) {
-        List<BigDecimal> prices = priceHistory.computeIfAbsent(symbol, k -> new ArrayList<>());
-        prices.add(price);
-        
-        // Keep history manageable (keep last maxHistorySize prices)
-        int maxHistorySize = getMaxHistorySize();
-        if (prices.size() > maxHistorySize + 10) {
-            prices.subList(0, prices.size() - maxHistorySize - 5).clear();
+    protected List<BigDecimal> getPriceHistory(String symbol, int count) {
+        if (candlestickHistoryService == null) {
+            System.err.println("⚠️ CandlestickHistoryService not injected, returning empty history");
+            return Collections.emptyList();
         }
+        
+        String provider = symbolProviders.get(symbol);
+        String interval = symbolIntervals.get(symbol);
+        
+        if (provider == null || interval == null) {
+            System.err.println("⚠️ Provider or interval not tracked for " + symbol);
+            return Collections.emptyList();
+        }
+        
+        List<CandlestickData> candles = candlestickHistoryService.getLastNCandlesticks(
+            provider, symbol, interval, count
+        );
+        
+        return candles.stream()
+            .map(CandlestickData::getClose)
+            .collect(java.util.stream.Collectors.toList());
     }
-
+    
     /**
-     * Get price history for a symbol
+     * Get price history for a symbol (uses default max history size)
      */
     protected List<BigDecimal> getPriceHistory(String symbol) {
-        return priceHistory.getOrDefault(symbol, Collections.emptyList());
+        return getPriceHistory(symbol, getMaxHistorySize());
+    }
+    
+    /**
+     * Get full candlestick history for a symbol
+     */
+    protected List<CandlestickData> getCandlestickHistory(String symbol, int count) {
+        if (candlestickHistoryService == null) {
+            return Collections.emptyList();
+        }
+        
+        String provider = symbolProviders.get(symbol);
+        String interval = symbolIntervals.get(symbol);
+        
+        if (provider == null || interval == null) {
+            return Collections.emptyList();
+        }
+        
+        return candlestickHistoryService.getLastNCandlesticks(provider, symbol, interval, count);
     }
 
     /**
      * Check if enough data is available for analysis
      */
     protected boolean hasEnoughData(String symbol, int requiredPeriod) {
-        List<BigDecimal> prices = getPriceHistory(symbol);
-        return prices.size() >= requiredPeriod;
+        if (candlestickHistoryService == null) {
+            return false;
+        }
+        
+        String provider = symbolProviders.get(symbol);
+        String interval = symbolIntervals.get(symbol);
+        
+        if (provider == null || interval == null) {
+            return false;
+        }
+        
+        return candlestickHistoryService.hasEnoughData(provider, symbol, interval, requiredPeriod);
     }
 
     /**
@@ -312,15 +363,15 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             // Sort by timestamp to ensure chronological order
             candles.sort(Comparator.comparing(CandlestickData::getCloseTime));
             
-            // Initialize price history for this symbol
-            List<BigDecimal> prices = priceHistory.computeIfAbsent(symbol, k -> new ArrayList<>());
-            
-            // Add close prices from historical data
-            for (CandlestickData candle : candles) {
-                prices.add(candle.getClose());
+            // Track provider and interval for this symbol
+            if (!candles.isEmpty()) {
+                CandlestickData firstCandle = candles.get(0);
+                symbolProviders.put(symbol, firstCandle.getProvider());
+                symbolIntervals.put(symbol, firstCandle.getInterval());
+                System.out.println("✅ " + symbol + " tracked with provider=" + firstCandle.getProvider() + 
+                                 ", interval=" + firstCandle.getInterval() + 
+                                 " (" + candles.size() + " historical candles available in centralized storage)");
             }
-            
-            System.out.println("✅ " + symbol + " loaded with " + prices.size() + " historical prices");
         }
         
         // Allow strategy-specific bootstrap logic

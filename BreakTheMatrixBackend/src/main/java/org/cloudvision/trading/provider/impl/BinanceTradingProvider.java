@@ -51,6 +51,10 @@ public class BinanceTradingProvider implements TradingDataProvider {
     // Flag to prevent manual disconnect from triggering reconnect
     private volatile boolean manualDisconnect = false;
     
+    // Reconnection attempt tracking for exponential backoff
+    private volatile int reconnectionAttempts = 0;
+    private static final int MAX_RECONNECTION_DELAY_SECONDS = 60;
+    
     public BinanceTradingProvider() {
         // Configure ObjectMapper for Java 8 time support
         this.objectMapper = new ObjectMapper();
@@ -78,6 +82,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
                     connected = true;
+                    reconnectionAttempts = 0; // Reset reconnection counter on successful connection
                     System.out.println("✅ Connected to Binance WebSocket successfully!");
                     System.out.println("🤝 Handshake status: " + handshake.getHttpStatus());
                     System.out.println("💡 You can now subscribe to any symbol/interval dynamically");
@@ -101,10 +106,17 @@ public class BinanceTradingProvider implements TradingDataProvider {
                     // Auto-reconnect for any abnormal closure (not 1000 = normal close)
                     // This includes code 1006 (abnormal closure, pong timeout, etc.)
                     if (!manualDisconnect && code != 1000) {
-                        System.out.println("🔄 Connection lost abnormally. Attempting to reconnect in 5 seconds...");
-                        executorService.schedule(() -> reconnect(), 5, java.util.concurrent.TimeUnit.SECONDS);
+                        reconnectionAttempts++;
+                        
+                        // Exponential backoff: 5s, 10s, 20s, 40s, 60s (max)
+                        int delaySeconds = Math.min(5 * (1 << (reconnectionAttempts - 1)), MAX_RECONNECTION_DELAY_SECONDS);
+                        
+                        System.out.println("🔄 Connection lost abnormally. Reconnection attempt #" + reconnectionAttempts + 
+                                         " in " + delaySeconds + " seconds...");
+                        executorService.schedule(() -> reconnect(), delaySeconds, java.util.concurrent.TimeUnit.SECONDS);
                     } else if (code == 1000) {
                         System.out.println("✅ WebSocket closed normally");
+                        reconnectionAttempts = 0;
                     }
                 }
 
@@ -171,47 +183,58 @@ public class BinanceTradingProvider implements TradingDataProvider {
             String symbol = entry.getKey();
             
             for (TimeInterval interval : entry.getValue()) {
-                try {
-                    System.out.println("📊 Fetching historical data for " + symbol + " (" + interval.getValue() + ")");
-                    
-                    // Fetch historical data with retry on failure
-                    List<CandlestickData> historicalData = fetchHistoricalDataWithRetry(symbol, interval, HISTORICAL_CANDLES_ON_RECONNECT, 2);
-                    
-                    if (!historicalData.isEmpty()) {
-                        System.out.println("✅ Retrieved " + historicalData.size() + " historical candles for " + 
-                                         symbol + " (" + interval.getValue() + ")");
-                        
-                        // Send historical data through the data handler
-                        for (CandlestickData candlestick : historicalData) {
-                            TradingData tradingData = new TradingData(
-                                symbol,
-                                candlestick.getCloseTime(),
-                                getProviderName(),
-                                TradingDataType.KLINE,
-                                candlestick
-                            );
-                            
-                            if (dataHandler != null) {
-                                dataHandler.accept(tradingData);
-                            }
-                        }
-                        
-                        System.out.println("✅ Historical data loaded for " + symbol + " (" + interval.getValue() + ")");
-                        successCount++;
-                    } else {
-                        System.out.println("⚠️ No historical data retrieved for " + symbol + " (" + interval.getValue() + ")");
-                        failureCount++;
-                    }
-                    
-                } catch (Exception e) {
-                    System.err.println("❌ Error loading historical data for " + symbol + " (" + interval.getValue() + "): " + e.getMessage());
+                if (loadHistoricalDataForSymbol(symbol, interval)) {
+                    successCount++;
+                } else {
                     failureCount++;
-                    // Continue with next symbol/interval
                 }
             }
         }
         
         System.out.println("✅ Historical data loading completed: " + successCount + " succeeded, " + failureCount + " failed");
+    }
+    
+    /**
+     * Load historical data for a specific symbol and interval
+     * @return true if successful, false otherwise
+     */
+    private boolean loadHistoricalDataForSymbol(String symbol, TimeInterval interval) {
+        try {
+            System.out.println("📊 Fetching historical data for " + symbol + " (" + interval.getValue() + ")");
+            
+            // Fetch historical data with retry on failure
+            List<CandlestickData> historicalData = fetchHistoricalDataWithRetry(symbol, interval, HISTORICAL_CANDLES_ON_RECONNECT, 2);
+            
+            if (!historicalData.isEmpty()) {
+                System.out.println("✅ Retrieved " + historicalData.size() + " historical candles for " + 
+                                 symbol + " (" + interval.getValue() + ")");
+                
+                // Send historical data through the data handler
+                for (CandlestickData candlestick : historicalData) {
+                    TradingData tradingData = new TradingData(
+                        symbol,
+                        candlestick.getCloseTime(),
+                        getProviderName(),
+                        TradingDataType.KLINE,
+                        candlestick
+                    );
+                    
+                    if (dataHandler != null) {
+                        dataHandler.accept(tradingData);
+                    }
+                }
+                
+                System.out.println("✅ Historical data loaded for " + symbol + " (" + interval.getValue() + ")");
+                return true;
+            } else {
+                System.out.println("⚠️ No historical data retrieved for " + symbol + " (" + interval.getValue() + ")");
+                return false;
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error loading historical data for " + symbol + " (" + interval.getValue() + "): " + e.getMessage());
+            return false;
+        }
     }
     
     /**
@@ -254,6 +277,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
         
         manualDisconnect = true; // Prevent auto-reconnect
         connected = false;
+        reconnectionAttempts = 0;
         activeStreams.clear();
         subscribedSymbols.clear();
         subscribedKlines.clear();
@@ -320,6 +344,11 @@ public class BinanceTradingProvider implements TradingDataProvider {
             activeStreams.add(streamName);
             
             System.out.println("✅ Successfully subscribed to " + symbol + " klines (" + interval.getValue() + ")");
+            
+            // Load historical data immediately after subscribing
+            System.out.println("📊 Loading historical data for " + symbol + " (" + interval.getValue() + ")...");
+            loadHistoricalDataForSymbol(symbol, interval);
+            
         } catch (Exception e) {
             System.err.println("❌ Failed to subscribe to " + symbol + " klines: " + e.getMessage());
             e.printStackTrace();
