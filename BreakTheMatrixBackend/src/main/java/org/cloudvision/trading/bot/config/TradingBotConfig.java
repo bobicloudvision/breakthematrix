@@ -44,10 +44,12 @@ public class TradingBotConfig {
         // autoRegisterAllStrategies();
         
         System.out.println("✅ Trading Bot configured with " + tradingBot.getStrategies().size() + " strategies");
-        System.out.println("📊 Strategies: " + tradingBot.getStrategies().stream()
+        System.out.println("📊 Registered strategies (all disabled): " + tradingBot.getStrategies().stream()
             .map(TradingStrategy::getStrategyName)
             .toList());
-        System.out.println("🚀 Use /api/bot/enable to start the bot");
+        System.out.println("⚠️  Note: Only ONE strategy can be enabled at a time per account");
+        System.out.println("🔧 Enable a strategy: POST /api/bot/strategies/{strategyId}/enable");
+        System.out.println("🚀 Start the bot: POST /api/bot/enable");
     }
     
     /**
@@ -70,8 +72,6 @@ public class TradingBotConfig {
         
         movingAverageStrategy.initialize(config);
         tradingBot.addStrategy(movingAverageStrategy);
-        
-        System.out.println("📈 Registered: Moving Average Strategy (10/20)");
     }
     
     /**
@@ -95,8 +95,6 @@ public class TradingBotConfig {
         
         rsiStrategy.initialize(config);
         tradingBot.addStrategy(rsiStrategy);
-        
-        System.out.println("📊 Registered: RSI Strategy (14-period, 30/70 thresholds)");
     }
     
     /**

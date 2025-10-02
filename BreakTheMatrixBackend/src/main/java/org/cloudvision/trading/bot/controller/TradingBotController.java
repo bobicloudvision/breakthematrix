@@ -13,6 +13,7 @@ import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
 import org.cloudvision.trading.model.TimeInterval;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -176,12 +177,25 @@ public class TradingBotController {
                 .toList();
     }
 
+    @Operation(summary = "Enable Strategy", description = "Enable a trading strategy. Only ONE strategy can be enabled per account at a time to prevent conflicts.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Strategy enabled successfully"),
+        @ApiResponse(responseCode = "400", description = "Cannot enable - another strategy is already active")
+    })
     @PostMapping("/strategies/{strategyId}/enable")
-    public String enableStrategy(@PathVariable String strategyId) {
-        tradingBot.setStrategyEnabled(strategyId, true);
-        return "Strategy " + strategyId + " enabled";
+    public ResponseEntity<String> enableStrategy(@PathVariable String strategyId) {
+        try {
+            tradingBot.setStrategyEnabled(strategyId, true);
+            return ResponseEntity.ok("Strategy " + strategyId + " enabled successfully");
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
+    @Operation(summary = "Disable Strategy", description = "Disable a trading strategy")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Strategy disabled successfully")
+    })
     @PostMapping("/strategies/{strategyId}/disable")
     public String disableStrategy(@PathVariable String strategyId) {
         tradingBot.setStrategyEnabled(strategyId, false);

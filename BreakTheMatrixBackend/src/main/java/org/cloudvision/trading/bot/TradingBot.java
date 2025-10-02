@@ -121,11 +121,14 @@ public class TradingBot {
 
     /**
      * Add a trading strategy to the bot
+     * Strategies are registered but DISABLED by default for safety
+     * Use setStrategyEnabled() or the /api/bot/strategies/{id}/enable endpoint to enable them
      */
     public void addStrategy(TradingStrategy strategy) {
         strategies.add(strategy);
-        strategyStatus.put(strategy.getStrategyId(), true);
-        System.out.println("Added strategy: " + strategy.getStrategyName());
+        strategyStatus.put(strategy.getStrategyId(), false); // Disabled by default
+        strategy.setEnabled(false); // Ensure strategy itself is also disabled
+        System.out.println("📝 Registered strategy: " + strategy.getStrategyName() + " (disabled by default)");
     }
 
     /**
@@ -139,14 +142,37 @@ public class TradingBot {
 
     /**
      * Enable/disable a specific strategy
+     * Only one strategy can be enabled per account to prevent conflicts
      */
     public void setStrategyEnabled(String strategyId, boolean enabled) {
+        if (enabled) {
+            // Check if any other strategy is already enabled
+            List<String> enabledStrategies = strategies.stream()
+                    .filter(s -> !s.getStrategyId().equals(strategyId))
+                    .filter(TradingStrategy::isEnabled)
+                    .map(TradingStrategy::getStrategyName)
+                    .toList();
+            
+            if (!enabledStrategies.isEmpty()) {
+                String message = "❌ Cannot enable multiple strategies on the same account! " +
+                        "Currently enabled: " + String.join(", ", enabledStrategies) + ". " +
+                        "Please disable the active strategy before enabling a new one.";
+                System.out.println(message);
+                throw new IllegalStateException(message);
+            }
+        }
+        
         strategyStatus.put(strategyId, enabled);
         strategies.stream()
                 .filter(s -> s.getStrategyId().equals(strategyId))
                 .findFirst()
                 .ifPresent(s -> s.setEnabled(enabled));
-        System.out.println("Strategy " + strategyId + " " + (enabled ? "enabled" : "disabled"));
+        
+        if (enabled) {
+            System.out.println("✅ Strategy " + strategyId + " enabled - This is the only active strategy");
+        } else {
+            System.out.println("🛑 Strategy " + strategyId + " disabled");
+        }
     }
 
     /**

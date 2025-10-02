@@ -56,14 +56,11 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     " (Quantity: " + longPositionQuantity + ") - skipping until TP/SL hit");
                 lastSignal.put(symbol, BigDecimal.ONE); // Keep bullish signal
             }
-            // If we have SHORT position → Close it ONLY (don't open LONG yet)
+            // If we have SHORT position → Skip (wait for TP/SL to close)
             else if (shortPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                Order closeShortOrder = createCloseShortOrder(symbol, currentPrice);
-                orders.add(closeShortOrder);
+                System.out.println("⏸️ MA Strategy: BUY signal but have SHORT position for " + symbol + 
+                    " (Quantity: " + shortPositionQuantity + ") - skipping, waiting for TP/SL to close");
                 lastSignal.put(symbol, BigDecimal.ONE); // Update to bullish signal
-                action = "CLOSE_SHORT";
-                System.out.println("🔄 MA Strategy: Closing SHORT position for " + symbol + 
-                    " at " + currentPrice + " | Quantity: " + shortPositionQuantity);
             }
             // No position → Open LONG
             else {
@@ -105,14 +102,11 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     " (Quantity: " + shortPositionQuantity + ") - skipping until TP/SL hit");
                 lastSignal.put(symbol, BigDecimal.ONE.negate()); // Keep bearish signal
             }
-            // If we have LONG position → Close it ONLY (don't open SHORT yet)
+            // If we have LONG position → Skip (wait for TP/SL to close)
             else if (longPositionQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                Order closeLongOrder = createCloseLongOrder(symbol, currentPrice);
-                orders.add(closeLongOrder);
+                System.out.println("⏸️ MA Strategy: SELL signal but have LONG position for " + symbol + 
+                    " (Quantity: " + longPositionQuantity + ") - skipping, waiting for TP/SL to close");
                 lastSignal.put(symbol, BigDecimal.ONE.negate()); // Update to bearish signal
-                action = "CLOSE_LONG";
-                System.out.println("🔄 MA Strategy: Closing LONG position for " + symbol + 
-                    " at " + currentPrice + " | Quantity: " + longPositionQuantity);
             }
             // No position → Open SHORT
             else {
