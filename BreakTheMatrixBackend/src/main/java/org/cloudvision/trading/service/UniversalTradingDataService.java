@@ -52,27 +52,24 @@ public class UniversalTradingDataService {
     }
 
     public void setGlobalDataHandler(Consumer<TradingData> handler) {
-        System.out.println("🔧 Setting global data handler: " + (handler != null ? handler.getClass().getSimpleName() : "null"));
         if (this.globalDataHandler != null) {
             System.out.println("⚠️ WARNING: Overwriting existing global data handler!");
         }
         this.globalDataHandler = handler;
-        System.out.println("✅ Global data handler set successfully");
+        System.out.println("✅ Global data handler set for UniversalTradingDataService");
     }
 
     private void handleData(TradingData data) {
-        System.out.println("Received: " + data);
+        // Forward data to global handler (TradingBot) - no logging to avoid console spam
         if (globalDataHandler != null) {
-            System.out.println("🔄 Forwarding data to global handler...");
             try {
                 globalDataHandler.accept(data);
-                System.out.println("✅ Data forwarded successfully to global handler");
             } catch (Exception e) {
                 System.err.println("❌ Exception in global data handler: " + e.getClass().getSimpleName() + " - " + e.getMessage());
                 e.printStackTrace();
             }
         } else {
-            System.err.println("❌ No global data handler set! Data not forwarded to WebSocket.");
+            System.err.println("❌ No global data handler set! Data not forwarded.");
         }
     }
 
@@ -89,6 +86,12 @@ public class UniversalTradingDataService {
         return providers.get(name);
     }
 
+    /**
+     * Fetch historical klines directly from provider.
+     * NOTE: This data is NOT stored in CandlestickHistoryService.
+     * Only use for API responses or visualization where persistence is not needed.
+     * For data that strategies need, use the provider's WebSocket connection instead.
+     */
     public List<CandlestickData> getHistoricalKlines(String providerName, String symbol, TimeInterval interval, int limit) {
         TradingDataProvider provider = providers.get(providerName);
         if (provider != null) {
@@ -97,6 +100,12 @@ public class UniversalTradingDataService {
         return List.of();
     }
 
+    /**
+     * Fetch historical klines for a time range directly from provider.
+     * NOTE: This data is NOT stored in CandlestickHistoryService.
+     * Only use for API responses or visualization where persistence is not needed.
+     * For data that strategies need, use the provider's WebSocket connection instead.
+     */
     public List<CandlestickData> getHistoricalKlines(String providerName, String symbol, TimeInterval interval, 
                                                      Instant startTime, Instant endTime) {
         TradingDataProvider provider = providers.get(providerName);
