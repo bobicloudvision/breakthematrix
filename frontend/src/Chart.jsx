@@ -560,41 +560,41 @@ const transformApiData = (apiData) => {
 };
 
 // Generate future empty data to maintain grid visibility until end of day
-const generateFutureData = (lastCandle, interval) => {
-    if (!lastCandle) return [];
+// const generateFutureData = (lastCandle, interval) => {
+//     if (!lastCandle) return [];
     
-    const futureData = [];
-    const intervalSec = getIntervalSeconds(interval);
-    let currentTime = lastCandle.time;
-    const lastPrice = lastCandle.close;
+//     const futureData = [];
+//     const intervalSec = getIntervalSeconds(interval);
+//     let currentTime = lastCandle.time;
+//     const lastPrice = lastCandle.close;
     
-    // Get the end of the current day (23:59:59)
-    const lastCandleDate = new Date(lastCandle.time * 1000);
-    const endOfDay = new Date(lastCandleDate);
-    endOfDay.setHours(23, 59, 59, 999);
-    const endOfDayTimestamp = Math.floor(endOfDay.getTime() / 1000);
+//     // Get the end of the current day (23:59:59)
+//     const lastCandleDate = new Date(lastCandle.time * 1000);
+//     const endOfDay = new Date(lastCandleDate);
+//     endOfDay.setHours(23, 59, 59, 999);
+//     const endOfDayTimestamp = Math.floor(endOfDay.getTime() / 1000);
     
-    console.log('Last candle time:', new Date(lastCandle.time * 1000).toISOString());
-    console.log('End of day:', endOfDay.toISOString());
-    console.log('Interval sec:', intervalSec);
+//     console.log('Last candle time:', new Date(lastCandle.time * 1000).toISOString());
+//     console.log('End of day:', endOfDay.toISOString());
+//     console.log('Interval sec:', intervalSec);
     
-    // Generate candles until end of day
-    while (currentTime < endOfDayTimestamp) {
-        currentTime += intervalSec;
-        if (currentTime <= endOfDayTimestamp) {
-            futureData.push({
-                time: currentTime,
-                open: lastPrice,
-                high: lastPrice,
-                low: lastPrice,
-                close: lastPrice,
-            });
-        }
-    }
+//     // Generate candles until end of day
+//     while (currentTime < endOfDayTimestamp) {
+//         currentTime += intervalSec;
+//         if (currentTime <= endOfDayTimestamp) {
+//             futureData.push({
+//                 time: currentTime,
+//                 open: lastPrice,
+//                 high: lastPrice,
+//                 low: lastPrice,
+//                 close: lastPrice,
+//             });
+//         }
+//     }
     
-    console.log('Generated future data:', futureData.length, 'candles');
-    return futureData;
-};
+//     console.log('Generated future data:', futureData.length, 'candles');
+//     return futureData;
+// };
 
 // Get interval in seconds
 const getIntervalSeconds = (interval) => {
@@ -665,32 +665,32 @@ export function Chart({ provider, symbol, interval, activeStrategies = [] }) {
                 setRealCount(chartData.length);
                 
                 // Generate future empty data to maintain grid visibility until end of day
-                const futureData = generateFutureData(chartData[chartData.length - 1], interval);
+                // const futureData = generateFutureData(chartData[chartData.length - 1], interval);
                 
-                // Fallback: if no future data generated, create at least 10 future candles
-                const finalFutureData = futureData.length > 0 ? futureData : (() => {
-                    const fallbackData = [];
-                    const intervalSec = getIntervalSeconds(interval);
-                    let currentTime = chartData[chartData.length - 1].time;
-                    const lastPrice = chartData[chartData.length - 1].close;
+                // // Fallback: if no future data generated, create at least 10 future candles
+                // const finalFutureData = futureData.length > 0 ? futureData : (() => {
+                //     const fallbackData = [];
+                //     const intervalSec = getIntervalSeconds(interval);
+                //     let currentTime = chartData[chartData.length - 1].time;
+                //     const lastPrice = chartData[chartData.length - 1].close;
                     
-                    for (let i = 1; i <= 10; i++) {
-                        currentTime += intervalSec;
-                        fallbackData.push({
-                            time: currentTime,
-                            open: lastPrice,
-                            high: lastPrice,
-                            low: lastPrice,
-                            close: lastPrice,
-                        });
-                    }
-                    return fallbackData;
-                })();
+                //     for (let i = 1; i <= 10; i++) {
+                //         currentTime += intervalSec;
+                //         fallbackData.push({
+                //             time: currentTime,
+                //             open: lastPrice,
+                //             high: lastPrice,
+                //             low: lastPrice,
+                //             close: lastPrice,
+                //         });
+                //     }
+                //     return fallbackData;
+                // })();
                 
-                const combinedData = [...chartData, ...finalFutureData];
+                // const combinedData = [...chartData, ...finalFutureData];
                 
-                console.log('Transformed chart data:', chartData.length, 'candles +', futureData.length, 'future candles');
-                setData(combinedData);
+                // console.log('Transformed chart data:', chartData.length, 'candles +', futureData.length, 'future candles');
+                setData(chartData);
             } catch (err) {
                 setError(err.message);
                 console.error('Failed to fetch historical data:', err);
