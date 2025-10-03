@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Break The Matrix - Trading Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>🚀 Break The Matrix</h1>
+            <div class="status" id="status">● Connected</div>
+        </header>
+
+        <main class="main">
+            <div class="container">
+                <h2>Trading Dashboard</h2>
+                <p>Your trading interface goes here...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Check backend connection
+        fetch('/api/health')
+            .then(res => {
+                const status = document.getElementById('status');
+                if (res.ok) {
+                    status.textContent = '● Connected';
+                    status.classList.add('connected');
+                } else {
+                    status.textContent = '○ Disconnected';
+                    status.classList.add('disconnected');
+                }
+            })
+            .catch(() => {
+                const status = document.getElementById('status');
+                status.textContent = '○ Disconnected';
+                status.classList.add('disconnected');
+            });
+    </script>
+</body>
+</html>
+
