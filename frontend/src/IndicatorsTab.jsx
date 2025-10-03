@@ -37,13 +37,7 @@ export function IndicatorsTab() {
   }, []);
 
   const getInitialParams = (indicatorId) => {
-    // Check if indicator is already enabled
-    const enabled = enabledIndicators.find(ind => ind.id === indicatorId);
-    if (enabled) {
-      return enabled.params;
-    }
-    
-    // Return default params
+    // Always return fresh default params (allow multiple instances with different settings)
     return {
       provider: localStorage.getItem('tradingProvider') || 'Binance',
       symbol: localStorage.getItem('tradingSymbol') || 'BTCUSDT',
@@ -62,14 +56,17 @@ export function IndicatorsTab() {
   };
 
   const handleApplyIndicator = (indicatorId, params) => {
+    // Generate unique instance ID for this indicator
+    const instanceId = `${indicatorId}_${Date.now()}`;
+    
     const newIndicator = {
-      id: indicatorId,
+      id: indicatorId, // Base indicator type (e.g., 'sma')
+      instanceId: instanceId, // Unique instance ID (e.g., 'sma_1234567890')
       params: params
     };
     
-    // Update or add the indicator
-    const newEnabled = enabledIndicators.filter(ind => ind.id !== indicatorId);
-    newEnabled.push(newIndicator);
+    // Add the new indicator instance (allow multiple instances of same type)
+    const newEnabled = [...enabledIndicators, newIndicator];
     
     setEnabledIndicators(newEnabled);
     localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
@@ -80,8 +77,8 @@ export function IndicatorsTab() {
     setSelectedIndicator(null);
   };
 
-  const removeIndicator = (indicatorId) => {
-    const newEnabled = enabledIndicators.filter(ind => ind.id !== indicatorId);
+  const removeIndicator = (instanceId) => {
+    const newEnabled = enabledIndicators.filter(ind => ind.instanceId !== instanceId);
     setEnabledIndicators(newEnabled);
     localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
     // Trigger custom event to notify chart
@@ -132,7 +129,7 @@ export function IndicatorsTab() {
                   {/* Indicators in this category */}
                   <div className="grid grid-cols-1 gap-2">
                     {categoryIndicators.map((indicator) => {
-                      const isEnabled = enabledIndicators.some(ind => ind.id === indicator.id);
+                      const enabledInstances = enabledIndicators.filter(ind => ind.id === indicator.id);
                       
                       return (
                         <div 
@@ -146,9 +143,9 @@ export function IndicatorsTab() {
                                 <span className="text-xs text-white/50 font-mono bg-white/5 px-2 py-0.5 rounded">
                                   {indicator.id}
                                 </span>
-                                {isEnabled && (
+                                {enabledInstances.length > 0 && (
                                   <span className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                    📊 On Chart
+                                    📊 {enabledInstances.length} on Chart
                                   </span>
                                 )}
                               </div>
@@ -160,22 +157,45 @@ export function IndicatorsTab() {
                                   {indicator.category}
                                 </span>
                               </div>
+                              
+                              {/* Show active instances */}
+                              {enabledInstances.length > 0 && (
+                                <div className="mt-3 space-y-1">
+                                  <div className="text-xs text-white/60 font-medium mb-1">Active Instances:</div>
+                                  {enabledInstances.map((instance) => {
+                                    const params = instance.params?.params || {};
+                                    const paramStr = Object.entries(params)
+                                      .map(([k, v]) => `${k}=${v}`)
+                                      .join(', ');
+                                    
+                                    return (
+                                      <div 
+                                        key={instance.instanceId}
+                                        className="flex items-center justify-between gap-2 bg-white/5 rounded px-2 py-1"
+                                      >
+                                        <span className="text-xs text-white/70 font-mono">
+                                          {paramStr || 'default'}
+                                        </span>
+                                        <button
+                                          onClick={() => removeIndicator(instance.instanceId)}
+                                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                                          title="Remove this instance"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleOpenConfig(indicator)}
-                                className="px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 transition-all"
+                                className="px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 transition-all whitespace-nowrap"
                               >
-                                Configure
+                                + Add
                               </button>
-                              {isEnabled && (
-                                <button
-                                  onClick={() => removeIndicator(indicator.id)}
-                                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-all"
-                                >
-                                  Remove
-                                </button>
-                              )}
                             </div>
                           </div>
                         </div>

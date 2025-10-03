@@ -215,7 +215,8 @@ export const ChartComponent = props => {
         const fetchAndAddIndicators = async () => {
             for (const indicator of enabledIndicators) {
                 try {
-                    console.log(`Fetching data for indicator: ${indicator.id}`, indicator.params);
+                    const instanceId = indicator.instanceId || `${indicator.id}_${Date.now()}`;
+                    console.log(`Fetching data for indicator instance: ${instanceId} (type: ${indicator.id})`, indicator.params);
                     
                     // Fetch historical data for this indicator
                     const res = await fetch(`http://localhost:8080/api/indicators/${indicator.id}/historical`, {
@@ -229,15 +230,15 @@ export const ChartComponent = props => {
                     
                     if (!res.ok) {
                         const errorText = await res.text();
-                        console.error(`Failed to fetch indicator ${indicator.id}: HTTP ${res.status}`, errorText);
+                        console.error(`Failed to fetch indicator ${instanceId}: HTTP ${res.status}`, errorText);
                         continue;
                     }
                     
                     const apiResponse = await res.json();
-                    console.log(`Indicator ${indicator.id} response received`);
+                    console.log(`Indicator ${instanceId} response received`);
                     
-                    // Use series manager to add the indicator
-                    const indicatorKey = `indicator_${indicator.id}`;
+                    // Use series manager to add the indicator with unique instance key
+                    const indicatorKey = `indicator_${instanceId}`;
                     const params = indicator.params?.params || {};
                     
                     seriesManagerRef.current.addFromApiResponse(
@@ -247,7 +248,7 @@ export const ChartComponent = props => {
                     );
 
                 } catch (error) {
-                    console.error(`❌ Error adding indicator ${indicator.id}:`, error);
+                    console.error(`❌ Error adding indicator ${indicator.instanceId || indicator.id}:`, error);
                 }
             }
         };
