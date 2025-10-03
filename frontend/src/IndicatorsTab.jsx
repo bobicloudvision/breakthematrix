@@ -216,89 +216,151 @@ export function IndicatorsTab() {
 
       {/* Browse Indicators Modal */}
       {showBrowseModal && createPortal(
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg border border-white/20 w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div 
+          className="fixed inset-0 bg-black/5 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+          onClick={handleCloseBrowseModal}
+        >
+          <div 
+            className="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-              <h2 className="text-white text-lg font-semibold">Browse Indicators</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-500/5 to-blue-500/5">
+              <div>
+                <h2 className="text-white text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                  Browse Indicators
+                </h2>
+                <p className="text-white/50 text-xs mt-0.5">
+                  {indicators.length} indicators available
+                </p>
+              </div>
               <button
                 onClick={handleCloseBrowseModal}
-                className="text-white/60 hover:text-white text-2xl leading-none"
+                className="text-white/40 hover:text-white hover:bg-white/10 transition-all rounded-full w-8 h-8 flex items-center justify-center text-xl font-light"
+                title="Close"
               >
                 ×
               </button>
             </div>
 
             {/* Search Bar */}
-            <div className="px-4 py-3 border-b border-white/10">
-              <input
-                type="text"
-                placeholder="Search indicators by name, category, or description..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded text-white placeholder-white/40 text-sm focus:outline-none focus:border-cyan-400/50"
-                autoFocus
-              />
+            <div className="px-6 py-4 border-b border-white/5 bg-black/20">
+              <div className="relative">
+                <svg 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search indicators by name, category, or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 text-sm focus:outline-none focus:border-cyan-400/50 focus:bg-white/10 transition-all"
+                  autoFocus
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-sm"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Loading/Error States */}
             {error && (
-              <div className="px-4 py-3 bg-red-500/10 border-b border-red-500/20">
-                <div className="text-red-400 text-sm">Failed to load indicators: {error}</div>
+              <div className="mx-6 mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <div className="text-red-400 text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  Failed to load indicators: {error}
+                </div>
               </div>
             )}
 
             {loading && (
-              <div className="px-4 py-3 text-center text-white/50">
-                Loading indicators...
+              <div className="px-6 py-8 text-center">
+                <div className="inline-flex items-center gap-3 text-white/50">
+                  <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Loading indicators...</span>
+                </div>
               </div>
             )}
 
             {/* Indicators List - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
               {!loading && indicators.length === 0 ? (
-                <div className="text-center text-white/50 py-12">
-                  <div className="mb-2">No indicators found</div>
+                <div className="text-center text-white/50 py-16">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div className="mb-3 text-lg">No indicators found</div>
                   <button
                     onClick={fetchIndicators}
-                    className="text-cyan-400 hover:text-cyan-300 text-sm"
+                    className="text-cyan-400 hover:text-cyan-300 text-sm font-medium"
                   >
                     Try refreshing
                   </button>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {Object.entries(groupedIndicators).map(([category, categoryIndicators]) => (
                     <div key={category}>
                       {/* Category Header */}
-                      <div className="text-cyan-400 text-sm font-semibold uppercase tracking-wide mb-3 sticky top-0 bg-gray-900 py-1">
-                        {category}
+                      <div className="flex items-center gap-3 mb-4 sticky top-0 bg-gradient-to-r from-gray-900 via-gray-900 to-transparent py-2 -mx-2 px-2 z-10">
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+                        <h3 className="text-cyan-400 text-sm font-bold uppercase tracking-wider">
+                          {category}
+                        </h3>
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
                       </div>
                       
                       {/* Indicators Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {categoryIndicators.map((indicator) => (
                           <div 
                             key={indicator.id}
-                            className="bg-black/30 rounded border border-white/10 hover:border-cyan-500/30 transition-colors p-3 cursor-pointer"
+                            className="group relative bg-gradient-to-br from-black/40 to-black/20 rounded-xl border border-white/10 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 p-4 cursor-pointer overflow-hidden"
                             onClick={() => handleOpenConfig(indicator)}
                           >
-                            <div className="flex flex-col gap-2">
-                              <div>
-                                <h3 className="text-white font-medium text-sm mb-1">{indicator.name}</h3>
-                                <span className="text-xs text-white/50 font-mono">{indicator.id}</span>
+                            {/* Gradient overlay on hover */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-blue-500/0 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-300 rounded-xl"></div>
+                            
+                            <div className="relative flex flex-col gap-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-white font-semibold text-sm mb-1 group-hover:text-cyan-300 transition-colors">
+                                    {indicator.name}
+                                  </h3>
+                                  <span className="text-xs text-white/40 font-mono">
+                                    {indicator.id}
+                                  </span>
+                                </div>
+                                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-cyan-400/50 group-hover:bg-cyan-400 transition-all group-hover:scale-125"></div>
                               </div>
                               
-                              <p className="text-xs text-white/60 leading-relaxed line-clamp-3">
+                              <p className="text-xs text-white/50 leading-relaxed line-clamp-2 group-hover:text-white/70 transition-colors">
                                 {indicator.description}
                               </p>
                               
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-xs px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                <span className="text-xs px-2 py-1 rounded-md bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-300 border border-cyan-500/20 font-medium">
                                   {indicator.category}
                                 </span>
-                                <span className="text-xs text-cyan-400 font-medium">
-                                  Click to add →
+                                <span className="text-xs text-cyan-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                  Add
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
                                 </span>
                               </div>
                             </div>
@@ -309,8 +371,14 @@ export function IndicatorsTab() {
                   ))}
                   
                   {filteredIndicators.length === 0 && searchQuery && (
-                    <div className="text-center text-white/50 py-12">
-                      No indicators match "{searchQuery}"
+                    <div className="text-center text-white/50 py-16">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-lg mb-1">No indicators match</p>
+                      <p className="text-white/40">"{searchQuery}"</p>
                     </div>
                   )}
                 </div>
