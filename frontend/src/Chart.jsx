@@ -217,7 +217,7 @@ export const ChartComponent = props => {
         const fetchAndAddIndicators = async () => {
             for (const indicator of enabledIndicators) {
                 try {
-                    console.log(`Fetching data for indicator: ${indicator.id}`);
+                    console.log(`Fetching data for indicator: ${indicator.id}`, indicator.params);
                     
                     // Fetch historical data for this indicator
                     const res = await fetch(`http://localhost:8080/api/indicators/${indicator.id}/historical`, {
@@ -229,17 +229,43 @@ export const ChartComponent = props => {
                         body: JSON.stringify(indicator.params),
                     });
                     
+                    console.log(`Response status for ${indicator.id}:`, res.status);
+                    
                     if (!res.ok) {
-                        console.error(`Failed to fetch indicator ${indicator.id}: HTTP ${res.status}`);
+                        const errorText = await res.text();
+                        console.error(`Failed to fetch indicator ${indicator.id}: HTTP ${res.status}`, errorText);
                         continue;
                     }
                     
-                    const indicatorData = await res.json();
+                    const responseData = await res.json();
+                    console.log(`Indicator ${indicator.id} raw response:`, responseData);
                     
-                    if (!Array.isArray(indicatorData) || indicatorData.length === 0) {
-                        console.warn(`No data returned for indicator: ${indicator.id}`);
+                    // Handle different response formats
+                    let indicatorData = responseData;
+                    
+                    // If response is an object with a data property, extract it
+                    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
+                        if (responseData.data && Array.isArray(responseData.data)) {
+                            indicatorData = responseData.data;
+                        } else if (responseData.values && Array.isArray(responseData.values)) {
+                            indicatorData = responseData.values;
+                        } else {
+                            console.warn(`Unexpected response format for indicator: ${indicator.id}`, responseData);
+                            continue;
+                        }
+                    }
+                    
+                    if (!Array.isArray(indicatorData)) {
+                        console.warn(`Data is not an array for indicator: ${indicator.id}`, typeof indicatorData);
                         continue;
                     }
+                    
+                    if (indicatorData.length === 0) {
+                        console.warn(`No data points returned for indicator: ${indicator.id}`);
+                        continue;
+                    }
+                    
+                    console.log(`Indicator ${indicator.id} data received:`, indicatorData.length, 'points');
 
                     const indicatorKey = `indicator_${indicator.id}`;
                     
@@ -248,38 +274,105 @@ export const ChartComponent = props => {
                     const color = params.color || '#2962FF';
                     const lineWidth = params.lineWidth || 2;
 
-                    // Create line series for the indicator
-                    const lineSeries = chartRef.current.addSeries(LineSeries, {
-                        color: color,
-                        lineWidth: lineWidth,
-                        title: indicator.id.toUpperCase(),
-                        priceLineVisible: false,
-                        lastValueVisible: true,
-                    });
+                    // Check metadata for series type
+                    const metadata = responseData.metadata?.[indicator.id] || {};
+                    const seriesType = metadata.seriesType || 'line';
+                    const separatePane = metadata.separatePane || false;
+
+                    console.log(`Creating ${seriesType} series for ${indicator.id} with color: ${color}, separatePane: ${separatePane}`);
+
+                    // Create series based on type
+                    if (!chartRef.current) {
+                        console.error('Chart reference is null, cannot add indicator');
+                        continue;
+                    }
+
+                    let indicatorSeries;
+                    if (seriesType === 'histogram') {
+                        indicatorSeries = chartRef.current.addSeries(HistogramSeries, {
+                            color: color,
+                            title: indicator.id.toUpperCase(),
+                            priceFormat: {
+                                type: 'volume',
+                            },
+                            priceScaleId: separatePane ? indicator.id : '', // Separate scale if separate pane
+                        });
+                        
+                        // Configure separate scale for volume
+                        if (separatePane) {
+                            chartRef.current.priceScale(indicator.id).applyOptions({
+                                scaleMargins: {
+                                    top: 0.8,
+                                    bottom: 0,
+                                },
+                            });
+                        }
+                    } else {
+                        // Default to line series
+                        indicatorSeries = chartRef.current.addSeries(LineSeries, {
+                            color: color,
+                            lineWidth: lineWidth,
+                            title: indicator.id.toUpperCase(),
+                            priceLineVisible: false,
+                            lastValueVisible: true,
+                        });
+                    }
+
+                    console.log(`Series created for ${indicator.id}`);
+                    
+                    // Log sample data point to understand structure
+                    if (indicatorData.length > 0) {
+                        console.log(`Sample data point for ${indicator.id}:`, indicatorData[0]);
+                    }
 
                     // Transform and set data
                     const transformedData = indicatorData
                         .map(point => {
-                            if (typeof point === 'object' && point.time && point.value !== undefined) {
-                                return {
-                                    time: point.time,
-                                    value: parseFloat(point.value)
-                                };
+                            if (typeof point === 'object') {
+                                const time = point.time || point.timestamp || point.t;
+                                
+                                // Check if value is nested in a values object
+                                let value;
+                                if (point.values && typeof point.values === 'object') {
+                                    // Look for the indicator-specific value in the values object
+                                    // Try indicator.id as key first, then common variations
+                                    value = point.values[indicator.id] || 
+                                           point.values.value ||
+                                           point.values.val ||
+                                           Object.values(point.values)[0]; // Fallback to first value
+                                } else {
+                                    // Try direct value properties
+                                    value = point.value !== undefined ? point.value : 
+                                           point.val !== undefined ? point.val :
+                                           point.v !== undefined ? point.v : undefined;
+                                }
+                                
+                                if (time !== undefined && value !== undefined && value !== null) {
+                                    // For histogram series, use 'value' property; for line series, use 'value' property
+                                    return {
+                                        time: time,
+                                        value: parseFloat(value),
+                                        color: seriesType === 'histogram' ? (value >= 0 ? color : '#ef5350') : undefined
+                                    };
+                                }
                             }
                             return null;
                         })
                         .filter(point => point !== null && !isNaN(point.value));
 
+                    console.log(`Transformed ${transformedData.length} data points for ${indicator.id}`, 
+                        transformedData.length > 0 ? `First: ${JSON.stringify(transformedData[0])}` : '');
+
                     if (transformedData.length > 0) {
-                        lineSeries.setData(transformedData);
-                        indicatorSeriesRef.current[indicatorKey] = lineSeries;
-                        console.log(`Added indicator: ${indicator.id} with ${transformedData.length} points`);
+                        indicatorSeries.setData(transformedData);
+                        indicatorSeriesRef.current[indicatorKey] = indicatorSeries;
+                        console.log(`✅ Successfully added indicator: ${indicator.id} with ${transformedData.length} points`);
                     } else {
                         console.warn(`No valid data points for indicator: ${indicator.id}`);
-                        chartRef.current.removeSeries(lineSeries);
+                        chartRef.current.removeSeries(indicatorSeries);
                     }
                 } catch (error) {
-                    console.error(`Error adding indicator ${indicator.id}:`, error);
+                    console.error(`❌ Error adding indicator ${indicator.id}:`, error);
                 }
             }
         };
