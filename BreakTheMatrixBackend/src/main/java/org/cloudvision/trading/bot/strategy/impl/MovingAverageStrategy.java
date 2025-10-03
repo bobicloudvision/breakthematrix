@@ -1,6 +1,7 @@
 package org.cloudvision.trading.bot.strategy.impl;
 
 import org.cloudvision.trading.bot.indicators.TechnicalIndicators;
+import org.cloudvision.trading.bot.indicators.impl.SMAIndicator;
 import org.cloudvision.trading.bot.model.*;
 import org.cloudvision.trading.bot.strategy.*;
 import org.cloudvision.trading.bot.visualization.StrategyVisualizationData;
@@ -18,6 +19,9 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
     
     @Autowired
     private VisualizationManager visualizationManager;
+    
+    @Autowired
+    private SMAIndicator smaIndicator;
     
     // Strategy parameters
     private int shortPeriod = 10;
@@ -37,11 +41,14 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             return Collections.emptyList();
         }
         
-        List<BigDecimal> prices = getPriceHistory(symbol);
+        List<CandlestickData> candles = getCandlestickHistory(symbol, getMaxHistorySize());
         
-        // Calculate moving averages using TechnicalIndicators utility
-        BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
-        BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
+        // Calculate moving averages using SMAIndicator
+        Map<String, Object> shortParams = Map.of("period", shortPeriod);
+        Map<String, Object> longParams = Map.of("period", longPeriod);
+        
+        BigDecimal shortMA = smaIndicator.calculate(candles, shortParams).get("sma");
+        BigDecimal longMA = smaIndicator.calculate(candles, longParams).get("sma");
         
         // Get previous MA values for crossover detection
         BigDecimal prevShortMA = previousShortMA.get(symbol);
@@ -154,12 +161,9 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         previousShortMA.put(symbol, shortMA);
         previousLongMA.put(symbol, longMA);
         
-        // Extract volume and open price using base class helper method
-        Map<String, BigDecimal> volumeData = extractVolumeAndOpen(priceData);
-        
         // Generate visualization data
         generateVisualizationData(symbol, currentPrice, shortMA, longMA, action, 
-                                priceData.timestamp, volumeData.get("volume"), volumeData.get("openPrice"));
+                                priceData.timestamp);
         
         return orders;
     }
@@ -236,9 +240,6 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             .paneOrder(0) // Main chart
             .build());
         
-        // Volume - Use reusable base class method
-        metadata.put("volume", getVolumeIndicatorMetadata(1));
-        
         // Spread - Histogram in separate pane
 //        metadata.put("spread", IndicatorMetadata.builder("spread")
 //            .displayName("MA Spread")
@@ -263,11 +264,14 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         // Calculate initial moving averages and store them for crossover detection
         for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
             String symbol = entry.getKey();
-            List<BigDecimal> prices = getPriceHistory(symbol);
+            List<CandlestickData> candles = getCandlestickHistory(symbol, getMaxHistorySize());
             
-            if (prices.size() >= longPeriod) {
-                BigDecimal shortMA = TechnicalIndicators.calculateSMA(prices, shortPeriod);
-                BigDecimal longMA = TechnicalIndicators.calculateSMA(prices, longPeriod);
+            if (candles.size() >= longPeriod) {
+                Map<String, Object> shortParams = Map.of("period", shortPeriod);
+                Map<String, Object> longParams = Map.of("period", longPeriod);
+                
+                BigDecimal shortMA = smaIndicator.calculate(candles, shortParams).get("sma");
+                BigDecimal longMA = smaIndicator.calculate(candles, longParams).get("sma");
                 
                 // Store initial MA values for crossover detection
                 previousShortMA.put(symbol, shortMA);
@@ -325,17 +329,20 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             for (int i = 0; i < candles.size(); i++) {
                 CandlestickData currentCandle = candles.get(i);
                 
-                // Get all close prices from start up to current candle (inclusive)
-                List<BigDecimal> progressivePrices = new ArrayList<>();
+                // Get all candles from start up to current candle (inclusive)
+                List<CandlestickData> progressiveCandles = new ArrayList<>();
                 for (int j = 0; j <= i; j++) {
-                    progressivePrices.add(candles.get(j).getClose());
+                    progressiveCandles.add(candles.get(j));
                 }
                 
                 // Only calculate indicators once we have enough data
-                if (progressivePrices.size() >= longPeriod) {
+                if (progressiveCandles.size() >= longPeriod) {
                     // Calculate indicators using the same method as real-time
-                    BigDecimal shortMA = TechnicalIndicators.calculateSMA(progressivePrices, shortPeriod);
-                    BigDecimal longMA = TechnicalIndicators.calculateSMA(progressivePrices, longPeriod);
+                    Map<String, Object> shortParams = Map.of("period", shortPeriod);
+                    Map<String, Object> longParams = Map.of("period", longPeriod);
+                    
+                    BigDecimal shortMA = smaIndicator.calculate(progressiveCandles, shortParams).get("sma");
+                    BigDecimal longMA = smaIndicator.calculate(progressiveCandles, longParams).get("sma");
                     
                     // Determine action based on ACTUAL crossover detection
                     String action = "HOLD";
@@ -353,8 +360,7 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     // Use closeTime to match real-time behavior - indicator is calculated at candle close
                     // This ensures historical and real-time visualization data are aligned
                     generateVisualizationData(symbol, currentCandle.getClose(), shortMA, longMA, 
-                                            action, currentCandle.getCloseTime(), 
-                                            currentCandle.getVolume(), currentCandle.getOpen());
+                                            action, currentCandle.getCloseTime());
                     generatedCount++;
                     
                     // Store current MAs as previous for next iteration
@@ -372,8 +378,7 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
      */
     private void generateVisualizationData(String symbol, BigDecimal price, 
                                          BigDecimal shortMA, BigDecimal longMA, 
-                                         String action, java.time.Instant timestamp, 
-                                         BigDecimal volume, BigDecimal openPrice) {
+                                         String action, java.time.Instant timestamp) {
         if (visualizationManager == null) return;
         
         // Prepare indicators
@@ -391,9 +396,6 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         signals.put("deathCross", shortMA.compareTo(longMA) < 0);
         signals.put("trend", shortMA.compareTo(longMA) > 0 ? "BULLISH" : "BEARISH");
         signals.put("strength", shortMA.subtract(longMA).abs());
-        
-        // Add volume indicator using reusable base class method
-        addVolumeIndicator(indicators, signals, volume, price, openPrice);
         
         // Prepare performance data
         Map<String, BigDecimal> performance = new HashMap<>();
