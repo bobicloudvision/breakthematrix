@@ -80,46 +80,130 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         super("sr", "Support & Resistance", 
               "Identifies key support and resistance levels based on pivot points",
               Indicator.IndicatorCategory.CUSTOM);
+    }
+    
+    @Override
+    public Map<String, IndicatorParameter> getParameters() {
+        Map<String, IndicatorParameter> params = new HashMap<>();
         
         // Pivot detection parameters
-        addParameter("pivotLookback", "Pivot Lookback", 
-                    "Number of candles to look left and right for pivot detection", 
-                    IndicatorParameter.ParameterType.INTEGER, 5, 1, 50);
+        params.put("pivotLookback", IndicatorParameter.builder("pivotLookback")
+            .displayName("Pivot Lookback")
+            .description("Number of candles to look left and right for pivot detection")
+            .type(IndicatorParameter.ParameterType.INTEGER)
+            .defaultValue(5)
+            .minValue(1)
+            .maxValue(50)
+            .required(true)
+            .build());
         
-        // Zone width
-        addParameter("zoneWidthPercent", "Zone Width %", 
-                    "Width of support/resistance zone as percentage of price", 
-                    IndicatorParameter.ParameterType.DECIMAL, 0.3, 0.1, 5.0);
+        // Zone width (thin horizontal zones like manually drawn by traders)
+        params.put("zoneWidthPercent", IndicatorParameter.builder("zoneWidthPercent")
+            .displayName("Zone Width %")
+            .description("Width of support/resistance zone as percentage of price (thin zones like manually drawn)")
+            .type(IndicatorParameter.ParameterType.DECIMAL)
+            .defaultValue(0.08)
+            .minValue(0.02)
+            .maxValue(0.5)
+            .required(true)
+            .build());
         
-        // Level management
-        addParameter("maxLevels", "Max Levels", 
-                    "Maximum number of support/resistance levels to track", 
-                    IndicatorParameter.ParameterType.INTEGER, 5, 1, 20);
+        // Extend boxes backward in time for better visualization
+        params.put("extendBackBars", IndicatorParameter.builder("extendBackBars")
+            .displayName("Extend Back (Bars)")
+            .description("Number of bars to extend the zone backward in time")
+            .type(IndicatorParameter.ParameterType.INTEGER)
+            .defaultValue(20)
+            .minValue(5)
+            .maxValue(100)
+            .required(false)
+            .build());
         
-        addParameter("mergeThresholdPercent", "Merge Threshold %", 
-                    "Merge levels within this percentage distance", 
-                    IndicatorParameter.ParameterType.DECIMAL, 0.5, 0.1, 3.0);
+        // Level management (fewer levels for cleaner chart)
+        params.put("maxLevels", IndicatorParameter.builder("maxLevels")
+            .displayName("Max Levels")
+            .description("Maximum number of support/resistance levels to display (fewer = cleaner)")
+            .type(IndicatorParameter.ParameterType.INTEGER)
+            .defaultValue(2)
+            .minValue(1)
+            .maxValue(10)
+            .required(true)
+            .build());
         
-        addParameter("minTouchesForStrong", "Min Touches (Strong)", 
-                    "Minimum touches to consider a level as strong", 
-                    IndicatorParameter.ParameterType.INTEGER, 3, 2, 10);
+        params.put("mergeThresholdPercent", IndicatorParameter.builder("mergeThresholdPercent")
+            .displayName("Merge Threshold %")
+            .description("Merge levels within this percentage distance (higher = fewer levels)")
+            .type(IndicatorParameter.ParameterType.DECIMAL)
+            .defaultValue(1.0)
+            .minValue(0.1)
+            .maxValue(5.0)
+            .required(true)
+            .build());
         
-        addParameter("breakConfirmationPercent", "Break Confirmation %", 
-                    "Percentage price must move beyond level to confirm break", 
-                    IndicatorParameter.ParameterType.DECIMAL, 0.2, 0.1, 2.0);
+        params.put("onlyShowNearby", IndicatorParameter.builder("onlyShowNearby")
+            .displayName("Only Show Nearby Levels")
+            .description("Only display levels near current price (reduces clutter)")
+            .type(IndicatorParameter.ParameterType.BOOLEAN)
+            .defaultValue(true)
+            .required(false)
+            .build());
+        
+        params.put("maxDistancePercent", IndicatorParameter.builder("maxDistancePercent")
+            .displayName("Max Distance %")
+            .description("Maximum distance from current price to show levels (when nearby filter is on)")
+            .type(IndicatorParameter.ParameterType.DECIMAL)
+            .defaultValue(3.0)
+            .minValue(0.5)
+            .maxValue(10.0)
+            .required(false)
+            .build());
+        
+        params.put("minTouchesForStrong", IndicatorParameter.builder("minTouchesForStrong")
+            .displayName("Min Touches (Strong)")
+            .description("Minimum touches to consider a level as strong")
+            .type(IndicatorParameter.ParameterType.INTEGER)
+            .defaultValue(3)
+            .minValue(2)
+            .maxValue(10)
+            .required(true)
+            .build());
+        
+        params.put("breakConfirmationPercent", IndicatorParameter.builder("breakConfirmationPercent")
+            .displayName("Break Confirmation %")
+            .description("Percentage price must move beyond level to confirm break")
+            .type(IndicatorParameter.ParameterType.DECIMAL)
+            .defaultValue(0.2)
+            .minValue(0.1)
+            .maxValue(2.0)
+            .required(true)
+            .build());
         
         // Display options
-        addParameter("showBrokenLevels", "Show Broken Levels", 
-                    "Display levels that have been broken", 
-                    IndicatorParameter.ParameterType.BOOLEAN, false, null, null);
+        params.put("showBrokenLevels", IndicatorParameter.builder("showBrokenLevels")
+            .displayName("Show Broken Levels")
+            .description("Display levels that have been broken")
+            .type(IndicatorParameter.ParameterType.BOOLEAN)
+            .defaultValue(false)
+            .required(false)
+            .build());
         
-        addParameter("supportColor", "Support Color", 
-                    "Color for support zones", 
-                    IndicatorParameter.ParameterType.STRING, "rgba(34, 139, 34, 0.2)", null, null);
+        params.put("supportColor", IndicatorParameter.builder("supportColor")
+            .displayName("Support Color")
+            .description("Color for support zones")
+            .type(IndicatorParameter.ParameterType.STRING)
+            .defaultValue("rgba(34, 139, 34, 0.2)")
+            .required(false)
+            .build());
         
-        addParameter("resistanceColor", "Resistance Color", 
-                    "Color for resistance zones", 
-                    IndicatorParameter.ParameterType.STRING, "rgba(220, 20, 60, 0.2)", null, null);
+        params.put("resistanceColor", IndicatorParameter.builder("resistanceColor")
+            .displayName("Resistance Color")
+            .description("Color for resistance zones")
+            .type(IndicatorParameter.ParameterType.STRING)
+            .defaultValue("rgba(220, 20, 60, 0.2)")
+            .required(false)
+            .build());
+        
+        return params;
     }
     
     @Override
@@ -187,25 +271,47 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         // Build result values
         Map<String, BigDecimal> values = calculateOutputValues(state, currentCandle.getClose());
         
-        // Convert levels to boxes for visualization
+        // Convert levels to boxes for visualization (with filters to reduce clutter)
         boolean showBroken = getBooleanParameter(params, "showBrokenLevels", false);
+        boolean onlyShowNearby = getBooleanParameter(params, "onlyShowNearby", true);
+        double maxDistancePct = getDoubleParameter(params, "maxDistancePercent", 3.0);
         String supportColor = getStringParameter(params, "supportColor", "rgba(34, 139, 34, 0.2)");
         String resistanceColor = getStringParameter(params, "resistanceColor", "rgba(220, 20, 60, 0.2)");
+        int extendBackBars = getIntParameter(params, "extendBackBars", 20);
+        
+        BigDecimal currentPrice = currentCandle.getClose();
+        BigDecimal maxDistance = currentPrice.multiply(BigDecimal.valueOf(maxDistancePct / 100.0));
         
         List<BoxShape> boxShapes = new ArrayList<>();
         
-        // Convert support levels to boxes
+        // Convert support levels to boxes (thin horizontal zones)
         for (SRLevel level : state.supportLevels) {
             if (level.broken && !showBroken) continue;
+            
+            // Filter by distance if onlyShowNearby is enabled
+            if (onlyShowNearby) {
+                BigDecimal distance = currentPrice.subtract(level.price).abs();
+                if (distance.compareTo(maxDistance) > 0) continue;
+            }
+            
             boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
-                                           supportColor, minTouchesForStrong));
+                                           supportColor, minTouchesForStrong, 
+                                           extendBackBars, candles));
         }
         
-        // Convert resistance levels to boxes
+        // Convert resistance levels to boxes (thin horizontal zones)
         for (SRLevel level : state.resistanceLevels) {
             if (level.broken && !showBroken) continue;
+            
+            // Filter by distance if onlyShowNearby is enabled
+            if (onlyShowNearby) {
+                BigDecimal distance = currentPrice.subtract(level.price).abs();
+                if (distance.compareTo(maxDistance) > 0) continue;
+            }
+            
             boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
-                                           resistanceColor, minTouchesForStrong));
+                                           resistanceColor, minTouchesForStrong,
+                                           extendBackBars, candles));
         }
         
         // Convert BoxShape objects to Map for API serialization
@@ -276,7 +382,7 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     }
     
     /**
-     * Add or merge a support level
+     * Add or merge a support level (keep zones stable for deduplication)
      */
     private void addSupportLevel(SRState state, BigDecimal price, Instant timestamp,
                                  double zoneWidthPct, double mergeThresholdPct, int maxLevels) {
@@ -292,12 +398,9 @@ public class SupportResistanceIndicator extends AbstractIndicator {
             BigDecimal threshold = price.multiply(BigDecimal.valueOf(mergeThresholdPct / 100.0));
             
             if (distance.compareTo(threshold) <= 0) {
-                // Merge: increase touch count and update zone
+                // Merge: increase touch count but DON'T expand zone (keeps prices stable for deduplication)
                 existing.touches++;
                 existing.lastTouchTime = timestamp;
-                // Expand zone if needed
-                if (top.compareTo(existing.top) > 0) existing.top = top;
-                if (bottom.compareTo(existing.bottom) < 0) existing.bottom = bottom;
                 return;
             }
         }
@@ -308,7 +411,7 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     }
     
     /**
-     * Add or merge a resistance level
+     * Add or merge a resistance level (keep zones stable for deduplication)
      */
     private void addResistanceLevel(SRState state, BigDecimal price, Instant timestamp,
                                    double zoneWidthPct, double mergeThresholdPct, int maxLevels) {
@@ -324,12 +427,9 @@ public class SupportResistanceIndicator extends AbstractIndicator {
             BigDecimal threshold = price.multiply(BigDecimal.valueOf(mergeThresholdPct / 100.0));
             
             if (distance.compareTo(threshold) <= 0) {
-                // Merge: increase touch count and update zone
+                // Merge: increase touch count but DON'T expand zone (keeps prices stable for deduplication)
                 existing.touches++;
                 existing.lastTouchTime = timestamp;
-                // Expand zone if needed
-                if (top.compareTo(existing.top) > 0) existing.top = top;
-                if (bottom.compareTo(existing.bottom) < 0) existing.bottom = bottom;
                 return;
             }
         }
@@ -389,21 +489,36 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     }
     
     /**
-     * Clean up old and weak levels
+     * Clean up old and weak levels (prioritize stronger and more recent levels)
      */
     private void cleanupLevels(SRState state, int maxLevels) {
         // Remove broken levels
         state.supportLevels.removeIf(level -> level.broken);
         state.resistanceLevels.removeIf(level -> level.broken);
         
-        // Keep only the strongest levels if we have too many
+        // Keep only the strongest and most recent levels if we have too many
+        // Sort by: 1) Number of touches (stronger levels), 2) Most recent touch time
         if (state.supportLevels.size() > maxLevels) {
-            state.supportLevels.sort((a, b) -> Integer.compare(b.touches, a.touches));
+            state.supportLevels.sort((a, b) -> {
+                // First, compare by touches (more touches = stronger)
+                int touchCompare = Integer.compare(b.touches, a.touches);
+                if (touchCompare != 0) return touchCompare;
+                
+                // If same touches, prefer more recent
+                return b.lastTouchTime.compareTo(a.lastTouchTime);
+            });
             state.supportLevels = new ArrayList<>(state.supportLevels.subList(0, maxLevels));
         }
         
         if (state.resistanceLevels.size() > maxLevels) {
-            state.resistanceLevels.sort((a, b) -> Integer.compare(b.touches, a.touches));
+            state.resistanceLevels.sort((a, b) -> {
+                // First, compare by touches (more touches = stronger)
+                int touchCompare = Integer.compare(b.touches, a.touches);
+                if (touchCompare != 0) return touchCompare;
+                
+                // If same touches, prefer more recent
+                return b.lastTouchTime.compareTo(a.lastTouchTime);
+            });
             state.resistanceLevels = new ArrayList<>(state.resistanceLevels.subList(0, maxLevels));
         }
     }
@@ -451,48 +566,61 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     }
     
     /**
-     * Convert SR level to BoxShape for visualization
+     * Convert SR level to BoxShape for visualization (thin horizontal zones like manually drawn)
+     * Uses level creation time and last touch time for stable deduplication
      */
     private BoxShape convertLevelToBox(SRLevel level, Instant currentTime, 
-                                      String color, int minTouchesForStrong) {
-        // Calculate end time
+                                      String color, int minTouchesForStrong, 
+                                      int extendBackBars, List<CandlestickData> candles) {
+        // Use level's creation time as start (stable for deduplication)
+        long startTime = level.timestamp.getEpochSecond();
+        
+        // Calculate end time based on level status
         long endTime;
         if (level.broken && level.brokenTime != null) {
+            // Broken levels: use break time
             endTime = level.brokenTime.getEpochSecond();
         } else {
-            // Active levels: extend to current time
-            endTime = currentTime.getEpochSecond();
+            // Active levels: extend a fixed amount from last touch (stable)
+            // This makes the boxes deduplicate properly
+            endTime = level.lastTouchTime.getEpochSecond() + (extendBackBars * 60); // Assume 1min candles
         }
         
         // Determine strength
         boolean isStrong = level.touches >= minTouchesForStrong;
-        String strengthLabel = isStrong ? " (Strong)" : "";
+        String strengthLabel = isStrong ? " 💪" : "";
         
         // Style based on status
         String backgroundColor;
         String label;
         if (level.broken) {
-            backgroundColor = "rgba(128, 128, 128, 0.08)";
-            label = (level.isSupport ? "Support" : "Resistance") + " (Broken)";
+            backgroundColor = "rgba(128, 128, 128, 0.05)";
+            label = (level.isSupport ? "S" : "R") + " (Broken)";
         } else {
             backgroundColor = color;
             label = (level.isSupport ? "Support" : "Resistance") + 
-                   strengthLabel + " [" + level.touches + " touches]";
+                   strengthLabel + " (" + level.touches + "x)";
         }
         
-        // Border color with higher opacity
-        String borderColor = color.replace("0.2)", "0.6)");
+        // Border color with higher opacity for clear visualization
+        String borderColor = color.replace("0.2)", "0.8)");
         if (level.broken) {
             borderColor = "rgba(128, 128, 128, 0.3)";
         } else if (isStrong) {
+            // Strong levels get solid border
             borderColor = color.replace("0.2)", "1.0)");
         }
         
+        // Round prices to 2 decimal places for better deduplication
+        // (ShapeRegistry deduplicates based on time1 + price1 + price2)
+        BigDecimal roundedTop = level.top.setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal roundedBottom = level.bottom.setScale(2, java.math.RoundingMode.HALF_UP);
+        
         return BoxShape.builder()
-            .time1(level.timestamp.getEpochSecond())
+            .time1(startTime)
             .time2(endTime)
-            .price1(level.top)
-            .price2(level.bottom)
+            .price1(roundedTop)
+            .price2(roundedBottom)
             .color(backgroundColor)
             .borderColor(borderColor)
             .label(label)
@@ -519,8 +647,7 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         // Nearest support price line
         metadata.put("nearestSupport", IndicatorMetadata.builder("nearestSupport")
             .displayName("Nearest Support")
-            .asLine("#228B22")
-            .addConfig("lineWidth", 1)
+            .asLine("#228B22", 1)
             .addConfig("lineStyle", 2) // Dashed
             .separatePane(false)
             .paneOrder(0)
@@ -529,8 +656,7 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         // Nearest resistance price line
         metadata.put("nearestResistance", IndicatorMetadata.builder("nearestResistance")
             .displayName("Nearest Resistance")
-            .asLine("#DC143C")
-            .addConfig("lineWidth", 1)
+            .asLine("#DC143C", 1)
             .addConfig("lineStyle", 2) // Dashed
             .separatePane(false)
             .paneOrder(0)
@@ -544,6 +670,23 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         params = mergeWithDefaults(params);
         int pivotLookback = getIntParameter(params, "pivotLookback", 5);
         return pivotLookback * 2 + 1;
+    }
+    
+    /**
+     * Helper method to get double parameter with default value
+     */
+    protected double getDoubleParameter(Map<String, Object> params, String key, double defaultValue) {
+        Object value = params.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Double) {
+            return (Double) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return Double.parseDouble(value.toString());
     }
 }
 
