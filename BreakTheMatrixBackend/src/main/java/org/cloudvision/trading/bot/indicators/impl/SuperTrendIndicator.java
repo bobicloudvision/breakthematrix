@@ -196,26 +196,41 @@ public class SuperTrendIndicator extends AbstractIndicator {
     /**
      * Calculate SuperTrend for multiple candles progressively (for historical data)
      * This maintains state across calculations for proper SuperTrend tracking
+     * 
+     * @param candles Historical candlestick data
+     * @param params Configuration parameters
+     * @param previousState State from previous calculation (SuperTrendState or null)
+     * @return Map containing "values" (indicator values) and "state" (for next iteration)
      */
+    @Override
     public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
                                                     Map<String, Object> params,
-                                                    BigDecimal previousSuperTrend,
-                                                    BigDecimal previousDirection) {
+                                                    Object previousState) {
         params = mergeWithDefaults(params);
         validateParameters(params);
+        
+        // Unpack previous state
+        BigDecimal previousSuperTrend = null;
+        BigDecimal previousDirection = null;
+        
+        if (previousState instanceof SuperTrendState) {
+            SuperTrendState state = (SuperTrendState) previousState;
+            previousSuperTrend = state.previousSuperTrend;
+            previousDirection = state.previousDirection;
+        }
         
         int atrPeriod = getIntParameter(params, "atrPeriod", 10);
         double multiplierDouble = getDoubleParameter(params, "multiplier", 3.0);
         BigDecimal multiplier = BigDecimal.valueOf(multiplierDouble);
         
         if (candles == null || candles.size() < atrPeriod + 1) {
+            SuperTrendState emptyState = new SuperTrendState(BigDecimal.ZERO, BigDecimal.ZERO);
             return Map.of(
                 "values", Map.of(
                     "supertrend", BigDecimal.ZERO,
                     "direction", BigDecimal.ZERO
                 ),
-                "previousSuperTrend", BigDecimal.ZERO,
-                "previousDirection", BigDecimal.ZERO
+                "state", emptyState
             );
         }
         
@@ -239,13 +254,16 @@ public class SuperTrendIndicator extends AbstractIndicator {
         );
         
         if (result == null) {
+            SuperTrendState failState = new SuperTrendState(
+                previousSuperTrend != null ? previousSuperTrend : BigDecimal.ZERO,
+                previousDirection != null ? previousDirection : BigDecimal.ZERO
+            );
             return Map.of(
                 "values", Map.of(
                     "supertrend", BigDecimal.ZERO,
                     "direction", BigDecimal.ZERO
                 ),
-                "previousSuperTrend", previousSuperTrend != null ? previousSuperTrend : BigDecimal.ZERO,
-                "previousDirection", previousDirection != null ? previousDirection : BigDecimal.ZERO
+                "state", failState
             );
         }
         
@@ -258,12 +276,34 @@ public class SuperTrendIndicator extends AbstractIndicator {
         values.put("price", currentPrice);
         values.put("distance", currentPrice.subtract(result[0]).abs());
         
+        // Pack state for next iteration
+        SuperTrendState newState = new SuperTrendState(result[0], result[1]);
+        
         Map<String, Object> output = new HashMap<>();
         output.put("values", values);
-        output.put("previousSuperTrend", result[0]);
-        output.put("previousDirection", result[1]);
+        output.put("state", newState);
+
+        System.out.println("SuperTrendIndicator progressive calculation: values=" + values + ", state=" + newState);
         
         return output;
+    }
+    
+    /**
+     * State class for SuperTrend progressive calculation
+     */
+    private static class SuperTrendState {
+        final BigDecimal previousSuperTrend;
+        final BigDecimal previousDirection;
+        
+        SuperTrendState(BigDecimal previousSuperTrend, BigDecimal previousDirection) {
+            this.previousSuperTrend = previousSuperTrend;
+            this.previousDirection = previousDirection;
+        }
+        
+        @Override
+        public String toString() {
+            return "SuperTrendState{st=" + previousSuperTrend + ", dir=" + previousDirection + "}";
+        }
     }
 }
 
