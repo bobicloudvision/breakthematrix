@@ -212,11 +212,15 @@ export const ChartComponent = props => {
         seriesManagerRef.current.removeSeriesByPrefix('indicator_');
         seriesManagerRef.current.removeAllBoxes();
 
-        // Fetch and add new indicator series
+        // Fetch and add new indicator series (only visible ones)
         const fetchAndAddIndicators = async () => {
             const allBoxes = []; // Collect all boxes from all indicators
             
-            for (const indicator of enabledIndicators) {
+            // Filter to only visible indicators (visible !== false means default true or explicitly true)
+            const visibleIndicators = enabledIndicators.filter(ind => ind.visible !== false);
+            console.log(`Processing ${visibleIndicators.length} visible indicators out of ${enabledIndicators.length} total`);
+            
+            for (const indicator of visibleIndicators) {
                 try {
                     const instanceId = indicator.instanceId || `${indicator.id}_${Date.now()}`;
                     console.log(`Fetching data for indicator instance: ${instanceId} (type: ${indicator.id})`, indicator.params);

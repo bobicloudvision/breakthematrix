@@ -89,7 +89,8 @@ export function IndicatorsTab() {
       const newIndicator = {
         id: indicatorId, // Base indicator type (e.g., 'sma')
         instanceId: instanceId, // Unique instance ID (e.g., 'sma_1234567890')
-        params: params
+        params: params,
+        visible: true // Default to visible
       };
       newEnabled = [...enabledIndicators, newIndicator];
       console.log(`Added new indicator instance: ${instanceId}`);
@@ -103,6 +104,18 @@ export function IndicatorsTab() {
     // Close modal
     setSelectedIndicator(null);
     setEditingInstance(null);
+  };
+
+  const toggleIndicatorVisibility = (instanceId) => {
+    const newEnabled = enabledIndicators.map(ind => 
+      ind.instanceId === instanceId
+        ? { ...ind, visible: !ind.visible }
+        : ind
+    );
+    setEnabledIndicators(newEnabled);
+    localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
+    // Trigger custom event to notify chart
+    window.dispatchEvent(new Event('indicatorsChanged'));
   };
 
   const removeIndicator = (instanceId) => {
@@ -178,11 +191,17 @@ export function IndicatorsTab() {
                 return (
                   <div 
                     key={instance.instanceId}
-                    className="bg-black/30 rounded border border-white/10 hover:border-cyan-500/30 transition-colors p-2"
+                    className={`bg-black/30 rounded border transition-all p-2 ${
+                      instance.visible !== false
+                        ? 'border-white/10 hover:border-cyan-500/30 opacity-100'
+                        : 'border-white/5 opacity-50 hover:opacity-70'
+                    }`}
                   >
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-start justify-between gap-1">
-                        <h3 className="text-white text-xs font-medium truncate flex-1" title={indicator.name}>
+                        <h3 className={`text-xs font-medium truncate flex-1 transition-colors ${
+                          instance.visible !== false ? 'text-white' : 'text-white/50'
+                        }`} title={indicator.name}>
                           {indicator.name}
                         </h3>
                       </div>
@@ -192,6 +211,29 @@ export function IndicatorsTab() {
                       </div>
                       
                       <div className="flex items-center gap-1 mt-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleIndicatorVisibility(instance.instanceId);
+                          }}
+                          className={`px-2 py-1 text-xs rounded border transition-all ${
+                            instance.visible !== false
+                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30 hover:bg-cyan-500/30'
+                              : 'bg-white/10 text-white/30 border-white/20 hover:bg-white/20'
+                          }`}
+                          title={instance.visible !== false ? 'Hide indicator' : 'Show indicator'}
+                        >
+                          {instance.visible !== false ? (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
                         <button
                           onClick={() => handleOpenConfig(indicator, instance)}
                           className="flex-1 px-2 py-1 text-xs rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 hover:bg-cyan-500/30 transition-all"
