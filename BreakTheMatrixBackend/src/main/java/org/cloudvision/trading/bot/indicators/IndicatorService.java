@@ -140,70 +140,36 @@ public class IndicatorService {
         }
         
         List<IndicatorDataPoint> dataPoints = new ArrayList<>();
-        
-        // Check if indicator supports progressive calculation (has calculateProgressive method)
-        boolean supportsProgressive = hasProgressiveCalculation(indicator);
         Object previousState = null;
-        
-        System.out.println("🔍 Indicator " + indicatorId + " supportsProgressive: " + supportsProgressive);
         
         // Calculate indicator progressively for each candle
         for (int i = requiredCandles; i <= allCandles.size(); i++) {
             List<CandlestickData> subset = allCandles.subList(0, i);
             CandlestickData currentCandle = allCandles.get(i - 1);
             
-            if (supportsProgressive) {
-                // Use progressive calculation (maintains state, returns boxes)
-                Map<String, Object> progressiveResult = invokeProgressiveCalculation(
-                    indicator, subset, params, previousState
-                );
-                
-                if (progressiveResult != null) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, BigDecimal> values = (Map<String, BigDecimal>) progressiveResult.get("values");
-                    previousState = progressiveResult.get("state");
-                    
-                    // Extract additional data (boxes, orderBlocks, etc.)
-                    Map<String, Object> additionalData = new HashMap<>();
-                    for (Map.Entry<String, Object> entry : progressiveResult.entrySet()) {
-                        if (!entry.getKey().equals("values") && !entry.getKey().equals("state")) {
-                            additionalData.put(entry.getKey(), entry.getValue());
-                        }
-                    }
-                    
-                    // Debug: Check if boxes are present
-                    if (i == requiredCandles) { // Log only for first data point
-                        System.out.println("🔍 Progressive result keys: " + progressiveResult.keySet());
-                        System.out.println("🔍 Additional data keys: " + additionalData.keySet());
-                        if (additionalData.containsKey("boxes")) {
-                            System.out.println("🔍 Boxes found: " + additionalData.get("boxes"));
-                        }
-                    }
-                    
-                    dataPoints.add(new IndicatorDataPoint(
-                        currentCandle.getCloseTime(),
-                        values,
-                        currentCandle,
-                        additionalData
-                    ));
-                } else {
-                    // Fallback to regular calculation
-                    Map<String, BigDecimal> values = indicator.calculate(subset, params);
-                    dataPoints.add(new IndicatorDataPoint(
-                        currentCandle.getCloseTime(),
-                        values,
-                        currentCandle
-                    ));
+            // Use progressive calculation (all indicators support it via interface)
+            Map<String, Object> progressiveResult = indicator.calculateProgressive(
+                subset, params, previousState
+            );
+            
+            @SuppressWarnings("unchecked")
+            Map<String, BigDecimal> values = (Map<String, BigDecimal>) progressiveResult.get("values");
+            previousState = progressiveResult.get("state");
+            
+            // Extract additional data (boxes, orderBlocks, shapes, etc.)
+            Map<String, Object> additionalData = new HashMap<>();
+            for (Map.Entry<String, Object> entry : progressiveResult.entrySet()) {
+                if (!entry.getKey().equals("values") && !entry.getKey().equals("state")) {
+                    additionalData.put(entry.getKey(), entry.getValue());
                 }
-            } else {
-                // Use standard calculation
-                Map<String, BigDecimal> values = indicator.calculate(subset, params);
-                dataPoints.add(new IndicatorDataPoint(
-                    currentCandle.getCloseTime(),
-                    values,
-                    currentCandle
-                ));
             }
+            
+            dataPoints.add(new IndicatorDataPoint(
+                currentCandle.getCloseTime(),
+                values,
+                currentCandle,
+                additionalData
+            ));
         }
         
         // Return only the requested count (most recent)
@@ -212,39 +178,6 @@ public class IndicatorService {
         }
         
         return dataPoints;
-    }
-    
-    /**
-     * Check if indicator supports progressive calculation
-     */
-    private boolean hasProgressiveCalculation(Indicator indicator) {
-        try {
-            indicator.getClass().getMethod("calculateProgressive", 
-                List.class, Map.class, Object.class);
-            return true;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
-    }
-    
-    /**
-     * Invoke progressive calculation using reflection
-     */
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> invokeProgressiveCalculation(Indicator indicator, 
-                                                             List<CandlestickData> candles,
-                                                             Map<String, Object> params,
-                                                             Object previousState) {
-        try {
-            java.lang.reflect.Method method = indicator.getClass().getMethod(
-                "calculateProgressive", List.class, Map.class, Object.class
-            );
-            Object result = method.invoke(indicator, candles, params, previousState);
-            return (Map<String, Object>) result;
-        } catch (Exception e) {
-            System.err.println("Failed to invoke progressive calculation: " + e.getMessage());
-            return null;
-        }
     }
     
     /**

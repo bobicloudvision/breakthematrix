@@ -61,6 +61,35 @@ public interface Indicator {
     Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params);
     
     /**
+     * Progressive calculation that maintains state across candles
+     * This is used for efficient historical data processing and indicators that need to track state
+     * or return additional data like shapes/boxes.
+     * 
+     * Default implementation: wraps standard calculate() method
+     * Override this for:
+     * - Indicators that need to maintain state (e.g., order blocks, market structure)
+     * - Indicators that return shapes/boxes/additional data
+     * - Performance optimization when calculating many sequential data points
+     * 
+     * @param candles Historical candlestick data (sorted chronologically)
+     * @param params Configuration parameters for this calculation
+     * @param previousState State from previous calculation (null for first call, type depends on indicator)
+     * @return Map containing:
+     *   - "values": Map<String, BigDecimal> with indicator values (required)
+     *   - "state": Object for next iteration (can be null)
+     *   - Additional data (e.g., "boxes", "orderBlocks", "shapes") - optional
+     */
+    default Map<String, Object> calculateProgressive(List<CandlestickData> candles,
+                                                     Map<String, Object> params,
+                                                     Object previousState) {
+        // Default: just call calculate and wrap result
+        return Map.of(
+            "values", calculate(candles, params),
+            "state", previousState != null ? previousState : new Object()
+        );
+    }
+    
+    /**
      * Get visualization metadata for frontend rendering
      * Defines how this indicator should be displayed on charts
      */
