@@ -117,7 +117,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
                                                                      incrementFactorPct, resetOn);
         
         return Map.of(
-            "trailingStop", result.trailingStop,
+            // "trailingStop", result.trailingStop,
             "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
             "pivotHigh", result.lastPivotHigh != null ? result.lastPivotHigh : BigDecimal.ZERO,
             "pivotLow", result.lastPivotLow != null ? result.lastPivotLow : BigDecimal.ZERO
@@ -151,7 +151,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             ? (MarketStructureState) previousState 
             : new MarketStructureState();
         
-        if (candles == null || candles.size() < pivotLookback + 1) {
+        if (candles == null || candles.size() < pivotLookback * 2 + 1) {
             return Map.of(
                 "values", createEmptyResult(),
                 "state", state,
@@ -299,7 +299,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         // Return current values
         Map<String, BigDecimal> values = Map.of(
-            "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
+            // "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
             "direction", BigDecimal.valueOf(state.os),
             "pivotHigh", state.phY != null ? state.phY : BigDecimal.ZERO,
             "pivotLow", state.plY != null ? state.plY : BigDecimal.ZERO
@@ -327,15 +327,15 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
         // Trailing stop line (changes color based on direction)
-        metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
-            .displayName("Trailing Stop")
-            .asLine("#9c27b0", 2) // Purple for neutral, will be overridden by frontend logic
-            .separatePane(false)
-            .paneOrder(0)
-            .addConfig("bullColor", bullColor)
-            .addConfig("bearColor", bearColor)
-            .addConfig("directionField", "direction") // Frontend will read this field
-            .build());
+        // metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
+        //     .displayName("Trailing Stop")
+        //     .asLine("#9c27b0", 2) // Purple for neutral, will be overridden by frontend logic
+        //     .separatePane(false)
+        //     .paneOrder(0)
+        //     .addConfig("bullColor", bullColor)
+        //     .addConfig("bearColor", bearColor)
+        //     .addConfig("directionField", "direction") // Frontend will read this field
+        //     .build());
         
         // Optional pivot markers
         metadata.put("pivotHigh", IndicatorMetadata.builder("pivotHigh")
@@ -512,7 +512,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         }
         
         MarketStructureResult result = new MarketStructureResult();
-        result.trailingStop = (ts != null) ? ts : BigDecimal.ZERO;
+        // result.trailingStop = (ts != null) ? ts : BigDecimal.ZERO;
         result.direction = BigDecimal.valueOf(os);
         result.lastPivotHigh = phY;
         result.lastPivotLow = plY;
@@ -615,7 +615,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      */
     private Map<String, BigDecimal> createEmptyResult() {
         return Map.of(
-            "trailingStop", BigDecimal.ZERO,
+            // "trailingStop", BigDecimal.ZERO,
             "direction", BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,
             "pivotLow", BigDecimal.ZERO
@@ -626,7 +626,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      * Result container for market structure calculation
      */
     private static class MarketStructureResult {
-        BigDecimal trailingStop;
+        // BigDecimal trailingStop;
         BigDecimal direction;
         BigDecimal lastPivotHigh;
         BigDecimal lastPivotLow;
