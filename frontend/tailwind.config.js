@@ -7,6 +7,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Raleway', 'sans-serif'],
+      },
       colors: {
         'cyan': {
           50: '#ecfeff',

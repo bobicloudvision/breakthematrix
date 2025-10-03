@@ -10,8 +10,6 @@ export function IndicatorConfigModal({
   const [params, setParams] = useState(initialParams || {});
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [calculating, setCalculating] = useState(false);
-  const [result, setResult] = useState(null);
 
   useEffect(() => {
     fetchIndicatorDetails();
@@ -68,36 +66,9 @@ export function IndicatorConfigModal({
     }));
   };
 
-  const calculateHistorical = async () => {
-    try {
-      setCalculating(true);
-      const res = await fetch(`http://localhost:8080/api/indicators/${indicator.id}/historical`, {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
-      });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      
-      const data = await res.json();
-      setResult(data);
-      return data;
-    } catch (e) {
-      console.error(`Failed to calculate ${indicator.id}:`, e);
-      throw e;
-    } finally {
-      setCalculating(false);
-    }
-  };
-
-  const handleApply = async () => {
-    const data = result || await calculateHistorical();
-    onApply(indicator.id, params, data);
+  const handleApply = () => {
+    // Just pass the configuration, Chart will handle fetching data
+    onApply(indicator.id, params);
   };
 
   return createPortal(
@@ -317,29 +288,6 @@ export function IndicatorConfigModal({
                 </div>
               )}
 
-              {/* Results */}
-              {result && (
-                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-green-300">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="font-medium">Calculation Complete</span>
-                  </div>
-                  <div className="text-sm text-white/70">
-                    <div className="flex justify-between py-1">
-                      <span>Data Points:</span>
-                      <span className="text-cyan-300 font-mono">{Array.isArray(result) ? result.length : 'N/A'}</span>
-                    </div>
-                    {Array.isArray(result) && result.length > 0 && (
-                      <div className="flex justify-between py-1">
-                        <span>Status:</span>
-                        <span className="text-green-300">Ready to apply</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -352,44 +300,17 @@ export function IndicatorConfigModal({
           >
             Cancel
           </button>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={calculateHistorical}
-              disabled={calculating || loading}
-              className={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${
-                calculating || loading
-                  ? 'bg-white/10 text-white/50 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-slate-600/40 to-slate-500/40 text-slate-200 border border-slate-400/50 hover:from-slate-600/60 hover:to-slate-500/60'
-              }`}
-            >
-              {calculating ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                  <span>Calculating...</span>
-                </div>
-              ) : (
-                'Calculate'
-              )}
-            </button>
-            <button
-              onClick={handleApply}
-              disabled={calculating || loading}
-              className={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${
-                calculating || loading
-                  ? 'bg-white/10 text-white/50 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-cyan-500/40 to-blue-500/40 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/60 hover:to-blue-500/60 shadow-lg shadow-cyan-500/20'
-              }`}
-            >
-              {calculating ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                  <span>Applying...</span>
-                </div>
-              ) : (
-                'Apply to Chart'
-              )}
-            </button>
-          </div>
+          <button
+            onClick={handleApply}
+            disabled={loading}
+            className={`px-6 py-2 text-sm font-medium rounded-lg transition-all ${
+              loading
+                ? 'bg-white/10 text-white/50 cursor-not-allowed'
+                : 'bg-gradient-to-r from-cyan-500/40 to-blue-500/40 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/60 hover:to-blue-500/60 shadow-lg shadow-cyan-500/20'
+            }`}
+          >
+            Apply to Chart
+          </button>
         </div>
       </div>
     </div>,

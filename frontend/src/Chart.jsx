@@ -213,55 +213,78 @@ export const ChartComponent = props => {
             }
         });
 
-        // Add new indicator series
-        enabledIndicators.forEach(indicator => {
-            try {
-                if (!indicator.data || !Array.isArray(indicator.data)) {
-                    console.warn(`No data for indicator: ${indicator.id}`);
-                    return;
+        // Fetch and add new indicator series
+        const fetchAndAddIndicators = async () => {
+            for (const indicator of enabledIndicators) {
+                try {
+                    console.log(`Fetching data for indicator: ${indicator.id}`);
+                    
+                    // Fetch historical data for this indicator
+                    const res = await fetch(`http://localhost:8080/api/indicators/${indicator.id}/historical`, {
+                        method: 'POST',
+                        headers: {
+                            'accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(indicator.params),
+                    });
+                    
+                    if (!res.ok) {
+                        console.error(`Failed to fetch indicator ${indicator.id}: HTTP ${res.status}`);
+                        continue;
+                    }
+                    
+                    const indicatorData = await res.json();
+                    
+                    if (!Array.isArray(indicatorData) || indicatorData.length === 0) {
+                        console.warn(`No data returned for indicator: ${indicator.id}`);
+                        continue;
+                    }
+
+                    const indicatorKey = `indicator_${indicator.id}`;
+                    
+                    // Get indicator parameters
+                    const params = indicator.params?.params || {};
+                    const color = params.color || '#2962FF';
+                    const lineWidth = params.lineWidth || 2;
+
+                    // Create line series for the indicator
+                    const lineSeries = chartRef.current.addSeries(LineSeries, {
+                        color: color,
+                        lineWidth: lineWidth,
+                        title: indicator.id.toUpperCase(),
+                        priceLineVisible: false,
+                        lastValueVisible: true,
+                    });
+
+                    // Transform and set data
+                    const transformedData = indicatorData
+                        .map(point => {
+                            if (typeof point === 'object' && point.time && point.value !== undefined) {
+                                return {
+                                    time: point.time,
+                                    value: parseFloat(point.value)
+                                };
+                            }
+                            return null;
+                        })
+                        .filter(point => point !== null && !isNaN(point.value));
+
+                    if (transformedData.length > 0) {
+                        lineSeries.setData(transformedData);
+                        indicatorSeriesRef.current[indicatorKey] = lineSeries;
+                        console.log(`Added indicator: ${indicator.id} with ${transformedData.length} points`);
+                    } else {
+                        console.warn(`No valid data points for indicator: ${indicator.id}`);
+                        chartRef.current.removeSeries(lineSeries);
+                    }
+                } catch (error) {
+                    console.error(`Error adding indicator ${indicator.id}:`, error);
                 }
-
-                const indicatorKey = `indicator_${indicator.id}`;
-                
-                // Get indicator parameters
-                const params = indicator.params?.params || {};
-                const color = params.color || '#2962FF';
-                const lineWidth = params.lineWidth || 2;
-
-                // Create line series for the indicator
-                const lineSeries = chartRef.current.addSeries(LineSeries, {
-                    color: color,
-                    lineWidth: lineWidth,
-                    title: indicator.id.toUpperCase(),
-                    priceLineVisible: false,
-                    lastValueVisible: true,
-                });
-
-                // Transform and set data
-                const indicatorData = indicator.data
-                    .map(point => {
-                        if (typeof point === 'object' && point.time && point.value !== undefined) {
-                            return {
-                                time: point.time,
-                                value: parseFloat(point.value)
-                            };
-                        }
-                        return null;
-                    })
-                    .filter(point => point !== null && !isNaN(point.value));
-
-                if (indicatorData.length > 0) {
-                    lineSeries.setData(indicatorData);
-                    indicatorSeriesRef.current[indicatorKey] = lineSeries;
-                    console.log(`Added indicator: ${indicator.id} with ${indicatorData.length} points`);
-                } else {
-                    console.warn(`No valid data points for indicator: ${indicator.id}`);
-                    chartRef.current.removeSeries(lineSeries);
-                }
-            } catch (error) {
-                console.error(`Error adding indicator ${indicator.id}:`, error);
             }
-        });
+        };
+
+        fetchAndAddIndicators();
     }, [enabledIndicators, data]);
 
     // Draw boxes/rectangles on chart using plugin system (lightweight-charts v4+)

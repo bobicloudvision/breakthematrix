@@ -61,11 +61,10 @@ export function IndicatorsTab() {
     setSelectedIndicator(null);
   };
 
-  const handleApplyIndicator = (indicatorId, params, data) => {
+  const handleApplyIndicator = (indicatorId, params) => {
     const newIndicator = {
       id: indicatorId,
-      params: params,
-      data: data
+      params: params
     };
     
     // Update or add the indicator

@@ -6,6 +6,7 @@
 html, body, #root {
   height: 100%;
   color: #fff;
+  font-family: 'Raleway', sans-serif;
   @apply bg-gradient-to-br from-slate-900 via-gray-900 to-black;
 }
 
