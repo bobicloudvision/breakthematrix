@@ -5,7 +5,8 @@ export function IndicatorConfigModal({
   indicator, 
   onClose, 
   onApply,
-  initialParams 
+  initialParams,
+  isEditing = false
 }) {
   const [params, setParams] = useState(initialParams || {});
   const [details, setDetails] = useState(null);
@@ -84,9 +85,11 @@ export function IndicatorConfigModal({
         <div className="px-6 py-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/50 to-slate-700/50">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text">
-                {indicator.name}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text">
+                  {isEditing ? 'Edit' : 'Add'} {indicator.name}
+                </h2>
+              </div>
               <p className="text-sm text-white/60 mt-1">{indicator.description}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30">
@@ -309,7 +312,7 @@ export function IndicatorConfigModal({
                 : 'bg-gradient-to-r from-cyan-500/40 to-blue-500/40 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/60 hover:to-blue-500/60 shadow-lg shadow-cyan-500/20'
             }`}
           >
-            Apply to Chart
+            {isEditing ? 'Update Indicator' : 'Apply to Chart'}
           </button>
         </div>
       </div>

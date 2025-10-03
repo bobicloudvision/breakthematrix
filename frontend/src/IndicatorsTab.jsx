@@ -6,6 +6,7 @@ export function IndicatorsTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedIndicator, setSelectedIndicator] = useState(null);
+  const [editingInstance, setEditingInstance] = useState(null); // Track which instance is being edited
   const [enabledIndicators, setEnabledIndicators] = useState(() => {
     // Load enabled indicators from localStorage
     const stored = localStorage.getItem('enabledIndicators');
@@ -37,7 +38,12 @@ export function IndicatorsTab() {
   }, []);
 
   const getInitialParams = (indicatorId) => {
-    // Always return fresh default params (allow multiple instances with different settings)
+    // If editing an existing instance, return its params
+    if (editingInstance) {
+      return editingInstance.params;
+    }
+    
+    // Otherwise return fresh default params
     return {
       provider: localStorage.getItem('tradingProvider') || 'Binance',
       symbol: localStorage.getItem('tradingSymbol') || 'BTCUSDT',
@@ -47,26 +53,38 @@ export function IndicatorsTab() {
     };
   };
 
-  const handleOpenConfig = (indicator) => {
+  const handleOpenConfig = (indicator, instanceToEdit = null) => {
     setSelectedIndicator(indicator);
+    setEditingInstance(instanceToEdit);
   };
 
   const handleCloseModal = () => {
     setSelectedIndicator(null);
+    setEditingInstance(null);
   };
 
   const handleApplyIndicator = (indicatorId, params) => {
-    // Generate unique instance ID for this indicator
-    const instanceId = `${indicatorId}_${Date.now()}`;
+    let newEnabled;
     
-    const newIndicator = {
-      id: indicatorId, // Base indicator type (e.g., 'sma')
-      instanceId: instanceId, // Unique instance ID (e.g., 'sma_1234567890')
-      params: params
-    };
-    
-    // Add the new indicator instance (allow multiple instances of same type)
-    const newEnabled = [...enabledIndicators, newIndicator];
+    if (editingInstance) {
+      // Update existing instance
+      newEnabled = enabledIndicators.map(ind => 
+        ind.instanceId === editingInstance.instanceId
+          ? { ...ind, params: params }
+          : ind
+      );
+      console.log(`Updated indicator instance: ${editingInstance.instanceId}`);
+    } else {
+      // Create new instance
+      const instanceId = `${indicatorId}_${Date.now()}`;
+      const newIndicator = {
+        id: indicatorId, // Base indicator type (e.g., 'sma')
+        instanceId: instanceId, // Unique instance ID (e.g., 'sma_1234567890')
+        params: params
+      };
+      newEnabled = [...enabledIndicators, newIndicator];
+      console.log(`Added new indicator instance: ${instanceId}`);
+    }
     
     setEnabledIndicators(newEnabled);
     localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
@@ -75,6 +93,7 @@ export function IndicatorsTab() {
     
     // Close modal
     setSelectedIndicator(null);
+    setEditingInstance(null);
   };
 
   const removeIndicator = (instanceId) => {
@@ -171,18 +190,27 @@ export function IndicatorsTab() {
                                     return (
                                       <div 
                                         key={instance.instanceId}
-                                        className="flex items-center justify-between gap-2 bg-white/5 rounded px-2 py-1"
+                                        className="flex items-center justify-between gap-2 bg-white/5 hover:bg-white/10 rounded px-2 py-1 transition-colors"
                                       >
-                                        <span className="text-xs text-white/70 font-mono">
+                                        <span className="text-xs text-white/70 font-mono flex-1">
                                           {paramStr || 'default'}
                                         </span>
-                                        <button
-                                          onClick={() => removeIndicator(instance.instanceId)}
-                                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                                          title="Remove this instance"
-                                        >
-                                          ✕
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => handleOpenConfig(indicator, instance)}
+                                            className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors px-1"
+                                            title="Edit this instance"
+                                          >
+                                            ✎
+                                          </button>
+                                          <button
+                                            onClick={() => removeIndicator(instance.instanceId)}
+                                            className="text-xs text-red-400 hover:text-red-300 transition-colors px-1"
+                                            title="Remove this instance"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
                                       </div>
                                     );
                                   })}
@@ -216,6 +244,7 @@ export function IndicatorsTab() {
           initialParams={getInitialParams(selectedIndicator.id)}
           onClose={handleCloseModal}
           onApply={handleApplyIndicator}
+          isEditing={!!editingInstance}
         />
       )}
     </div>
