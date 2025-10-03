@@ -121,7 +121,10 @@ export const ChartComponent = props => {
                 }
             }
 
-            window.addEventListener('resize', () => {
+            window.addEventListener('resize', handleResize);
+
+            // Add ResizeObserver to detect container size changes (e.g., when bottom bar is resized)
+            const resizeObserver = new ResizeObserver(() => {
                 if (!chartContainerRef.current || !chartRef.current) return;
                 chartRef.current.applyOptions({ 
                     width: chartContainerRef.current.clientWidth,
@@ -129,9 +132,14 @@ export const ChartComponent = props => {
                 });
             });
 
+            if (chartContainerRef.current) {
+                resizeObserver.observe(chartContainerRef.current);
+            }
+
             return () => {
                 isMountedRef.current = false;
                 window.removeEventListener('resize', handleResize);
+                resizeObserver.disconnect();
                 if (markerPluginRef.current) {
                     markerPluginRef.current.detach();
                     markerPluginRef.current = null;
