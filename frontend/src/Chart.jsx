@@ -12,6 +12,7 @@ import {
 } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { BoxPrimitive } from './BoxPrimitive';
+import { ChartSeriesManager } from './ChartSeriesManager';
 
 // Global variable for default zoom level (last N candles)
 if (typeof window !== 'undefined' && !window.BTM_DEFAULT_ZOOM_CANDLES) {
@@ -42,12 +43,11 @@ export const ChartComponent = props => {
     const chartContainerRef = useRef();
     const chartRef = useRef();
     const seriesRef = useRef();
-    const indicatorSeriesRef = useRef({});
+    const seriesManagerRef = useRef(null); // Centralized series manager
     const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
     const boxPrimitivesRef = useRef([]);
-    const boxesContainerRef = useRef(null); // Backup for HTML overlay
 
     useEffect(
         () => {
@@ -97,6 +97,9 @@ export const ChartComponent = props => {
             // Store references
             chartRef.current = chart;
             seriesRef.current = candleSeries;
+            
+            // Initialize series manager
+            seriesManagerRef.current = new ChartSeriesManager(chart);
 
             // Set initial data if available
             if (data && data.length > 0) {
@@ -133,7 +136,6 @@ export const ChartComponent = props => {
                 chart.remove();
                 chartRef.current = null;
                 seriesRef.current = null;
-                indicatorSeriesRef.current = {};
             };
         },
         [backgroundColor, textColor, upColor, downColor, wickUpColor, wickDownColor, borderUpColor, borderDownColor]
@@ -195,23 +197,14 @@ export const ChartComponent = props => {
 
     // Handle enabled indicators from IndicatorsTab
     useEffect(() => {
-        if (!chartRef.current || !data || data.length === 0) {
+        if (!seriesManagerRef.current || !data || data.length === 0) {
             return;
         }
 
         console.log('Enabled indicators changed:', enabledIndicators);
 
         // Remove all existing indicator series
-        Object.keys(indicatorSeriesRef.current).forEach(key => {
-            if (key.startsWith('indicator_')) {
-                try {
-                    chartRef.current.removeSeries(indicatorSeriesRef.current[key]);
-                    delete indicatorSeriesRef.current[key];
-                } catch (error) {
-                    console.error('Error removing indicator series:', error);
-                }
-            }
-        });
+        seriesManagerRef.current.removeSeriesByPrefix('indicator_');
 
         // Fetch and add new indicator series
         const fetchAndAddIndicators = async () => {
@@ -229,148 +222,25 @@ export const ChartComponent = props => {
                         body: JSON.stringify(indicator.params),
                     });
                     
-                    console.log(`Response status for ${indicator.id}:`, res.status);
-                    
                     if (!res.ok) {
                         const errorText = await res.text();
                         console.error(`Failed to fetch indicator ${indicator.id}: HTTP ${res.status}`, errorText);
                         continue;
                     }
                     
-                    const responseData = await res.json();
-                    console.log(`Indicator ${indicator.id} raw response:`, responseData);
+                    const apiResponse = await res.json();
+                    console.log(`Indicator ${indicator.id} response received`);
                     
-                    // Handle different response formats
-                    let indicatorData = responseData;
-                    
-                    // If response is an object with a data property, extract it
-                    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
-                        if (responseData.data && Array.isArray(responseData.data)) {
-                            indicatorData = responseData.data;
-                        } else if (responseData.values && Array.isArray(responseData.values)) {
-                            indicatorData = responseData.values;
-                        } else {
-                            console.warn(`Unexpected response format for indicator: ${indicator.id}`, responseData);
-                            continue;
-                        }
-                    }
-                    
-                    if (!Array.isArray(indicatorData)) {
-                        console.warn(`Data is not an array for indicator: ${indicator.id}`, typeof indicatorData);
-                        continue;
-                    }
-                    
-                    if (indicatorData.length === 0) {
-                        console.warn(`No data points returned for indicator: ${indicator.id}`);
-                        continue;
-                    }
-                    
-                    console.log(`Indicator ${indicator.id} data received:`, indicatorData.length, 'points');
-
+                    // Use series manager to add the indicator
                     const indicatorKey = `indicator_${indicator.id}`;
-                    
-                    // Get indicator parameters
                     const params = indicator.params?.params || {};
-                    const color = params.color || '#2962FF';
-                    const lineWidth = params.lineWidth || 2;
-
-                    // Check metadata for series type
-                    const metadata = responseData.metadata?.[indicator.id] || {};
-                    const seriesType = metadata.seriesType || 'line';
-                    const separatePane = metadata.separatePane || false;
-
-                    console.log(`Creating ${seriesType} series for ${indicator.id} with color: ${color}, separatePane: ${separatePane}`);
-
-                    // Create series based on type
-                    if (!chartRef.current) {
-                        console.error('Chart reference is null, cannot add indicator');
-                        continue;
-                    }
-
-                    let indicatorSeries;
-                    if (seriesType === 'histogram') {
-                        indicatorSeries = chartRef.current.addSeries(HistogramSeries, {
-                            color: color,
-                            title: indicator.id.toUpperCase(),
-                            priceFormat: {
-                                type: 'volume',
-                            },
-                            priceScaleId: separatePane ? indicator.id : '', // Separate scale if separate pane
-                        });
-                        
-                        // Configure separate scale for volume
-                        if (separatePane) {
-                            chartRef.current.priceScale(indicator.id).applyOptions({
-                                scaleMargins: {
-                                    top: 0.8,
-                                    bottom: 0,
-                                },
-                            });
-                        }
-                    } else {
-                        // Default to line series
-                        indicatorSeries = chartRef.current.addSeries(LineSeries, {
-                            color: color,
-                            lineWidth: lineWidth,
-                            title: indicator.id.toUpperCase(),
-                            priceLineVisible: false,
-                            lastValueVisible: true,
-                        });
-                    }
-
-                    console.log(`Series created for ${indicator.id}`);
                     
-                    // Log sample data point to understand structure
-                    if (indicatorData.length > 0) {
-                        console.log(`Sample data point for ${indicator.id}:`, indicatorData[0]);
-                    }
+                    seriesManagerRef.current.addFromApiResponse(
+                        indicatorKey,
+                        apiResponse,
+                        params
+                    );
 
-                    // Transform and set data
-                    const transformedData = indicatorData
-                        .map(point => {
-                            if (typeof point === 'object') {
-                                const time = point.time || point.timestamp || point.t;
-                                
-                                // Check if value is nested in a values object
-                                let value;
-                                if (point.values && typeof point.values === 'object') {
-                                    // Look for the indicator-specific value in the values object
-                                    // Try indicator.id as key first, then common variations
-                                    value = point.values[indicator.id] || 
-                                           point.values.value ||
-                                           point.values.val ||
-                                           Object.values(point.values)[0]; // Fallback to first value
-                                } else {
-                                    // Try direct value properties
-                                    value = point.value !== undefined ? point.value : 
-                                           point.val !== undefined ? point.val :
-                                           point.v !== undefined ? point.v : undefined;
-                                }
-                                
-                                if (time !== undefined && value !== undefined && value !== null) {
-                                    // For histogram series, use 'value' property; for line series, use 'value' property
-                                    return {
-                                        time: time,
-                                        value: parseFloat(value),
-                                        color: seriesType === 'histogram' ? (value >= 0 ? color : '#ef5350') : undefined
-                                    };
-                                }
-                            }
-                            return null;
-                        })
-                        .filter(point => point !== null && !isNaN(point.value));
-
-                    console.log(`Transformed ${transformedData.length} data points for ${indicator.id}`, 
-                        transformedData.length > 0 ? `First: ${JSON.stringify(transformedData[0])}` : '');
-
-                    if (transformedData.length > 0) {
-                        indicatorSeries.setData(transformedData);
-                        indicatorSeriesRef.current[indicatorKey] = indicatorSeries;
-                        console.log(`✅ Successfully added indicator: ${indicator.id} with ${transformedData.length} points`);
-                    } else {
-                        console.warn(`No valid data points for indicator: ${indicator.id}`);
-                        chartRef.current.removeSeries(indicatorSeries);
-                    }
                 } catch (error) {
                     console.error(`❌ Error adding indicator ${indicator.id}:`, error);
                 }
@@ -419,256 +289,6 @@ export const ChartComponent = props => {
         }
     };
     
-    // Old HTML-based drawBoxes (keeping as backup)
-    const drawBoxesHTML = (chart, series, boxes) => {
-        // Get visible time range
-        const timeRange = chart.timeScale().getVisibleRange();
-        console.log('Chart visible time range:', {
-            from: timeRange?.from,
-            to: timeRange?.to,
-            fromDate: timeRange?.from ? new Date(timeRange.from * 1000).toISOString() : 'null',
-            toDate: timeRange?.to ? new Date(timeRange.to * 1000).toISOString() : 'null'
-        });
-        
-        // Get logical range (all loaded data)
-        const logicalRange = chart.timeScale().getVisibleLogicalRange();
-        console.log('Chart logical range:', logicalRange);
-        
-        console.log('drawBoxes called:', {
-            hasContainer: !!chartContainerRef.current,
-            hasChart: !!chart,
-            hasSeries: !!series,
-            boxesCount: boxes.length,
-            chartDataLength: data?.length
-        });
-        
-        if (!chartContainerRef.current || !chart || !series) {
-            console.error('drawBoxes: Missing required refs');
-            return;
-        }
-        
-        // Create or clear boxes container
-        if (!boxesContainerRef.current) {
-            const container = document.createElement('div');
-            container.style.position = 'absolute';
-            container.style.top = '0';
-            container.style.left = '0';
-            container.style.right = '0';
-            container.style.bottom = '0';
-            container.style.pointerEvents = 'none';
-            container.style.zIndex = '10';
-            container.style.overflow = 'hidden';
-            chartContainerRef.current.style.position = 'relative';
-            chartContainerRef.current.appendChild(container);
-            boxesContainerRef.current = container;
-            console.log('Created boxes container');
-
-        } else {
-            // Clear existing boxes
-            boxesContainerRef.current.innerHTML = '';
-        }
-        
-        // Log the first and last data points in the chart
-        if (data && data.length > 0) {
-            console.log('Chart data range:', {
-                first: data[0].time,
-                last: data[data.length - 1].time,
-                firstDate: new Date(data[0].time * 1000).toISOString(),
-                lastDate: new Date(data[data.length - 1].time * 1000).toISOString(),
-                totalPoints: data.length
-            });
-        }
-        
-        console.log('Starting to process', boxes.length, 'boxes');
-        
-        boxes.forEach((box, idx) => {
-            console.log(`\n=== Processing box ${idx + 1} ===`);
-            try {
-                console.log(`Box ${idx + 1} data:`, box);
-                
-                // Try to get time scale first
-                const timeScale = chart.timeScale();
-                if (!timeScale) {
-                    console.error('Time scale not available');
-                    return;
-                }
-                
-                // IMPORTANT: We need to find the logical indices for our times
-                // timeToCoordinate might not work if times don't exactly match data points
-                // Let's try a different approach: find closest data points
-                let logical1 = null;
-                let logical2 = null;
-                
-                if (data && data.length > 0) {
-                    // Find logical indices for the box times
-                    for (let i = 0; i < data.length; i++) {
-                        if (data[i].time >= box.time1 && logical1 === null) {
-                            logical1 = i;
-                        }
-                        if (data[i].time >= box.time2) {
-                            logical2 = i;
-                            break;
-                        }
-                    }
-                    
-                    // If time2 is beyond the last data point, use the last index
-                    if (logical2 === null && box.time2 > data[data.length - 1].time) {
-                        logical2 = data.length - 1;
-                    }
-                    
-                    // If time1 is before the first data point, use the first index
-                    if (logical1 === null && box.time1 < data[0].time) {
-                        logical1 = 0;
-                    }
-                    
-                    console.log(`Logical indices for box ${idx + 1}:`, { logical1, logical2, time1: box.time1, time2: box.time2, dataLast: data[data.length - 1].time });
-                }
-                
-                // Convert time to pixel coordinates
-                let x1, x2;
-                if (logical1 !== null && logical2 !== null) {
-                    x1 = timeScale.logicalToCoordinate(logical1);
-                    x2 = timeScale.logicalToCoordinate(logical2);
-                    console.log(`Using logical coordinates: ${logical1} -> ${x1}, ${logical2} -> ${x2}`);
-                } else {
-                    x1 = timeScale.timeToCoordinate(box.time1);
-                    x2 = timeScale.timeToCoordinate(box.time2);
-                    console.log(`Using time coordinates directly`);
-                }
-                
-                console.log(`Time coordinates for box ${idx + 1}:`, { 
-                    time1: box.time1, 
-                    time2: box.time2,
-                    x1, 
-                    x2,
-                    time1Date: new Date(box.time1 * 1000).toISOString(),
-                    time2Date: new Date(box.time2 * 1000).toISOString()
-                });
-                
-                const y1 = series.priceToCoordinate(box.price1);
-                const y2 = series.priceToCoordinate(box.price2);
-                
-                console.log(`Box ${idx + 1} coordinates:`, { x1, x2, y1, y2 });
-                
-                if (x1 === null || x2 === null || y1 === null || y2 === null) {
-                    console.warn(`Could not calculate coordinates for box ${idx + 1}:`, box, { x1, x2, y1, y2 });
-                    
-                    // Try to understand why
-                    const visibleRange = timeScale.getVisibleRange();
-                    console.warn('Visible range:', visibleRange, {
-                        from: visibleRange?.from,
-                        to: visibleRange?.to,
-                        boxWithinRange: box.time1 >= visibleRange?.from && box.time2 <= visibleRange?.to
-                    });
-                    return;
-                }
-                
-                // Create box element
-                const boxElement = document.createElement('div');
-                boxElement.style.position = 'absolute';
-                boxElement.style.left = Math.min(x1, x2) + 'px';
-                boxElement.style.top = Math.min(y1, y2) + 'px';
-                boxElement.style.width = Math.abs(x2 - x1) + 'px';
-                boxElement.style.height = Math.abs(y2 - y1) + 'px';
-                boxElement.style.backgroundColor = box.backgroundColor || 'rgba(33, 150, 243, 0.1)';
-                boxElement.style.border = `${box.borderWidth || 1}px ${box.borderStyle || 'solid'} ${box.borderColor || '#2196F3'}`;
-                boxElement.style.boxSizing = 'border-box';
-                
-                // Add text label if provided
-                if (box.text) {
-                    const label = document.createElement('div');
-                    label.textContent = box.text;
-                    label.style.position = 'absolute';
-                    label.style.top = '4px';
-                    label.style.left = '4px';
-                    label.style.color = box.textColor || '#ffffff';
-                    label.style.fontSize = '11px';
-                    label.style.fontFamily = 'Arial, sans-serif';
-                    label.style.fontWeight = 'bold';
-                    label.style.textShadow = '1px 1px 2px rgba(0,0,0,0.8)';
-                    boxElement.appendChild(label);
-                }
-                
-                boxesContainerRef.current.appendChild(boxElement);
-                console.log(`✅ Box ${idx + 1} created successfully at position:`, {
-                    left: boxElement.style.left,
-                    top: boxElement.style.top,
-                    width: boxElement.style.width,
-                    height: boxElement.style.height,
-                    backgroundColor: boxElement.style.backgroundColor,
-                    border: boxElement.style.border
-                });
-            } catch (e) {
-                console.error(`❌ Error drawing box ${idx + 1}:`, e, box);
-            }
-        });
-        
-        console.log('Total boxes created:', boxesContainerRef.current.children.length);
-        
-        // Store box data with logical indices for updating
-        const boxesData = boxes.map(box => {
-            let logical1 = null;
-            let logical2 = null;
-            
-            if (data && data.length > 0) {
-                for (let i = 0; i < data.length; i++) {
-                    if (data[i].time >= box.time1 && logical1 === null) {
-                        logical1 = i;
-                    }
-                    if (data[i].time >= box.time2) {
-                        logical2 = i;
-                        break;
-                    }
-                }
-                
-                // If time2 is beyond the last data point, use the last index
-                if (logical2 === null && box.time2 > data[data.length - 1].time) {
-                    logical2 = data.length - 1;
-                }
-                
-                // If time1 is before the first data point, use the first index
-                if (logical1 === null && box.time1 < data[0].time) {
-                    logical1 = 0;
-                }
-            }
-            
-            return { ...box, logical1, logical2 };
-        });
-        
-        // Update box positions on chart scroll/zoom
-        const updateBoxes = () => {
-            if (!boxesContainerRef.current || !chart || !series) return;
-            const boxElements = boxesContainerRef.current.children;
-            const timeScale = chart.timeScale();
-            
-            boxesData.forEach((box, index) => {
-                if (index >= boxElements.length) return;
-                
-                let x1, x2;
-                if (box.logical1 !== null && box.logical2 !== null) {
-                    x1 = timeScale.logicalToCoordinate(box.logical1);
-                    x2 = timeScale.logicalToCoordinate(box.logical2);
-                } else {
-                    x1 = timeScale.timeToCoordinate(box.time1);
-                    x2 = timeScale.timeToCoordinate(box.time2);
-                }
-                
-                const y1 = series.priceToCoordinate(box.price1);
-                const y2 = series.priceToCoordinate(box.price2);
-                
-                if (x1 !== null && x2 !== null && y1 !== null && y2 !== null) {
-                    const boxElement = boxElements[index];
-                    boxElement.style.left = Math.min(x1, x2) + 'px';
-                    boxElement.style.top = Math.min(y1, y2) + 'px';
-                    boxElement.style.width = Math.abs(x2 - x1) + 'px';
-                    boxElement.style.height = Math.abs(y2 - y1) + 'px';
-                }
-            });
-        };
-        
-        chart.timeScale().subscribeVisibleTimeRangeChange(updateBoxes);
-    };
-
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
         // Prevent concurrent indicator addition
@@ -732,18 +352,11 @@ export const ChartComponent = props => {
             console.log('Starting to add indicators...');
             console.log('Strategy data structure:', strategyData);
             
-            // Clear existing indicator series
-            console.log('Clearing existing indicator series...');
-            Object.values(indicatorSeriesRef.current).forEach(series => {
-                if (series && chart) {
-                    try {
-                        chart.removeSeries(series);
-                    } catch (e) {
-                        console.warn('Error removing series:', e);
-                    }
-                }
-            });
-            indicatorSeriesRef.current = {};
+            // Clear existing strategy indicator series
+            console.log('Clearing existing strategy indicator series...');
+            if (seriesManagerRef.current) {
+                seriesManagerRef.current.removeSeriesByPrefix('strategy_');
+            }
 
             // Process indicators from the new structure
             const indicators = strategyData.series.indicators;
@@ -777,282 +390,59 @@ export const ChartComponent = props => {
                     dataLength: indicator.data ? indicator.data.length : 0
                 });
                 
-                // Validate data format based on series type
-                let validData;
-                
-                switch (indicator.type.toLowerCase()) {
-                    case 'candlestick':
-                        validData = indicator.data.filter(item => 
-                            item && 
-                            typeof item.time === 'number' && 
-                            typeof item.open === 'number' && 
-                            typeof item.high === 'number' && 
-                            typeof item.low === 'number' && 
-                            typeof item.close === 'number' &&
-                            !isNaN(item.time) && 
-                            !isNaN(item.open) && 
-                            !isNaN(item.high) && 
-                            !isNaN(item.low) && 
-                            !isNaN(item.close)
-                        );
-                        break;
-                        
-                    case 'bar':
-                        validData = indicator.data.filter(item => 
-                            item && 
-                            typeof item.time === 'number' && 
-                            typeof item.open === 'number' && 
-                            typeof item.high === 'number' && 
-                            typeof item.low === 'number' && 
-                            typeof item.close === 'number' &&
-                            !isNaN(item.time) && 
-                            !isNaN(item.open) && 
-                            !isNaN(item.high) && 
-                            !isNaN(item.low) && 
-                            !isNaN(item.close)
-                        );
-                        break;
-                        
-                    case 'histogram':
-                        validData = indicator.data.filter(item => 
-                            item && 
-                            typeof item.time === 'number' && 
-                            typeof item.value === 'number' &&
-                            !isNaN(item.time) && 
-                            !isNaN(item.value)
-                        ).map(item => {
-                            // Preserve the individual bar color if provided
-                            const dataPoint = { time: item.time, value: item.value };
-                            if (item.color) {
-                                dataPoint.color = item.color;
-                            }
-                            return dataPoint;
-                        });
-                        break;
-                        
-                    default: // line, area, baseline
-                        validData = indicator.data.filter(item => 
-                            item && 
-                            typeof item.time === 'number' && 
-                            typeof item.value === 'number' &&
-                            !isNaN(item.time) && 
-                            !isNaN(item.value)
-                        );
-                        break;
-                }
-                
-                // Remove duplicates and sort by time (CRITICAL for lightweight-charts)
-                const originalLength = validData.length;
-                const timeMap = new Map();
-                validData.forEach(item => {
-                    // Keep the last occurrence of each timestamp
-                    timeMap.set(item.time, item);
-                });
-                validData = Array.from(timeMap.values()).sort((a, b) => a.time - b.time);
-                
-                if (originalLength !== validData.length) {
-                    console.warn(`${indicator.name}: Removed ${originalLength - validData.length} duplicate timestamps`);
-                }
-                console.log(`Validated data for ${indicator.name}: ${validData.length} unique points (sorted)`);
-                
-                // Debug: Check timestamp alignment with main chart data
-                if (validData.length > 0 && data && data.length > 0) {
-                    const indicatorFirst = validData[0].time;
-                    const indicatorLast = validData[validData.length - 1].time;
-                    const chartFirst = data[0].time;
-                    const chartLast = data[data.length - 1].time;
-                    
-                    console.log(`${indicator.name} time range:`, {
-                        first: indicatorFirst,
-                        last: indicatorLast,
-                        firstDate: new Date(indicatorFirst * 1000).toISOString(),
-                        lastDate: new Date(indicatorLast * 1000).toISOString(),
-                        duration: `${((indicatorLast - indicatorFirst) / 60).toFixed(1)} minutes`
-                    });
-                    console.log(`Main chart time range:`, {
-                        first: chartFirst,
-                        last: chartLast,
-                        firstDate: new Date(chartFirst * 1000).toISOString(),
-                        lastDate: new Date(chartLast * 1000).toISOString(),
-                        duration: `${((chartLast - chartFirst) / 3600).toFixed(1)} hours`
-                    });
-                    
-                    // Warn if time ranges don't overlap properly
-                    if (indicatorFirst > chartLast || indicatorLast < chartFirst) {
-                        console.error(`⚠️ ${indicator.name}: Time range does NOT overlap with chart data!`);
-                    } else if (indicatorLast - indicatorFirst < (chartLast - chartFirst) * 0.5) {
-                        console.warn(`⚠️ ${indicator.name}: Indicator covers only ${(((indicatorLast - indicatorFirst) / (chartLast - chartFirst)) * 100).toFixed(1)}% of chart time range. Backend should calculate indicators for the full range!`);
-                    }
-                }
-                
-                if (validData.length === 0) {
-                    console.warn(`No valid data points found for indicator: ${indicator.name} (type: ${indicator.type})`);
+                // Basic validation - ChartSeriesManager will handle detailed validation
+                if (!indicator.data || !Array.isArray(indicator.data) || indicator.data.length === 0) {
+                    console.warn(`No data for indicator: ${indicator.name}`);
+                    processIndicator(index + 1);
                     return;
                 }
 
                 try {
-                    // Check if chart is still valid before creating series
-                    if (!chart || !chartRef.current) {
-                        console.error('Chart is no longer valid, skipping indicator');
+                    // Check if chart and series manager are still valid
+                    if (!seriesManagerRef.current || !chart || !chartRef.current) {
+                        console.error('Chart or series manager is no longer valid, skipping indicator');
                         return;
                     }
                     
                     console.log(`Creating series for ${indicator.name} with type ${indicator.type}`);
-                    let series;
                     
-                    switch (indicator.type.toLowerCase()) {
-                        case 'line':
-                            const lineOptions = {
-                                color: indicator.config.color,
-                                lineWidth: indicator.config.lineWidth || 2,
-                                title: indicator.config.title
-                            };
-                            
-                            // Map lineStyle from number to LineStyle enum
-                            if (indicator.config.lineStyle !== undefined) {
-                                const lineStyleMap = {
-                                    0: LineStyle.Solid,
-                                    1: LineStyle.Dotted,
-                                    2: LineStyle.Dashed,
-                                    3: LineStyle.LargeDashed,
-                                    4: LineStyle.SparseDotted
-                                };
-                                lineOptions.lineStyle = lineStyleMap[indicator.config.lineStyle] || LineStyle.Solid;
-                            }
-                            
-                            series = chart.addSeries(LineSeries, lineOptions);
-                            console.log(`Line series created for ${indicator.name}:`, !!series, 'with options:', lineOptions);
-                            break;
-                            
-                        case 'area':
-                            series = chart.addSeries(AreaSeries, {
-                                lineColor: indicator.config.color,
-                                topColor: indicator.config.topColor || indicator.config.color + '40', // 25% opacity
-                                bottomColor: indicator.config.bottomColor || indicator.config.color + '10', // 6% opacity
-                                lineWidth: indicator.config.lineWidth || 2,
-                                title: indicator.config.title
-                            });
-                            break;
-                            
-                        case 'bar':
-                            series = chart.addSeries(BarSeries, {
-                                upColor: indicator.config.upColor || indicator.config.color,
-                                downColor: indicator.config.downColor || indicator.config.color,
-                                openVisible: indicator.config.openVisible !== false,
-                                thinBars: indicator.config.thinBars || false,
-                                title: indicator.config.title
-                            });
-                            break;
-                            
-                        case 'baseline':
-                            series = chart.addSeries(BaselineSeries, {
-                                baseValue: indicator.config.baseValue || { type: 'price', price: 0 },
-                                lineColor: indicator.config.color,
-                                topFillColor1: indicator.config.topFillColor1 || indicator.config.color + '40',
-                                topFillColor2: indicator.config.topFillColor2 || indicator.config.color + '20',
-                                bottomFillColor1: indicator.config.bottomFillColor1 || indicator.config.color + '20',
-                                bottomFillColor2: indicator.config.bottomFillColor2 || indicator.config.color + '40',
-                                lineWidth: indicator.config.lineWidth || 2,
-                                title: indicator.config.title
-                            });
-                            break;
-                            
-                        case 'candlestick':
-                            series = chart.addSeries(CandlestickSeries, {
-                                upColor: indicator.config.upColor || '#4caf50',
-                                downColor: indicator.config.downColor || '#e91e63',
-                                wickUpColor: indicator.config.wickUpColor || indicator.config.upColor || '#4caf50',
-                                wickDownColor: indicator.config.wickDownColor || indicator.config.downColor || '#e91e63',
-                                borderUpColor: indicator.config.borderUpColor || indicator.config.upColor || '#4caf50',
-                                borderDownColor: indicator.config.borderDownColor || indicator.config.downColor || '#e91e63',
-                                title: indicator.config.title
-                            });
-                            break;
-                            
-                        case 'histogram':
-                            const histogramOptions = {
-                                color: indicator.config.color,
-                                priceFormat: indicator.config.priceFormat || {
-                                    type: 'volume',
-                                },
-                                title: indicator.config.title
-                            };
-                            
-                            // Handle separate pane for indicators like volume
-                            if (indicator.separatePane) {
-                                // Create a unique price scale ID for this indicator
-                                const priceScaleId = indicator.config.priceScaleId || `${indicator.name}_scale`;
-                                histogramOptions.priceScaleId = priceScaleId;
-                                
-                                // Configure the separate price scale
-                                histogramOptions.priceScaleOptions = {
-                                    scaleMargins: {
-                                        top: 0.8,    // 80% of the chart height is for the main chart
-                                        bottom: 0,   // Volume starts at the bottom
-                                    },
-                                };
-                            } else {
-                                histogramOptions.priceScaleId = indicator.config.priceScaleId || '';
-                            }
-                            
-                            series = chart.addSeries(HistogramSeries, histogramOptions);
-                            
-                            // Apply price scale options if separate pane
-                            if (indicator.separatePane && series) {
-                                const priceScaleId = indicator.config.priceScaleId || `${indicator.name}_scale`;
-                                series.priceScale().applyOptions({
-                                    scaleMargins: {
-                                        top: 0.8,
-                                        bottom: 0,
-                                    },
-                                });
-                            }
-                            break;
-                            
-                        default:
-                            console.warn(`Unsupported indicator type: ${indicator.type}`);
-                            return;
-                    }
-
-                    // Check if series was created successfully
-                    if (!series) {
-                        console.error(`Failed to create series for ${indicator.name}`, {
-                            indicatorType: indicator.type,
-                            indicatorConfig: indicator.config,
-                            chartValid: !!chart,
-                            chartRefValid: !!chartRef.current
-                        });
-                        return;
-                    }
+                    // Use ChartSeriesManager to add the series
+                    const seriesId = `strategy_${indicator.name}`;
+                    const metadata = {
+                        seriesType: indicator.type,
+                        separatePane: indicator.separatePane || false,
+                        config: indicator.config
+                    };
                     
-                    console.log(`${indicator.name} series created, setting data...`);
-                    
-                    // Add a small delay before setting data to prevent timing issues
+                    // Add a small delay before adding to prevent timing issues
                     setTimeout(() => {
                         try {
-                            // Check if series is still valid
-                            if (!series || typeof series.setData !== 'function') {
-                                console.error(`${indicator.name} series is invalid or destroyed`);
-                                return;
-                            }
-                            
-                            // Check if chart is still valid
-                            if (!chart || !chartRef.current) {
+                            // Check if still valid
+                            if (!seriesManagerRef.current || !chartRef.current) {
                                 console.error('Chart is no longer valid');
                                 return;
                             }
                             
-                            console.log(`Setting data for ${indicator.name} with ${validData.length} points`);
-                            series.setData(validData);
-                            indicatorSeriesRef.current[indicator.name] = series;
-                            console.log(`${indicator.name} series added successfully`);
+                            console.log(`Adding series ${seriesId} with ${indicator.data.length} points`);
+                            const success = seriesManagerRef.current.addSeries(
+                                seriesId,
+                                indicator.data,
+                                metadata,
+                                indicator.config
+                            );
+                            
+                            if (success) {
+                                console.log(`✅ ${indicator.name} series added successfully`);
+                            } else {
+                                console.warn(`⚠️ Failed to add series for ${indicator.name}`);
+                            }
                         } catch (e) {
-                            console.error(`Error setting data for ${indicator.name}:`, e);
+                            console.error(`Error adding ${indicator.name} series:`, e);
                         }
                     }, 100 + (50 * index)); // Increased base delay and stagger
                     
                 } catch (e) {
-                    console.error(`Error adding ${indicator.name} series:`, e);
+                    console.error(`Error processing ${indicator.name} series:`, e);
                 }
                 
                 // Process next indicator after a delay
