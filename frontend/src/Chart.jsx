@@ -26,6 +26,7 @@ export const ChartComponent = props => {
         loading = false,
         error = null,
         realCount = 0,
+        enabledIndicators = [],
         colors: {
             backgroundColor = 'transparent',
             textColor = '#fff',
@@ -191,6 +192,77 @@ export const ChartComponent = props => {
             return () => clearTimeout(timeoutId);
         }
     }, [strategyData, data]);
+
+    // Handle enabled indicators from IndicatorsTab
+    useEffect(() => {
+        if (!chartRef.current || !data || data.length === 0) {
+            return;
+        }
+
+        console.log('Enabled indicators changed:', enabledIndicators);
+
+        // Remove all existing indicator series
+        Object.keys(indicatorSeriesRef.current).forEach(key => {
+            if (key.startsWith('indicator_')) {
+                try {
+                    chartRef.current.removeSeries(indicatorSeriesRef.current[key]);
+                    delete indicatorSeriesRef.current[key];
+                } catch (error) {
+                    console.error('Error removing indicator series:', error);
+                }
+            }
+        });
+
+        // Add new indicator series
+        enabledIndicators.forEach(indicator => {
+            try {
+                if (!indicator.data || !Array.isArray(indicator.data)) {
+                    console.warn(`No data for indicator: ${indicator.id}`);
+                    return;
+                }
+
+                const indicatorKey = `indicator_${indicator.id}`;
+                
+                // Get indicator parameters
+                const params = indicator.params?.params || {};
+                const color = params.color || '#2962FF';
+                const lineWidth = params.lineWidth || 2;
+
+                // Create line series for the indicator
+                const lineSeries = chartRef.current.addSeries(LineSeries, {
+                    color: color,
+                    lineWidth: lineWidth,
+                    title: indicator.id.toUpperCase(),
+                    priceLineVisible: false,
+                    lastValueVisible: true,
+                });
+
+                // Transform and set data
+                const indicatorData = indicator.data
+                    .map(point => {
+                        if (typeof point === 'object' && point.time && point.value !== undefined) {
+                            return {
+                                time: point.time,
+                                value: parseFloat(point.value)
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(point => point !== null && !isNaN(point.value));
+
+                if (indicatorData.length > 0) {
+                    lineSeries.setData(indicatorData);
+                    indicatorSeriesRef.current[indicatorKey] = lineSeries;
+                    console.log(`Added indicator: ${indicator.id} with ${indicatorData.length} points`);
+                } else {
+                    console.warn(`No valid data points for indicator: ${indicator.id}`);
+                    chartRef.current.removeSeries(lineSeries);
+                }
+            } catch (error) {
+                console.error(`Error adding indicator ${indicator.id}:`, error);
+            }
+        });
+    }, [enabledIndicators, data]);
 
     // Draw boxes/rectangles on chart using plugin system (lightweight-charts v4+)
     const drawBoxes = (chart, series, boxes) => {
@@ -1040,7 +1112,7 @@ const getIntervalSeconds = (interval) => {
     return intervalMap[interval] || 60;
 };
 
-export function Chart({ provider, symbol, interval, activeStrategies = [] }) {
+export function Chart({ provider, symbol, interval, activeStrategies = [], enabledIndicators = [] }) {
     const [data, setData] = useState([]);
     const [realCount, setRealCount] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -1182,6 +1254,7 @@ export function Chart({ provider, symbol, interval, activeStrategies = [] }) {
             realCount={realCount}
             activeStrategies={activeStrategies}
             strategyData={strategyData}
+            enabledIndicators={enabledIndicators}
         />
     );
 }

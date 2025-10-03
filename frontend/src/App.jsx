@@ -6,6 +6,7 @@ import { OrdersTab } from "./OrdersTab";
 import { StrategiesTab } from "./StrategiesTab";
 import { AccountsTab } from "./AccountsTab";
 import { PositionsTab } from "./PositionsTab";
+import { IndicatorsTab } from "./IndicatorsTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -14,6 +15,7 @@ export default function App() {
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
   const [activeStrategies, setActiveStrategies] = useState([]);
+  const [enabledIndicators, setEnabledIndicators] = useState([]);
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -50,6 +52,38 @@ export default function App() {
   // Fetch active strategies on component mount
   useEffect(() => {
     fetchActiveStrategies();
+  }, []);
+
+  // Load enabled indicators from localStorage
+  useEffect(() => {
+    const loadEnabledIndicators = () => {
+      const stored = localStorage.getItem('enabledIndicators');
+      if (stored) {
+        setEnabledIndicators(JSON.parse(stored));
+      }
+    };
+
+    loadEnabledIndicators();
+
+    // Listen for storage changes (when indicators are toggled)
+    const handleStorageChange = (e) => {
+      if (e.key === 'enabledIndicators') {
+        loadEnabledIndicators();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom event from same window
+    const handleIndicatorChange = () => {
+      loadEnabledIndicators();
+    };
+    window.addEventListener('indicatorsChanged', handleIndicatorChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('indicatorsChanged', handleIndicatorChange);
+    };
   }, []);
 
   const handleProviderSelect = (provider) => {
@@ -183,6 +217,7 @@ export default function App() {
                     symbol={symbol}
                     interval={interval}
                     activeStrategies={activeStrategies}
+                    enabledIndicators={enabledIndicators}
                   />
                 </div>
               ) : (
@@ -246,6 +281,16 @@ export default function App() {
                 >
                   Positions
                 </button>
+                <button 
+                  onClick={() => setActiveTab('indicators')}
+                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    activeTab === 'indicators' 
+                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
+                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                  }`}
+                >
+                  Indicators
+                </button>
                 {/* Future tabs: Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-3.5rem)]">
@@ -253,6 +298,7 @@ export default function App() {
                 {activeTab === 'strategies' && <StrategiesTab />}
                 {activeTab === 'accounts' && <AccountsTab />}
                 {activeTab === 'positions' && <PositionsTab />}
+                {activeTab === 'indicators' && <IndicatorsTab />}
               </div>
             </div>
           </main>
