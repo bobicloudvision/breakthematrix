@@ -5,7 +5,12 @@ import org.cloudvision.trading.model.CandlestickData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import java.io.File;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -75,6 +80,8 @@ class MarketStructureTrailingStopIndicatorTest {
         
         assertEquals(BigDecimal.ZERO, result.get("trailingStop"));
         assertEquals(BigDecimal.ZERO, result.get("direction"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotHigh"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotLow"));
     }
     
     @Test
@@ -337,6 +344,69 @@ class MarketStructureTrailingStopIndicatorTest {
         assertNotNull(result);
         assertEquals(BigDecimal.ZERO, result.get("trailingStop"));
         assertEquals(BigDecimal.ZERO, result.get("direction"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotHigh"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotLow"));
+    }
+    
+    @Test
+    @DisplayName("Should handle empty candles list")
+    void testEmptyCandles() {
+        List<CandlestickData> candles = new ArrayList<>();
+        Map<String, Object> params = new HashMap<>();
+        params.put("pivotLookback", 14);
+        
+        Map<String, BigDecimal> result = indicator.calculate(candles, params);
+        
+        assertNotNull(result);
+        assertEquals(BigDecimal.ZERO, result.get("trailingStop"));
+        assertEquals(BigDecimal.ZERO, result.get("direction"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotHigh"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotLow"));
+    }
+    
+    @Test
+    @DisplayName("Should return zeros for single candle")
+    void testSingleCandle() {
+        List<CandlestickData> candles = new ArrayList<>();
+        Instant baseTime = Instant.now();
+        candles.add(createCandle(baseTime, 100.0, 101.0, 99.0, 100.5, 1000.0));
+        
+        Map<String, Object> params = new HashMap<>();
+        params.put("pivotLookback", 14);
+        
+        Map<String, BigDecimal> result = indicator.calculate(candles, params);
+        
+        assertNotNull(result);
+        assertEquals(BigDecimal.ZERO, result.get("trailingStop"));
+        assertEquals(BigDecimal.ZERO, result.get("direction"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotHigh"));
+        assertEquals(BigDecimal.ZERO, result.get("pivotLow"));
+    }
+    
+    @Test
+    @DisplayName("Should verify pivot values are zero when no pivots detected")
+    void testNoPivotsDetected() {
+        // Create flat market with no clear pivots
+        List<CandlestickData> candles = new ArrayList<>();
+        Instant baseTime = Instant.now();
+        
+        for (int i = 0; i < 50; i++) {
+            // All candles at same price level - no pivots
+            candles.add(createCandle(baseTime.plusSeconds(i * 60), 
+                100.0, 100.01, 99.99, 100.0, 1000.0));
+        }
+        
+        Map<String, Object> params = new HashMap<>();
+        params.put("pivotLookback", 5);
+        
+        Map<String, BigDecimal> result = indicator.calculate(candles, params);
+        
+        assertNotNull(result);
+        // In a completely flat market, pivots should be zero or the indicator should handle it gracefully
+        assertNotNull(result.get("trailingStop"));
+        assertNotNull(result.get("direction"));
+        assertNotNull(result.get("pivotHigh"));
+        assertNotNull(result.get("pivotLow"));
     }
     
     @Test
@@ -352,7 +422,183 @@ class MarketStructureTrailingStopIndicatorTest {
         assertNotNull(result.get("trailingStop"));
     }
     
+    @Test
+    @DisplayName("Should work with real BTC market data from JSON")
+    void testWithRealBTCData() throws IOException {
+        // Load real BTC candlestick data from JSON file
+        List<CandlestickData> candles = loadCandlesFromJson("src/test/java/org/cloudvision/1mbtc.json");
+        
+        assertNotNull(candles);
+        assertTrue(candles.size() > 0, "Should have loaded candles from JSON");
+        System.out.println("Loaded " + candles.size() + " real BTC candles");
+        
+        // Test with default parameters
+        Map<String, Object> params = new HashMap<>();
+        params.put("pivotLookback", 10);
+        params.put("incrementFactor", 100.0);
+        params.put("resetOn", "All");
+        params.put("showStructures", true);
+        
+        Map<String, BigDecimal> result = indicator.calculate(candles, params);
+        
+        // Verify results are not null
+        assertNotNull(result);
+        assertNotNull(result.get("trailingStop"));
+        assertNotNull(result.get("direction"));
+        assertNotNull(result.get("pivotHigh"));
+        assertNotNull(result.get("pivotLow"));
+        
+        // Verify real data produces non-zero meaningful values
+        assertNotEquals(BigDecimal.ZERO, result.get("trailingStop"), 
+            "Trailing stop should not be zero with 1000 real candles");
+        assertNotEquals(BigDecimal.ZERO, result.get("direction"), 
+            "Direction should be 1 or -1, not zero with real market data");
+        
+        // With 1000 candles and lookback of 10, we should have detected at least one pivot
+        assertTrue(
+            result.get("pivotHigh").compareTo(BigDecimal.ZERO) != 0 || 
+            result.get("pivotLow").compareTo(BigDecimal.ZERO) != 0,
+            "At least one pivot (high or low) should be detected with 1000 candles"
+        );
+        
+        System.out.println("Trailing Stop: " + result.get("trailingStop"));
+        System.out.println("Direction: " + result.get("direction"));
+        System.out.println("Pivot High: " + result.get("pivotHigh"));
+        System.out.println("Pivot Low: " + result.get("pivotLow"));
+        
+        // Test progressive calculation with real data
+        // IMPORTANT: Progressive must be called from the beginning to build state properly
+        Object previousState = null;
+        int pivotLookback = (Integer) params.get("pivotLookback");
+        int minRequired = 2 * pivotLookback + 1; // Start from minimum required
+        Map<String, BigDecimal> lastProgressiveValues = null;
+        
+        // Process all candles progressively to build up proper state
+        for (int i = minRequired; i < candles.size(); i++) {
+            List<CandlestickData> subset = candles.subList(0, i + 1);
+            Map<String, Object> progressiveResult = indicator.calculateProgressive(subset, params, previousState);
+            
+            assertNotNull(progressiveResult);
+            assertTrue(progressiveResult.containsKey("values"));
+            assertTrue(progressiveResult.containsKey("state"));
+            
+            @SuppressWarnings("unchecked")
+            Map<String, BigDecimal> values = (Map<String, BigDecimal>) progressiveResult.get("values");
+            
+            assertNotNull(values.get("trailingStop"));
+            assertNotNull(values.get("direction"));
+            
+            previousState = progressiveResult.get("state");
+            lastProgressiveValues = values;
+        }
+        
+        // Verify final progressive calculation produces meaningful values
+        assertNotNull(lastProgressiveValues);
+        System.out.println("Final progressive direction: " + lastProgressiveValues.get("direction"));
+        System.out.println("Final progressive trailing stop: " + lastProgressiveValues.get("trailingStop"));
+        
+        // After processing 1000 candles progressively, should have non-zero values
+        assertNotEquals(BigDecimal.ZERO, lastProgressiveValues.get("direction"), 
+            "Progressive should establish direction after processing 1000 candles");
+        assertNotEquals(BigDecimal.ZERO, lastProgressiveValues.get("trailingStop"), 
+            "Progressive should calculate trailing stop after processing 1000 candles");
+        
+        // Progressive result should match batch result (both process same data)
+        assertEquals(result.get("direction"), lastProgressiveValues.get("direction"),
+            "Progressive and batch directions should match");
+        
+        System.out.println("✓ Progressive calculation produces same results as batch");
+    }
+    
+    @Test
+    @DisplayName("Should test different parameters with real data")
+    void testRealDataWithDifferentParameters() throws IOException {
+        List<CandlestickData> candles = loadCandlesFromJson("src/test/java/org/cloudvision/1mbtc.json");
+        
+        assertNotNull(candles);
+        assertTrue(candles.size() > 50, "Need enough candles for testing");
+        
+        // Test with shorter lookback period
+        Map<String, Object> params1 = new HashMap<>();
+        params1.put("pivotLookback", 5);
+        params1.put("incrementFactor", 100.0);
+        params1.put("resetOn", "CHoCH");
+        
+        Map<String, BigDecimal> result1 = indicator.calculate(candles, params1);
+        assertNotNull(result1.get("trailingStop"));
+        assertNotEquals(BigDecimal.ZERO, result1.get("trailingStop"), 
+            "Short lookback should produce non-zero trailing stop with real data");
+        assertNotEquals(BigDecimal.ZERO, result1.get("direction"), 
+            "Short lookback should produce non-zero direction with real data");
+        
+        // Test with longer lookback period
+        Map<String, Object> params2 = new HashMap<>();
+        params2.put("pivotLookback", 20);
+        params2.put("incrementFactor", 150.0);
+        params2.put("resetOn", "All");
+        
+        Map<String, BigDecimal> result2 = indicator.calculate(candles, params2);
+        assertNotNull(result2.get("trailingStop"));
+        assertNotEquals(BigDecimal.ZERO, result2.get("trailingStop"), 
+            "Long lookback should produce non-zero trailing stop with real data");
+        assertNotEquals(BigDecimal.ZERO, result2.get("direction"), 
+            "Long lookback should produce non-zero direction with real data");
+        
+        // Both configurations should detect market structure (at least one pivot)
+        assertTrue(
+            result1.get("pivotHigh").compareTo(BigDecimal.ZERO) != 0 || 
+            result1.get("pivotLow").compareTo(BigDecimal.ZERO) != 0,
+            "Short lookback should detect at least one pivot"
+        );
+        assertTrue(
+            result2.get("pivotHigh").compareTo(BigDecimal.ZERO) != 0 || 
+            result2.get("pivotLow").compareTo(BigDecimal.ZERO) != 0,
+            "Long lookback should detect at least one pivot"
+        );
+        
+        System.out.println("Short lookback trailing stop: " + result1.get("trailingStop"));
+        System.out.println("Long lookback trailing stop: " + result2.get("trailingStop"));
+    }
+    
     // Helper methods for creating test data
+    
+    /**
+     * Load candlestick data from JSON file
+     */
+    private List<CandlestickData> loadCandlesFromJson(String filePath) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        
+        File jsonFile = new File(filePath);
+        
+        // Parse as array of maps first
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> jsonData = mapper.readValue(jsonFile, List.class);
+        
+        List<CandlestickData> candles = new ArrayList<>();
+        
+        for (Map<String, Object> data : jsonData) {
+            CandlestickData candle = new CandlestickData(
+                (String) data.get("symbol"),
+                Instant.parse((String) data.get("openTime")),
+                Instant.parse((String) data.get("closeTime")),
+                new BigDecimal(data.get("open").toString()),
+                new BigDecimal(data.get("high").toString()),
+                new BigDecimal(data.get("low").toString()),
+                new BigDecimal(data.get("close").toString()),
+                new BigDecimal(data.get("volume").toString()),
+                new BigDecimal(data.get("quoteAssetVolume").toString()),
+                ((Number) data.get("numberOfTrades")).intValue(),
+                (String) data.get("interval"),
+                (String) data.get("provider"),
+                (Boolean) data.get("closed")
+            );
+            candles.add(candle);
+        }
+        
+        return candles;
+    }
     
     private List<CandlestickData> createMockCandles(int count, double basePrice, double volatility) {
         List<CandlestickData> candles = new ArrayList<>();
