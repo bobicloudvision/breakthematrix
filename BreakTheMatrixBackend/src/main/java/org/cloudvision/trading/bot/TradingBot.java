@@ -285,14 +285,12 @@ public class TradingBot {
 
     /**
      * Enable the bot (analysis mode by default)
+     * Note: Provider connection and kline subscriptions must be set up at application startup
      * @param bootstrapHistorical Whether to bootstrap with historical data first
-     * @param interval Time interval for kline subscriptions and historical data
+     * @param interval Time interval for historical data
      * @param historicalLimit Number of historical candles to fetch (if bootstrapping)
      */
     public void enable(boolean bootstrapHistorical, TimeInterval interval, int historicalLimit) {
-        // Connect to provider first
-        tradingDataService.connectProvider("Binance");
-        
         // Bootstrap with historical data if requested
         if (bootstrapHistorical) {
             System.out.println("📊 Bootstrapping with " + historicalLimit + " historical candles...");
@@ -301,14 +299,7 @@ public class TradingBot {
         
         botEnabled = true;
         System.out.println("🚀 Bot ENABLED - Analysis mode active");
-        
-        // Subscribe to real-time kline data for all strategy symbols
-        for (TradingStrategy strategy : strategies) {
-            for (String symbol : strategy.getSymbols()) {
-                tradingDataService.subscribeToKlines("Binance", symbol, interval);
-                System.out.println("📡 Subscribed to " + symbol + " klines (" + interval.getValue() + ")");
-            }
-        }
+        System.out.println("ℹ️  Bot assumes provider is already connected and subscriptions are set up");
     }
     
     /**

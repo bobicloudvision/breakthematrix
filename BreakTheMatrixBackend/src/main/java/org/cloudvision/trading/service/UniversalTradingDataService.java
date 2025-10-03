@@ -45,6 +45,22 @@ public class UniversalTradingDataService {
     public void subscribeToKlines(String providerName, String symbol, TimeInterval interval) {
         TradingDataProvider provider = providers.get(providerName);
         if (provider != null && provider.isConnected()) {
+            // First, fetch and store historical data so strategies have immediate data
+            if (candlestickHistoryService != null) {
+                try {
+                    System.out.println("📥 Fetching historical data for " + symbol + " before subscribing...");
+                    List<CandlestickData> historicalData = provider.getHistoricalKlines(symbol, interval, 1000);
+                    
+                    if (!historicalData.isEmpty()) {
+                        candlestickHistoryService.addCandlesticks(providerName, symbol, interval.getValue(), historicalData);
+                        System.out.println("✅ Stored " + historicalData.size() + " historical candles for " + symbol);
+                    }
+                } catch (Exception e) {
+                    System.err.println("⚠️ Failed to fetch historical data for " + symbol + ": " + e.getMessage());
+                }
+            }
+            
+            // Then subscribe to real-time updates
             provider.subscribeToKlines(symbol, interval);
         }
     }

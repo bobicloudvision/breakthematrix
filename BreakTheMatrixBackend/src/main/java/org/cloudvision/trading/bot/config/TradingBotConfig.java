@@ -8,7 +8,6 @@ import org.cloudvision.trading.bot.strategy.impl.OrderBlockStrategy;
 import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
 import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.ApplicationContext;
 
@@ -19,8 +18,10 @@ import java.util.List;
 /**
  * Trading Bot Configuration
  * Registers and configures all trading strategies
+ * Note: Infrastructure (connection, subscriptions) is handled by TradingConfig
  */
 @Configuration
+@org.springframework.core.annotation.Order(1) // Run before TradingConfig (which needs strategies)
 public class TradingBotConfig {
 
     @Autowired
@@ -66,6 +67,7 @@ public class TradingBotConfig {
         System.out.println("⚠️  Note: Only ONE strategy can be enabled at a time per account");
         System.out.println("🔧 Enable a strategy: POST /api/bot/strategies/{strategyId}/enable");
         System.out.println("🚀 Start the bot: POST /api/bot/enable");
+        System.out.println("\nℹ️  Market data connection will be established by TradingConfig\n");
     }
     
     /**
