@@ -3,62 +3,116 @@ import { positionsBox } from './helpers/positions';
 class LineRenderer {
     constructor(data) {
         this._data = data;
+        this._cachedGroups = null;
+        this._lastLineCount = 0;
     }
 
     draw(target) {
         target.useBitmapCoordinateSpace(scope => {
             const ctx = scope.context;
+            const hRatio = scope.horizontalPixelRatio;
+            const vRatio = scope.verticalPixelRatio;
 
-            this._data.lines.forEach((line) => {
-                // Skip lines with invalid coordinates
-                if (line.x1 === null || line.x2 === null || line.y1 === null || line.y2 === null) {
-                    return;
-                }
+            // Cache line groups if lines haven't changed
+            if (!this._cachedGroups || this._lastLineCount !== this._data.lines.length) {
+                this._buildLineGroups();
+                this._lastLineCount = this._data.lines.length;
+            }
 
-                const x1 = line.x1 * scope.horizontalPixelRatio;
-                const y1 = line.y1 * scope.verticalPixelRatio;
-                const x2 = line.x2 * scope.horizontalPixelRatio;
-                const y2 = line.y2 * scope.verticalPixelRatio;
-
-                // Draw line
-                ctx.strokeStyle = line.color || '#2196F3';
-                ctx.lineWidth = (line.lineWidth || 1) * scope.horizontalPixelRatio;
+            // Draw lines by style group using cached groups
+            this._cachedGroups.groups.forEach((group) => {
+                ctx.strokeStyle = group.color;
+                ctx.lineWidth = group.lineWidth;
                 
-                // Set line style
-                if (line.lineStyle === 'dashed') {
-                    ctx.setLineDash([5 * scope.horizontalPixelRatio, 5 * scope.horizontalPixelRatio]);
-                } else if (line.lineStyle === 'dotted') {
-                    ctx.setLineDash([2 * scope.horizontalPixelRatio, 2 * scope.horizontalPixelRatio]);
+                // Set line dash pattern once per group
+                if (group.lineStyle === 'dashed') {
+                    ctx.setLineDash([5 * hRatio, 5 * hRatio]);
+                } else if (group.lineStyle === 'dotted') {
+                    ctx.setLineDash([2 * hRatio, 2 * hRatio]);
                 } else {
                     ctx.setLineDash([]);
                 }
                 
+                // Draw all lines in this group in one path
                 ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
+                const lines = group.lines;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    ctx.moveTo(line.x1 * hRatio, line.y1 * vRatio);
+                    ctx.lineTo(line.x2 * hRatio, line.y2 * vRatio);
+                }
                 ctx.stroke();
+            });
 
-                // Draw label if provided
-                if (line.label) {
-                    ctx.fillStyle = line.color || '#2196F3';
-                    ctx.font = `${10 * scope.verticalPixelRatio}px Arial`;
-                    ctx.textBaseline = 'bottom';
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                    ctx.shadowBlur = 2 * scope.verticalPixelRatio;
-                    
-                    // Position label at the start of the line, slightly above
-                    ctx.fillText(
-                        line.label,
-                        x1 + 4 * scope.horizontalPixelRatio,
-                        y1 - 4 * scope.verticalPixelRatio
-                    );
-                    ctx.shadowBlur = 0;
+            // Reset line dash
+            ctx.setLineDash([]);
+
+            // Draw labels if any
+            const labels = this._cachedGroups.labels;
+            if (labels.length > 0) {
+                ctx.font = `${10 * vRatio}px Arial`;
+                ctx.textBaseline = 'bottom';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 2 * vRatio;
+                
+                for (let i = 0; i < labels.length; i++) {
+                    const label = labels[i];
+                    ctx.fillStyle = label.color;
+                    ctx.fillText(label.text, label.x * hRatio, label.y * vRatio);
                 }
                 
-                // Reset line dash
-                ctx.setLineDash([]);
-            });
+                ctx.shadowBlur = 0;
+            }
         });
+    }
+
+    _buildLineGroups() {
+        const lineGroups = new Map();
+        const labels = [];
+        
+        const lines = this._data.lines;
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            const color = line.color || '#2196F3';
+            const lineWidth = line.lineWidth || 1;
+            const lineStyle = line.lineStyle || 'solid';
+            const styleKey = `${color}_${lineWidth}_${lineStyle}`;
+
+            // Group lines by style
+            let group = lineGroups.get(styleKey);
+            if (!group) {
+                group = {
+                    color,
+                    lineWidth,
+                    lineStyle,
+                    lines: []
+                };
+                lineGroups.set(styleKey, group);
+            }
+            
+            group.lines.push({ 
+                x1: line.x1, 
+                y1: line.y1, 
+                x2: line.x2, 
+                y2: line.y2 
+            });
+
+            // Collect labels
+            if (line.label) {
+                labels.push({
+                    text: line.label,
+                    x: line.x1 + 4,
+                    y: line.y1 - 4,
+                    color: color
+                });
+            }
+        }
+
+        this._cachedGroups = {
+            groups: Array.from(lineGroups.values()),
+            labels: labels
+        };
     }
 }
 
@@ -73,7 +127,39 @@ class LinePaneView {
         const timeScale = this._source._chart.timeScale();
         const chartData = this._source._chartData;
         
-        this._lines = this._source._linesData.map((line) => {
+        // Get visible time range for culling
+        const visibleRange = timeScale.getVisibleLogicalRange();
+        let visibleTimeRange = null;
+        
+        if (visibleRange && chartData && chartData.length > 0) {
+            const startIdx = Math.max(0, Math.floor(visibleRange.from));
+            const endIdx = Math.min(chartData.length - 1, Math.ceil(visibleRange.to));
+            
+            if (startIdx < chartData.length && endIdx >= 0) {
+                visibleTimeRange = {
+                    from: chartData[startIdx].time,
+                    to: chartData[endIdx].time
+                };
+            }
+        }
+        
+        // Filter and transform only visible lines
+        this._lines = this._source._linesData
+            .filter((line) => {
+                // Skip lines outside visible time range (culling optimization)
+                if (visibleTimeRange) {
+                    // Line is visible if any part overlaps with visible range
+                    const lineStart = Math.min(line.time1, line.time2);
+                    const lineEnd = Math.max(line.time1, line.time2);
+                    
+                    // Skip if line is completely before or after visible range
+                    if (lineEnd < visibleTimeRange.from || lineStart > visibleTimeRange.to) {
+                        return false;
+                    }
+                }
+                return true;
+            })
+            .map((line) => {
             let x1 = timeScale.timeToCoordinate(line.time1);
             let x2 = timeScale.timeToCoordinate(line.time2);
             const y1 = series.priceToCoordinate(line.price1);
@@ -124,6 +210,10 @@ class LinePaneView {
                 lineStyle: line.lineStyle,
                 label: line.label,
             };
+        })
+        .filter(line => {
+            // Final check: skip lines with null coordinates
+            return line.x1 !== null && line.x2 !== null && line.y1 !== null && line.y2 !== null;
         });
     }
 
