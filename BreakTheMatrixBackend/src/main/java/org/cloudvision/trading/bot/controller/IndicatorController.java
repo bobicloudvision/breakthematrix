@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -471,48 +472,153 @@ public class IndicatorController {
             description = "Successfully retrieved historical data",
             content = @Content(
                 mediaType = "application/json",
-                examples = @ExampleObject(
-                    name = "Historical SMA Data",
-                    value = """
-                    {
-                      "indicatorId": "sma",
-                      "symbol": "BTCUSDT",
-                      "interval": "5m",
-                      "count": 200,
-                      "data": [
+examples = {
+                    @ExampleObject(
+                        name = "Historical SMA Data",
+                        value = """
                         {
-                          "time": 1704067200,
-                          "values": {
-                            "sma": "94500.00"
-                          }
-                        },
-                        {
-                          "time": 1704067500,
-                          "values": {
-                            "sma": "94523.45"
-                          }
-                        },
-                        {
-                          "time": 1704067800,
-                          "values": {
-                            "sma": "94550.12"
+                          "indicatorId": "sma",
+                          "symbol": "BTCUSDT",
+                          "interval": "5m",
+                          "count": 200,
+                          "data": [
+                            {
+                              "time": 1704067200,
+                              "values": {
+                                "sma": "94500.00"
+                              }
+                            },
+                            {
+                              "time": 1704067500,
+                              "values": {
+                                "sma": "94523.45"
+                              }
+                            },
+                            {
+                              "time": 1704067800,
+                              "values": {
+                                "sma": "94550.12"
+                              }
+                            }
+                          ],
+                          "metadata": {
+                            "sma": {
+                              "key": "sma",
+                              "displayName": "SMA(20)",
+                              "visualType": "LINE",
+                              "color": "#2962FF",
+                              "lineWidth": 2,
+                              "separatePane": false,
+                              "paneOrder": 0
+                            }
                           }
                         }
-                      ],
-                      "metadata": {
-                        "sma": {
-                          "key": "sma",
-                          "displayName": "SMA(20)",
-                          "visualType": "LINE",
-                          "color": "#2962FF",
-                          "lineWidth": 2,
-                          "separatePane": false,
-                          "paneOrder": 0
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Order Block Indicator with Shapes",
+                        description = "Optimized response for charting libraries. Shapes are categorized by type (boxes, lines, markers, arrows) for flexible rendering.",
+                        value = """
+                        {
+                          "indicatorId": "orderblock",
+                          "symbol": "BTCUSDT",
+                          "interval": "1m",
+                          "count": 100,
+                          "supportsShapes": true,
+                          "series": {
+                            "marketStructure": [
+                              { "time": 1704067200, "value": "0" },
+                              { "time": 1704067500, "value": "1" },
+                              { "time": 1704067800, "value": "0" }
+                            ],
+                            "volumeStrength": [
+                              { "time": 1704067200, "value": "1.8" },
+                              { "time": 1704067500, "value": "2.1" },
+                              { "time": 1704067800, "value": "1.5" }
+                            ],
+                            "activeBullishOBs": [
+                              { "time": 1704067200, "value": "2" },
+                              { "time": 1704067500, "value": "2" },
+                              { "time": 1704067800, "value": "3" }
+                            ]
+                          },
+                          "shapes": {
+                            "boxes": [
+                              {
+                                "time1": 1704060000,
+                                "time2": 1704067200,
+                                "price1": 50000.0,
+                                "price2": 49500.0,
+                                "backgroundColor": "rgba(22, 148, 0, 0.15)",
+                                "text": "Bullish OB ✓",
+                                "textColor": "rgba(22, 148, 0, 0.8)",
+                                "volumeStrength": 1.8,
+                                "touched": true,
+                                "mitigated": false
+                              },
+                              {
+                                "time1": 1704055000,
+                                "time2": 1704067200,
+                                "price1": 51200.0,
+                                "price2": 50800.0,
+                                "backgroundColor": "rgba(255, 17, 0, 0.15)",
+                                "text": "Bearish OB",
+                                "textColor": "rgba(255, 17, 0, 0.8)",
+                                "volumeStrength": 2.1,
+                                "touched": false,
+                                "mitigated": false
+                              }
+                            ],
+                            "lines": [
+                              {
+                                "time1": 1704060000,
+                                "time2": 1704070000,
+                                "price1": 49800.0,
+                                "price2": 50200.0,
+                                "color": "#2962FF",
+                                "width": 2,
+                                "style": "solid",
+                                "text": "Support Line"
+                              }
+                            ],
+                            "markers": [
+                              {
+                                "time": 1704067200,
+                                "price": 50000.0,
+                                "shape": "circle",
+                                "color": "#26a69a",
+                                "text": "Entry"
+                              }
+                            ]
+                          },
+                          "shapesSummary": {
+                            "boxes": 2,
+                            "lines": 1,
+                            "markers": 1
+                          },
+                          "data": [
+                            {
+                              "time": 1704067200,
+                              "values": {
+                                "marketStructure": "0",
+                                "volumeStrength": "1.8",
+                                "activeBullishOBs": "2"
+                              }
+                            }
+                          ],
+                          "metadata": {
+                            "marketStructure": {
+                              "key": "marketStructure",
+                              "displayName": "Market Structure",
+                              "visualType": "HISTOGRAM",
+                              "separatePane": true,
+                              "paneOrder": 1
+                            }
+                          }
                         }
-                      }
-                    }
-                    """
-                )
+                        """
+                    )
+                }
             )
         ),
         @ApiResponse(
@@ -546,15 +652,145 @@ public class IndicatorController {
                     request.getCount() != null ? request.getCount() : 100
                 );
             
-            // Convert to response format
-            List<Map<String, Object>> data = dataPoints.stream()
-                .map(dp -> {
-                    Map<String, Object> point = new HashMap<>();
-                    point.put("time", dp.getTimestamp().getEpochSecond());
-                    point.put("values", dp.getValues());
-                    return point;
-                })
-                .collect(Collectors.toList());
+            // First, collect all shapes to determine if this is a shape-based indicator
+            Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
+            boolean hasShapes = false;
+            
+            System.out.println("🔍 Collecting shapes from " + dataPoints.size() + " data points");
+            
+            for (IndicatorService.IndicatorDataPoint dp : dataPoints) {
+                if (dp.getAdditionalData() != null) {
+                    // Check for different shape types
+                    Map<String, Object> additionalData = dp.getAdditionalData();
+                    
+                    // Boxes/Rectangles
+                    if (additionalData.containsKey("boxes")) {
+                        hasShapes = true;
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> boxes = (List<Map<String, Object>>) additionalData.get("boxes");
+                        if (boxes != null && !boxes.isEmpty()) {
+                            shapesByType.computeIfAbsent("boxes", k -> new ArrayList<>()).addAll(boxes);
+                        }
+                    }
+                    
+                    // Lines
+                    if (additionalData.containsKey("lines")) {
+                        hasShapes = true;
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> lines = (List<Map<String, Object>>) additionalData.get("lines");
+                        if (lines != null && !lines.isEmpty()) {
+                            shapesByType.computeIfAbsent("lines", k -> new ArrayList<>()).addAll(lines);
+                        }
+                    }
+                    
+                    // Markers/Points
+                    if (additionalData.containsKey("markers")) {
+                        hasShapes = true;
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> markers = (List<Map<String, Object>>) additionalData.get("markers");
+                        if (markers != null && !markers.isEmpty()) {
+                            shapesByType.computeIfAbsent("markers", k -> new ArrayList<>()).addAll(markers);
+                        }
+                    }
+                    
+                    // Arrows
+                    if (additionalData.containsKey("arrows")) {
+                        hasShapes = true;
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> arrows = (List<Map<String, Object>>) additionalData.get("arrows");
+                        if (arrows != null && !arrows.isEmpty()) {
+                            shapesByType.computeIfAbsent("arrows", k -> new ArrayList<>()).addAll(arrows);
+                        }
+                    }
+                }
+            }
+            
+            // Remove duplicates for each shape type
+            Map<String, List<Map<String, Object>>> uniqueShapesByType = new HashMap<>();
+            for (Map.Entry<String, List<Map<String, Object>>> entry : shapesByType.entrySet()) {
+                String shapeType = entry.getKey();
+                List<Map<String, Object>> shapes = entry.getValue();
+                
+                // Different deduplication logic based on shape type
+                List<Map<String, Object>> uniqueShapes;
+                if ("boxes".equals(shapeType)) {
+                    // Deduplicate boxes by time1, price1, price2
+                    uniqueShapes = shapes.stream()
+                        .collect(Collectors.toMap(
+                            box -> box.get("time1") + "_" + box.get("price1") + "_" + box.get("price2"),
+                            box -> box,
+                            (existing, replacement) -> replacement // Keep latest
+                        ))
+                        .values()
+                        .stream()
+                        .collect(Collectors.toList());
+                } else if ("lines".equals(shapeType)) {
+                    // Deduplicate lines by time1, time2, price1, price2
+                    uniqueShapes = shapes.stream()
+                        .collect(Collectors.toMap(
+                            line -> line.get("time1") + "_" + line.get("time2") + "_" + 
+                                   line.get("price1") + "_" + line.get("price2"),
+                            line -> line,
+                            (existing, replacement) -> replacement
+                        ))
+                        .values()
+                        .stream()
+                        .collect(Collectors.toList());
+                } else if ("markers".equals(shapeType)) {
+                    // Deduplicate markers by time and price
+                    uniqueShapes = shapes.stream()
+                        .collect(Collectors.toMap(
+                            marker -> marker.get("time") + "_" + marker.get("price"),
+                            marker -> marker,
+                            (existing, replacement) -> replacement
+                        ))
+                        .values()
+                        .stream()
+                        .collect(Collectors.toList());
+                } else {
+                    // Default: keep all
+                    uniqueShapes = new ArrayList<>(shapes);
+                }
+                
+                uniqueShapesByType.put(shapeType, uniqueShapes);
+            }
+            
+            System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
+            System.out.println("🔍 Has shapes: " + hasShapes);
+            
+            // Convert to response format - only for non-shape indicators
+            List<Map<String, Object>> data = new ArrayList<>();
+            if (!hasShapes) {
+                data = dataPoints.stream()
+                    .map(dp -> {
+                        Map<String, Object> point = new HashMap<>();
+                        point.put("time", dp.getTimestamp().getEpochSecond());
+                        point.put("values", dp.getValues());
+                        return point;
+                    })
+                    .collect(Collectors.toList());
+            }
+            
+            // Create series-ready format for Lightweight Charts
+            // Only generate series for indicators that don't return shapes
+            Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
+            if (!hasShapes && !dataPoints.isEmpty()) {
+                // Get all value keys from first data point
+                Map<String, BigDecimal> firstValues = dataPoints.get(0).getValues();
+                
+                for (String key : firstValues.keySet()) {
+                    List<Map<String, Object>> seriesPoints = dataPoints.stream()
+                        .map(dp -> {
+                            Map<String, Object> seriesPoint = new HashMap<>();
+                            seriesPoint.put("time", dp.getTimestamp().getEpochSecond());
+                            BigDecimal value = dp.getValues().get(key);
+                            seriesPoint.put("value", value != null ? value : BigDecimal.ZERO);
+                            return seriesPoint;
+                        })
+                        .collect(Collectors.toList());
+                    seriesData.put(key, seriesPoints);
+                }
+            }
             
             // Get visualization metadata
             Map<String, IndicatorMetadata> metadata = indicatorService.getVisualizationMetadata(
@@ -562,14 +798,32 @@ public class IndicatorController {
                 request.getParams() != null ? request.getParams() : new HashMap<>()
             );
             
-            return ResponseEntity.ok(Map.of(
-                "indicatorId", id,
-                "symbol", request.getSymbol(),
-                "interval", request.getInterval(),
-                "count", data.size(),
-                "data", data,
-                "metadata", metadata
-            ));
+            Map<String, Object> response = new HashMap<>();
+            response.put("indicatorId", id);
+            response.put("symbol", request.getSymbol());
+            response.put("interval", request.getInterval());
+            response.put("metadata", metadata);
+            
+            // For shape-based indicators (like order blocks), only include shapes
+            if (hasShapes && !uniqueShapesByType.isEmpty()) {
+                response.put("count", dataPoints.size());
+                response.put("supportsShapes", true);
+                response.put("shapes", uniqueShapesByType);
+                
+                // Add shape type summary
+                Map<String, Integer> shapeSummary = new HashMap<>();
+                for (Map.Entry<String, List<Map<String, Object>>> entry : uniqueShapesByType.entrySet()) {
+                    shapeSummary.put(entry.getKey(), entry.getValue().size());
+                }
+                response.put("shapesSummary", shapeSummary);
+            } else {
+                // For standard indicators (like SMA, RSI, etc.), include data and series
+                response.put("count", data.size());
+                response.put("data", data); // Original format (backward compatibility)
+                response.put("series", seriesData); // Lightweight Charts optimized format
+            }
+            
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                 "error", e.getMessage()

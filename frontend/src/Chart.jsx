@@ -208,11 +208,14 @@ export const ChartComponent = props => {
 
         console.log('Enabled indicators changed:', enabledIndicators);
 
-        // Remove all existing indicator series
+        // Remove all existing indicator series and boxes
         seriesManagerRef.current.removeSeriesByPrefix('indicator_');
+        seriesManagerRef.current.removeAllBoxes();
 
         // Fetch and add new indicator series
         const fetchAndAddIndicators = async () => {
+            const allBoxes = []; // Collect all boxes from all indicators
+            
             for (const indicator of enabledIndicators) {
                 try {
                     const instanceId = indicator.instanceId || `${indicator.id}_${Date.now()}`;
@@ -235,21 +238,43 @@ export const ChartComponent = props => {
                     }
                     
                     const apiResponse = await res.json();
-                    console.log(`Indicator ${instanceId} response received`);
+                    console.log(`Indicator ${instanceId} response received:`, {
+                        hasMetadata: !!apiResponse.metadata,
+                        hasShapes: !!apiResponse.shapes,
+                        boxCount: apiResponse.shapes?.boxes?.length || 0
+                    });
                     
-                    // Use series manager to add the indicator with unique instance key
-                    const indicatorKey = `indicator_${instanceId}`;
-                    const params = indicator.params?.params || {};
+                    // Add series data if present
+                    if (apiResponse.metadata || apiResponse.data) {
+                        const indicatorKey = `indicator_${instanceId}`;
+                        const params = indicator.params?.params || {};
+                        
+                        seriesManagerRef.current.addFromApiResponse(
+                            indicatorKey,
+                            apiResponse,
+                            params
+                        );
+                    }
                     
-                    seriesManagerRef.current.addFromApiResponse(
-                        indicatorKey,
-                        apiResponse,
-                        params
-                    );
+                    // Collect boxes from shapes if present
+                    if (apiResponse.shapes?.boxes && Array.isArray(apiResponse.shapes.boxes)) {
+                        console.log(`Adding ${apiResponse.shapes.boxes.length} boxes from indicator ${instanceId}`);
+                        allBoxes.push(...apiResponse.shapes.boxes);
+                    }
 
                 } catch (error) {
                     console.error(`❌ Error adding indicator ${indicator.instanceId || indicator.id}:`, error);
                 }
+            }
+            
+            // Add all collected boxes at once
+            if (allBoxes.length > 0) {
+                console.log(`Adding ${allBoxes.length} total boxes from all indicators`);
+                setTimeout(() => {
+                    if (seriesManagerRef.current && data && data.length > 0) {
+                        seriesManagerRef.current.addBoxes(allBoxes, BoxPrimitive);
+                    }
+                }, 200); // Small delay to ensure series are rendered first
             }
         };
 

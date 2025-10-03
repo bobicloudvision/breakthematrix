@@ -440,8 +440,33 @@ export class ChartSeriesManager {
     /**
      * Add series from API response format
      * Handles the standard API response with metadata and data
+     * For indicators with multiple series, adds all series from metadata
      */
     addFromApiResponse(id, apiResponse, additionalParams = {}) {
+        // Check if this is a multi-series indicator (has multiple entries in metadata)
+        if (apiResponse.metadata && typeof apiResponse.metadata === 'object') {
+            const metadataKeys = Object.keys(apiResponse.metadata);
+            
+            if (metadataKeys.length > 1) {
+                // Multi-series indicator - add each series separately
+                console.log(`Multi-series indicator detected: ${metadataKeys.length} series`);
+                let successCount = 0;
+                
+                metadataKeys.forEach(seriesKey => {
+                    const seriesMetadata = apiResponse.metadata[seriesKey];
+                    const seriesData = apiResponse.data || [];
+                    const seriesId = `${id}_${seriesKey}`;
+                    
+                    console.log(`Adding sub-series: ${seriesId}`);
+                    const success = this.addSeries(seriesId, seriesData, seriesMetadata, additionalParams);
+                    if (success) successCount++;
+                });
+                
+                return successCount > 0;
+            }
+        }
+        
+        // Single series indicator - use original logic
         const data = apiResponse.data || apiResponse;
         
         // For indicators, the id might be 'indicator_sma' but metadata key is 'sma'
