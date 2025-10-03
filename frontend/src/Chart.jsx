@@ -212,9 +212,9 @@ export const ChartComponent = props => {
 
         console.log('Enabled indicators changed:', enabledIndicators);
 
-        // Remove all existing indicator series and boxes
+        // Remove all existing indicator series and shapes (boxes, lines, markers)
         seriesManagerRef.current.removeSeriesByPrefix('indicator_');
-        seriesManagerRef.current.removeAllBoxes();
+        seriesManagerRef.current.clearAllShapes();
 
         // Fetch and add new indicator series (only visible ones)
         const fetchAndAddIndicators = async () => {
@@ -249,10 +249,13 @@ export const ChartComponent = props => {
                     console.log(`Indicator ${instanceId} response received:`, {
                         hasMetadata: !!apiResponse.metadata,
                         hasShapes: !!apiResponse.shapes,
-                        boxCount: apiResponse.shapes?.boxes?.length || 0
+                        boxCount: apiResponse.shapes?.boxes?.length || 0,
+                        lineCount: apiResponse.shapes?.lines?.length || 0,
+                        markerCount: apiResponse.shapes?.markers?.length || 0
                     });
                     
-                    // Add series data if present
+                    // Add series data and shapes (lines, markers) if present
+                    // Note: addFromApiResponse automatically handles lines and markers via LinePrimitive
                     if (apiResponse.metadata || apiResponse.data) {
                         const indicatorKey = `indicator_${instanceId}`;
                         const params = indicator.params?.params || {};
@@ -265,7 +268,7 @@ export const ChartComponent = props => {
                         );
                     }
                     
-                    // Collect boxes from shapes if present
+                    // Collect boxes from shapes if present (boxes are batched for better performance)
                     if (apiResponse.shapes?.boxes && Array.isArray(apiResponse.shapes.boxes)) {
                         console.log(`Adding ${apiResponse.shapes.boxes.length} boxes from indicator ${instanceId}`);
                         
