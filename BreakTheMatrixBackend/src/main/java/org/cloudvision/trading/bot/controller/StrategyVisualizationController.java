@@ -503,8 +503,8 @@ public class StrategyVisualizationController {
             // Remove duplicates by timestamp and sort
             Map<Long, CandlestickData> uniqueCandlesticks = new java.util.LinkedHashMap<>();
             candlesticks.stream()
-                .sorted((c1, c2) -> c1.getCloseTime().compareTo(c2.getCloseTime()))
-                .forEach(c -> uniqueCandlesticks.put(c.getCloseTime().getEpochSecond(), c));
+                .sorted((c1, c2) -> c1.getOpenTime().compareTo(c2.getOpenTime()))
+                .forEach(c -> uniqueCandlesticks.put(c.getOpenTime().getEpochSecond(), c));
             
             List<CandlestickData> cleanedCandlesticks = new java.util.ArrayList<>(uniqueCandlesticks.values());
             
@@ -514,7 +514,7 @@ public class StrategyVisualizationController {
                             c.getLow() != null && c.getClose() != null)
                 .map(c -> {
                     Map<String, Object> candle = new java.util.HashMap<>();
-                    candle.put("time", c.getCloseTime().getEpochSecond());
+                    candle.put("time", c.getOpenTime().getEpochSecond());
                     candle.put("open", c.getOpen());
                     candle.put("high", c.getHigh());
                     candle.put("low", c.getLow());
@@ -528,7 +528,7 @@ public class StrategyVisualizationController {
                 .filter(c -> c.getVolume() != null)
                 .map(c -> {
                     Map<String, Object> vol = new java.util.HashMap<>();
-                    vol.put("time", c.getCloseTime().getEpochSecond());
+                    vol.put("time", c.getOpenTime().getEpochSecond());
                     vol.put("value", c.getVolume());
                     // Color based on price movement (green for up candle, red for down)
                     vol.put("color", c.getClose().compareTo(c.getOpen()) >= 0 ? 
@@ -573,8 +573,8 @@ public class StrategyVisualizationController {
             response.put("metadata", Map.of(
                 "dataPoints", cleanedCandlesticks.size(),
                 "timeRange", Map.of(
-                    "from", cleanedCandlesticks.get(0).getCloseTime().getEpochSecond(),
-                    "to", cleanedCandlesticks.get(cleanedCandlesticks.size() - 1).getCloseTime().getEpochSecond()
+                    "from", cleanedCandlesticks.get(0).getOpenTime().getEpochSecond(),
+                    "to", cleanedCandlesticks.get(cleanedCandlesticks.size() - 1).getOpenTime().getEpochSecond()
                 )
             ));
             

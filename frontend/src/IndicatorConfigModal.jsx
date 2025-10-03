@@ -179,7 +179,7 @@ export function IndicatorConfigModal({
                     <label className="text-sm text-white/70 mb-1.5 block">Data Points</label>
                     <input
                       type="number"
-                      value={params.count || 200}
+                      value={params.count || 5000}
                       onChange={(e) => handleParamChange('count', parseInt(e.target.value))}
                       className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
                     />

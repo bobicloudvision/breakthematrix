@@ -165,7 +165,7 @@ public class IndicatorService {
             }
             
             dataPoints.add(new IndicatorDataPoint(
-                currentCandle.getCloseTime(),
+                currentCandle.getOpenTime(),
                 values,
                 currentCandle,
                 additionalData

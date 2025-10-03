@@ -391,7 +391,7 @@ public class IndicatorController {
      *   "provider": "Binance",
      *   "symbol": "BTCUSDT",
      *   "interval": "1m",
-     *   "count": 100,
+     *   "count": 5000,
      *   "params": {
      *     "period": 20
      *   }
@@ -423,7 +423,7 @@ public class IndicatorController {
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "5m",
-                      "count": 200,
+                      "count": 5000,
                       "params": {
                         "period": 20,
                         "color": "#2962FF",
@@ -440,7 +440,7 @@ public class IndicatorController {
                       "provider": "Binance",
                       "symbol": "ETHUSDT",
                       "interval": "1h",
-                      "count": 100,
+                      "count": 5000,
                       "params": {
                         "period": 50,
                         "source": "close"
@@ -456,7 +456,7 @@ public class IndicatorController {
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "1m",
-                      "count": 500,
+                      "count": 5000,
                       "params": {
                         "bullishColor": "#00C853",
                         "bearishColor": "#D50000"
@@ -481,7 +481,7 @@ examples = {
                           "indicatorId": "sma",
                           "symbol": "BTCUSDT",
                           "interval": "5m",
-                          "count": 200,
+                          "count": 5000,
                           "data": [
                             {
                               "time": 1704067200,
@@ -531,7 +531,7 @@ examples = {
                           "indicatorId": "volume",
                           "symbol": "BTCUSDT",
                           "interval": "1m",
-                          "count": 100,
+                          "count": 5000,
                           "data": [
                             {
                               "time": 1704067200,
@@ -583,7 +583,7 @@ examples = {
                           "indicatorId": "orderblock",
                           "symbol": "BTCUSDT",
                           "interval": "1m",
-                          "count": 100,
+                          "count": 5000,
                           "supportsShapes": true,
                           "series": {
                             "marketStructure": [
@@ -709,7 +709,7 @@ examples = {
                     request.getSymbol(),
                     request.getInterval(),
                     request.getParams() != null ? request.getParams() : new HashMap<>(),
-                    request.getCount() != null ? request.getCount() : 100
+                    request.getCount() != null ? request.getCount() : 5000
                 );
             
             // Collect all shapes using ShapeRegistry (dynamic, no hardcoded types)

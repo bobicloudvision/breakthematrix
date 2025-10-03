@@ -51,7 +51,7 @@ export function IndicatorsTab() {
       provider: localStorage.getItem('tradingProvider') || 'Binance',
       symbol: localStorage.getItem('tradingSymbol') || 'BTCUSDT',
       interval: localStorage.getItem('tradingInterval') || '5m',
-      count: 200,
+      count: 5000,
       params: {}
     };
   };
