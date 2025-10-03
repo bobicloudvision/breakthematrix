@@ -12,6 +12,7 @@ import {
 } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { BoxPrimitive } from './BoxPrimitive';
+import { LinePrimitive } from './LinePrimitive';
 import { ChartSeriesManager } from './ChartSeriesManager';
 
 // Global variable for default zoom level (last N candles)
@@ -256,7 +257,8 @@ export const ChartComponent = props => {
                         seriesManagerRef.current.addFromApiResponse(
                             indicatorKey,
                             apiResponse,
-                            params
+                            params,
+                            LinePrimitive
                         );
                     }
                     

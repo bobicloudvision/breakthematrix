@@ -1,15 +1,15 @@
 import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, CandlestickSeries, LineStyle } from 'lightweight-charts';
 
 /**
- * Centralized manager for adding and managing chart series and boxes
- * Handles indicators, strategy data, and box primitives
+ * Centralized manager for adding and managing chart series, boxes, lines, and markers
+ * Handles indicators, strategy data, and shape primitives
  * 
  * Example Usage:
  * 
- * // For Indicators:
+ * // For Indicators (with automatic shapes support):
  * const response = await fetch('/api/indicators/sma/historical', {...});
  * const data = await response.json();
- * seriesManager.addFromApiResponse('indicator_sma', data, { color: '#2962FF' });
+ * seriesManager.addFromApiResponse('indicator_sma', data, { color: '#2962FF' }, LinePrimitive);
  * 
  * // For Strategies:
  * seriesManager.addSeries('strategy_signals', signalsData, {
@@ -20,6 +20,18 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  * // For Boxes:
  * seriesManager.addBoxes(boxes, BoxPrimitive);
  * seriesManager.removeAllBoxes();
+ * 
+ * // For Lines/Trendlines:
+ * seriesManager.addLines(lines, LinePrimitive);
+ * seriesManager.removeAllLines();
+ * 
+ * // For Markers:
+ * seriesManager.addShapeMarkers('myMarkers', markers);
+ * seriesManager.removeShapeMarkers('myMarkers');
+ * 
+ * // For Shapes (markers and lines together):
+ * seriesManager.addShapesFromApiResponse('indicator_srbreaks', shapes, LinePrimitive);
+ * seriesManager.clearAllShapes();
  * 
  * // Remove by prefix:
  * seriesManager.removeSeriesByPrefix('indicator_'); // Remove all indicators
@@ -32,6 +44,8 @@ export class ChartSeriesManager {
         this.chartData = chartData;
         this.seriesMap = new Map(); // Track all series by key
         this.boxPrimitives = []; // Track box primitives
+        this.linePrimitives = []; // Track line primitives
+        this.markerSets = new Map(); // Track marker sets by ID
     }
 
     /**
@@ -439,10 +453,19 @@ export class ChartSeriesManager {
 
     /**
      * Add series from API response format
-     * Handles the standard API response with metadata and data
+     * Handles the standard API response with metadata, data, and shapes
      * For indicators with multiple series, adds all series from metadata
+     * Also handles shapes (markers and lines) if present
+     * @param {string} id - Unique identifier for the indicator
+     * @param {Object} apiResponse - API response with metadata, data, and optionally shapes
+     * @param {Object} additionalParams - Additional parameters
+     * @param {Object} LinePrimitiveClass - Optional LinePrimitive class for rendering lines
+     * @returns {boolean|Object} - Success status or object with series/shapes success status
      */
-    addFromApiResponse(id, apiResponse, additionalParams = {}) {
+    addFromApiResponse(id, apiResponse, additionalParams = {}, LinePrimitiveClass = null) {
+        let seriesAdded = false;
+        let shapesAdded = { markers: false, lines: false };
+        
         // Check if this is a multi-series indicator (has multiple entries in metadata)
         if (apiResponse.metadata && typeof apiResponse.metadata === 'object') {
             const metadataKeys = Object.keys(apiResponse.metadata);
@@ -462,32 +485,53 @@ export class ChartSeriesManager {
                     if (success) successCount++;
                 });
                 
-                return successCount > 0;
+                seriesAdded = successCount > 0;
+            } else {
+                // Single series indicator - use original logic
+                const data = apiResponse.data || apiResponse;
+                
+                // For indicators, the id might be 'indicator_sma' but metadata key is 'sma'
+                // Try to find the metadata by looking for the base id
+                let metadata = apiResponse.metadata?.[id] || {};
+                
+                // If not found, try to find by removing 'indicator_' prefix
+                if (Object.keys(metadata).length === 0 && id.startsWith('indicator_')) {
+                    const baseId = id.replace('indicator_', '');
+                    metadata = apiResponse.metadata?.[baseId] || {};
+                }
+                
+                // If still not found, try to get the first metadata entry
+                if (Object.keys(metadata).length === 0 && apiResponse.metadata) {
+                    const firstKey = Object.keys(apiResponse.metadata)[0];
+                    if (firstKey) {
+                        metadata = apiResponse.metadata[firstKey];
+                    }
+                }
+                
+                seriesAdded = this.addSeries(id, data, metadata, additionalParams);
             }
+        } else {
+            // No metadata, just add data as-is
+            const data = apiResponse.data || apiResponse;
+            seriesAdded = this.addSeries(id, data, {}, additionalParams);
         }
         
-        // Single series indicator - use original logic
-        const data = apiResponse.data || apiResponse;
-        
-        // For indicators, the id might be 'indicator_sma' but metadata key is 'sma'
-        // Try to find the metadata by looking for the base id
-        let metadata = apiResponse.metadata?.[id] || {};
-        
-        // If not found, try to find by removing 'indicator_' prefix
-        if (Object.keys(metadata).length === 0 && id.startsWith('indicator_')) {
-            const baseId = id.replace('indicator_', '');
-            metadata = apiResponse.metadata?.[baseId] || {};
+        // Handle shapes if present
+        if (apiResponse.shapes && LinePrimitiveClass) {
+            shapesAdded = this.addShapesFromApiResponse(id, apiResponse.shapes, LinePrimitiveClass);
+        } else if (apiResponse.shapes && !LinePrimitiveClass) {
+            console.warn('Shapes found in API response but LinePrimitiveClass not provided');
         }
         
-        // If still not found, try to get the first metadata entry
-        if (Object.keys(metadata).length === 0 && apiResponse.metadata) {
-            const firstKey = Object.keys(apiResponse.metadata)[0];
-            if (firstKey) {
-                metadata = apiResponse.metadata[firstKey];
-            }
+        // Return combined result if shapes were found, otherwise just series status
+        if (apiResponse.shapes) {
+            return {
+                series: seriesAdded,
+                shapes: shapesAdded
+            };
         }
         
-        return this.addSeries(id, data, metadata, additionalParams);
+        return seriesAdded;
     }
 
     /**
@@ -646,6 +690,249 @@ export class ChartSeriesManager {
     updateBoxes(boxes, BoxPrimitiveClass) {
         this.removeAllBoxes();
         return this.addBoxes(boxes, BoxPrimitiveClass);
+    }
+
+    /**
+     * Add lines/trendlines to the chart using primitives
+     * Requires LinePrimitive class to be imported
+     * @param {Array} lines - Array of line objects with {time1, time2, price1, price2, color, lineWidth, lineStyle, label}
+     * @param {Object} LinePrimitiveClass - The LinePrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    addLines(lines, LinePrimitiveClass) {
+        console.log('ChartSeriesManager.addLines called:', { linesCount: lines.length });
+        
+        if (!this.mainSeries) {
+            console.error('Cannot add lines: mainSeries not set');
+            return false;
+        }
+        
+        if (!lines || !Array.isArray(lines) || lines.length === 0) {
+            console.log('No lines to add');
+            return false;
+        }
+
+        try {
+            // Create new line primitive with all lines
+            const linePrimitive = new LinePrimitiveClass(
+                this.chart, 
+                this.mainSeries, 
+                lines, 
+                this.chartData
+            );
+            this.mainSeries.attachPrimitive(linePrimitive);
+            this.linePrimitives.push(linePrimitive);
+            
+            console.log(`✅ Line primitive attached with ${lines.length} lines`);
+            
+            // Request animation frame to ensure chart is fully rendered
+            requestAnimationFrame(() => {
+                linePrimitive.updateAllViews();
+                console.log('Line primitive updateAllViews() called after RAF');
+                
+                // Force chart redraw
+                this.chart.timeScale().applyOptions({});
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error creating line primitive:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Remove all lines from the chart
+     */
+    removeAllLines() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        this.linePrimitives.forEach(primitive => {
+            try {
+                this.mainSeries.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn('Error detaching line primitive:', e);
+            }
+        });
+        
+        this.linePrimitives = [];
+        console.log('All line primitives removed');
+    }
+
+    /**
+     * Update lines with new data
+     * @param {Array} lines - New array of lines
+     * @param {Object} LinePrimitiveClass - The LinePrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    updateLines(lines, LinePrimitiveClass) {
+        this.removeAllLines();
+        return this.addLines(lines, LinePrimitiveClass);
+    }
+
+    /**
+     * Add markers from shapes array
+     * These are different from series markers - they're placed at specific price/time coordinates
+     * @param {string} id - Unique identifier for this marker set
+     * @param {Array} markers - Array of marker objects with {shape, color, size, price, time, position, text}
+     * @returns {boolean} - Success status
+     */
+    addShapeMarkers(id, markers) {
+        console.log('ChartSeriesManager.addShapeMarkers called:', { id, markersCount: markers.length });
+        
+        if (!this.mainSeries) {
+            console.error('Cannot add markers: mainSeries not set');
+            return false;
+        }
+        
+        if (!markers || !Array.isArray(markers) || markers.length === 0) {
+            console.log('No markers to add');
+            return false;
+        }
+
+        try {
+            // Transform markers to lightweight-charts format
+            const chartMarkers = markers.map(marker => {
+                // Map shape to lightweight-charts marker shape
+                let shape = 'circle';
+                if (marker.shape === 'square') {
+                    shape = 'square';
+                } else if (marker.shape === 'triangle' || marker.shape === 'arrow') {
+                    // Convert position to determine arrow direction
+                    if (marker.position === 'above' || marker.position === 'aboveBar') {
+                        shape = 'arrowDown';
+                    } else {
+                        shape = 'arrowUp';
+                    }
+                }
+
+                // Map position
+                let position = 'inBar';
+                if (marker.position === 'above' || marker.position === 'aboveBar') {
+                    position = 'aboveBar';
+                } else if (marker.position === 'below' || marker.position === 'belowBar') {
+                    position = 'belowBar';
+                }
+
+                return {
+                    time: marker.time,
+                    position: position,
+                    color: marker.color || '#2196F3',
+                    shape: shape,
+                    text: marker.text || '',
+                    size: marker.size || 1
+                };
+            }).sort((a, b) => a.time - b.time);
+
+            // Store markers for this ID
+            this.markerSets.set(id, chartMarkers);
+
+            // Merge all marker sets and apply to series
+            this._applyAllMarkers();
+
+            console.log(`✅ Added ${chartMarkers.length} markers with ID: ${id}`);
+            return true;
+        } catch (error) {
+            console.error('Error adding shape markers:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Remove markers by ID
+     */
+    removeShapeMarkers(id) {
+        if (!this.markerSets.has(id)) {
+            return false;
+        }
+
+        this.markerSets.delete(id);
+        this._applyAllMarkers();
+        console.log(`Removed marker set: ${id}`);
+        return true;
+    }
+
+    /**
+     * Remove all shape markers
+     */
+    removeAllShapeMarkers() {
+        this.markerSets.clear();
+        if (this.mainSeries) {
+            this.mainSeries.setMarkers([]);
+        }
+        console.log('All shape markers removed');
+    }
+
+    /**
+     * Apply all marker sets to the main series
+     * @private
+     */
+    _applyAllMarkers() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        // Merge all marker sets
+        const allMarkers = [];
+        this.markerSets.forEach((markers, id) => {
+            allMarkers.push(...markers);
+        });
+
+        // Sort by time
+        allMarkers.sort((a, b) => a.time - b.time);
+
+        // Apply to series
+        this.mainSeries.setMarkers(allMarkers);
+        console.log(`Applied ${allMarkers.length} total markers from ${this.markerSets.size} sets`);
+    }
+
+    /**
+     * Add shapes from API response (markers and lines)
+     * @param {string} id - Unique identifier for these shapes
+     * @param {Object} shapes - Shapes object with markers and lines arrays
+     * @param {Object} LinePrimitiveClass - The LinePrimitive class constructor
+     * @returns {Object} - Success status for markers and lines
+     */
+    addShapesFromApiResponse(id, shapes, LinePrimitiveClass) {
+        console.log('ChartSeriesManager.addShapesFromApiResponse called:', { id, shapes });
+        
+        const result = {
+            markers: false,
+            lines: false
+        };
+
+        // Add markers if present
+        if (shapes.markers && Array.isArray(shapes.markers) && shapes.markers.length > 0) {
+            result.markers = this.addShapeMarkers(`${id}_markers`, shapes.markers);
+        }
+
+        // Add lines if present
+        if (shapes.lines && Array.isArray(shapes.lines) && shapes.lines.length > 0) {
+            result.lines = this.addLines(shapes.lines, LinePrimitiveClass);
+        }
+
+        return result;
+    }
+
+    /**
+     * Remove shapes by ID (both markers and lines with that prefix)
+     */
+    removeShapes(id) {
+        this.removeShapeMarkers(`${id}_markers`);
+        // Note: Lines are currently all removed together via removeAllLines()
+        // In the future, we could track lines by ID for granular removal
+    }
+
+    /**
+     * Clear all shapes (markers, lines, and boxes)
+     */
+    clearAllShapes() {
+        this.removeAllShapeMarkers();
+        this.removeAllLines();
+        this.removeAllBoxes();
+        console.log('Cleared all shapes');
     }
 }
 
