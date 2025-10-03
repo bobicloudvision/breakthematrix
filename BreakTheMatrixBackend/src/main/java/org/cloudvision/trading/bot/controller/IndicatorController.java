@@ -450,7 +450,7 @@ public class IndicatorController {
                 ),
                 @ExampleObject(
                     name = "Volume - 500 points",
-                    description = "Get 500 data points of volume for BTCUSDT 1-minute chart",
+                    description = "Get 500 data points of volume for BTCUSDT 1-minute chart with custom colors",
                     value = """
                     {
                       "provider": "Binance",
@@ -458,8 +458,8 @@ public class IndicatorController {
                       "interval": "1m",
                       "count": 500,
                       "params": {
-                        "bullishColor": "#26a69a",
-                        "bearishColor": "#ef5350"
+                        "bullishColor": "#00C853",
+                        "bearishColor": "#D50000"
                       }
                     }
                     """
@@ -502,6 +502,13 @@ examples = {
                               }
                             }
                           ],
+                          "series": {
+                            "sma": [
+                              { "time": 1704067200, "value": "94500.00" },
+                              { "time": 1704067500, "value": "94523.45" },
+                              { "time": 1704067800, "value": "94550.12" }
+                            ]
+                          },
                           "metadata": {
                             "sma": {
                               "key": "sma",
@@ -511,6 +518,58 @@ examples = {
                               "lineWidth": 2,
                               "separatePane": false,
                               "paneOrder": 0
+                            }
+                          }
+                        }
+                        """
+                    ),
+                    @ExampleObject(
+                        name = "Volume with Color-Coded Bars",
+                        description = "Volume indicator returns color per bar based on candle direction (bullish/bearish)",
+                        value = """
+                        {
+                          "indicatorId": "volume",
+                          "symbol": "BTCUSDT",
+                          "interval": "1m",
+                          "count": 100,
+                          "data": [
+                            {
+                              "time": 1704067200,
+                              "values": {
+                                "volume": "1234.56"
+                              },
+                              "color": "#26a69a"
+                            },
+                            {
+                              "time": 1704067260,
+                              "values": {
+                                "volume": "987.65"
+                              },
+                              "color": "#ef5350"
+                            },
+                            {
+                              "time": 1704067320,
+                              "values": {
+                                "volume": "1567.89"
+                              },
+                              "color": "#26a69a"
+                            }
+                          ],
+                          "series": {
+                            "volume": [
+                              { "time": 1704067200, "value": "1234.56", "color": "#26a69a" },
+                              { "time": 1704067260, "value": "987.65", "color": "#ef5350" },
+                              { "time": 1704067320, "value": "1567.89", "color": "#26a69a" }
+                            ]
+                          },
+                          "metadata": {
+                            "volume": {
+                              "key": "volume",
+                              "displayName": "Volume",
+                              "visualType": "HISTOGRAM",
+                              "color": "#26a69a",
+                              "separatePane": true,
+                              "paneOrder": 1
                             }
                           }
                         }
@@ -700,6 +759,12 @@ examples = {
                         Map<String, Object> point = new HashMap<>();
                         point.put("time", dp.getTimestamp().getEpochSecond());
                         point.put("values", dp.getValues());
+                        
+                        // Include any additional data from the indicator (colors, etc.)
+                        if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
+                            point.putAll(dp.getAdditionalData());
+                        }
+                        
                         return point;
                     })
                     .collect(Collectors.toList());
@@ -719,6 +784,12 @@ examples = {
                             seriesPoint.put("time", dp.getTimestamp().getEpochSecond());
                             BigDecimal value = dp.getValues().get(key);
                             seriesPoint.put("value", value != null ? value : BigDecimal.ZERO);
+                            
+                            // Include any additional data from the indicator (colors, etc.)
+                            if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
+                                seriesPoint.putAll(dp.getAdditionalData());
+                            }
+                            
                             return seriesPoint;
                         })
                         .collect(Collectors.toList());

@@ -67,6 +67,38 @@ public class VolumeIndicator extends AbstractIndicator {
         return result;
     }
     
+    /**
+     * Progressive calculation that returns color information per data point
+     */
+    public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
+                                                     Map<String, Object> params, 
+                                                     Object previousState) {
+        if (candles == null || candles.isEmpty()) {
+            return Map.of("values", Map.of("volume", BigDecimal.ZERO));
+        }
+        
+        params = mergeWithDefaults(params);
+        CandlestickData lastCandle = candles.get(candles.size() - 1);
+        
+        // Get color parameters
+        String bullishColor = getStringParameter(params, "bullishColor", "#26a69a");
+        String bearishColor = getStringParameter(params, "bearishColor", "#ef5350");
+        
+        // Determine color based on candle direction
+        String color = getVolumeColor(lastCandle, bullishColor, bearishColor);
+        
+        // Return values and color
+        Map<String, BigDecimal> values = new HashMap<>();
+        values.put("volume", lastCandle.getVolume());
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("values", values);
+        result.put("color", color);
+        result.put("state", null); // No state needed
+        
+        return result;
+    }
+    
     @Override
     public Map<String, IndicatorMetadata> getVisualizationMetadata(Map<String, Object> params) {
         params = mergeWithDefaults(params);

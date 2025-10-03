@@ -177,8 +177,8 @@ public class OrderBlockIndicator extends AbstractIndicator {
         List<BigDecimal> volumes = candles.stream().map(CandlestickData::getVolume).collect(Collectors.toList());
         List<Instant> timestamps = candles.stream().map(CandlestickData::getCloseTime).collect(Collectors.toList());
         
-        // Calculate market structure
-        int marketStructure = updateMarketStructure(highs, lows, volumePivotLength);
+        // Calculate market structure (no previous state in simple calculate method)
+        int marketStructure = updateMarketStructure(highs, lows, volumePivotLength, 0);
         
         // Detect volume pivot
         BigDecimal pivotVolume = detectVolumePivot(volumes, volumePivotLength);
@@ -261,8 +261,8 @@ public class OrderBlockIndicator extends AbstractIndicator {
         CandlestickData currentCandle = candles.get(candles.size() - 1);
         state.barIndex++;
         
-        // Update market structure
-        state.marketStructure = updateMarketStructure(highs, lows, volumePivotLength);
+        // Update market structure (preserve previous state)
+        state.marketStructure = updateMarketStructure(highs, lows, volumePivotLength, state.marketStructure);
         
         // Detect volume pivot
         BigDecimal pivotVolume = detectVolumePivot(volumes, volumePivotLength);
@@ -446,9 +446,9 @@ public class OrderBlockIndicator extends AbstractIndicator {
         return result;
     }
     
-    private int updateMarketStructure(List<BigDecimal> highs, List<BigDecimal> lows, int volumePivotLength) {
+    private int updateMarketStructure(List<BigDecimal> highs, List<BigDecimal> lows, int volumePivotLength, int previousStructure) {
         int size = highs.size();
-        if (size < volumePivotLength + 1) return 0;
+        if (size < volumePivotLength + 1) return previousStructure;
         
         BigDecimal currentHigh = highs.get(size - 1 - volumePivotLength);
         BigDecimal currentLow = lows.get(size - 1 - volumePivotLength);
@@ -456,13 +456,14 @@ public class OrderBlockIndicator extends AbstractIndicator {
         BigDecimal upper = calculateHighest(highs, volumePivotLength, volumePivotLength);
         BigDecimal lower = calculateLowest(lows, volumePivotLength, volumePivotLength);
         
-        // Default to uptrend
-        int os = 0;
+        // Preserve previous market structure if neither breakout condition is met
+        int os = previousStructure;
         if (currentHigh.compareTo(upper) > 0) {
-            os = 0; // Uptrend
+            os = 0; // Uptrend: making higher highs
         } else if (currentLow.compareTo(lower) < 0) {
-            os = 1; // Downtrend
+            os = 1; // Downtrend: making lower lows
         }
+        // Otherwise maintain current structure
         
         return os;
     }
