@@ -237,16 +237,22 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
             }
         }
         
-        // Create S/R lines
+        // Create S/R lines (use stable times for proper deduplication)
         List<Map<String, Object>> lines = new ArrayList<>();
         
         if (state.currentResistance.compareTo(BigDecimal.ZERO) > 0 && state.resistanceTime != null) {
-            lines.add(createSRLine(state.resistanceTime, currentCandle.getCloseTime(),
+            // Use fixed end time (resistance time + 20 bars) for stable deduplication
+            long fixedEndTime = state.resistanceTime.getEpochSecond() + (20 * 60); // Assume 1min candles
+            lines.add(createSRLine(state.resistanceTime, 
+                                  Instant.ofEpochSecond(fixedEndTime),
                                   state.currentResistance, resistanceColor, "Resistance"));
         }
         
         if (state.currentSupport.compareTo(BigDecimal.ZERO) > 0 && state.supportTime != null) {
-            lines.add(createSRLine(state.supportTime, currentCandle.getCloseTime(),
+            // Use fixed end time (support time + 20 bars) for stable deduplication
+            long fixedEndTime = state.supportTime.getEpochSecond() + (20 * 60); // Assume 1min candles
+            lines.add(createSRLine(state.supportTime, 
+                                  Instant.ofEpochSecond(fixedEndTime),
                                   state.currentSupport, supportColor, "Support"));
         }
         
