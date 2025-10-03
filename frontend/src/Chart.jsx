@@ -43,11 +43,10 @@ export const ChartComponent = props => {
     const chartContainerRef = useRef();
     const chartRef = useRef();
     const seriesRef = useRef();
-    const seriesManagerRef = useRef(null); // Centralized series manager
+    const seriesManagerRef = useRef(null); // Centralized series and box manager
     const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
-    const boxPrimitivesRef = useRef([]);
 
     useEffect(
         () => {
@@ -98,8 +97,8 @@ export const ChartComponent = props => {
             chartRef.current = chart;
             seriesRef.current = candleSeries;
             
-            // Initialize series manager
-            seriesManagerRef.current = new ChartSeriesManager(chart);
+            // Initialize series manager with chart, main series, and data
+            seriesManagerRef.current = new ChartSeriesManager(chart, candleSeries, data);
 
             // Set initial data if available
             if (data && data.length > 0) {
@@ -147,6 +146,12 @@ export const ChartComponent = props => {
             try {
                 console.log('Updating chart with new data:', data.length, 'candles');
                 seriesRef.current.setData(data);
+                
+                // Update series manager's chart data reference
+                if (seriesManagerRef.current) {
+                    seriesManagerRef.current.setChartData(data);
+                }
+                
                 if (chartRef.current) {
                     // Default zoom: show last N REAL candles (exclude future placeholders)
                     const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
@@ -250,45 +255,6 @@ export const ChartComponent = props => {
         fetchAndAddIndicators();
     }, [enabledIndicators, data]);
 
-    // Draw boxes/rectangles on chart using plugin system (lightweight-charts v4+)
-    const drawBoxes = (chart, series, boxes) => {
-        console.log('drawBoxes called (plugin version v5):', { boxesCount: boxes.length });
-        
-        if (!chart || !series || !boxes || boxes.length === 0) {
-            console.log('Skipping boxes: missing chart, series, or boxes');
-            return;
-        }
-        
-        // Remove existing box primitives
-        boxPrimitivesRef.current.forEach(primitive => {
-            try {
-                series.detachPrimitive(primitive);
-            } catch (e) {
-                console.warn('Error detaching box primitive:', e);
-            }
-        });
-        boxPrimitivesRef.current = [];
-        
-        // Create new box primitive with all boxes (pass data for logical coordinate fallback)
-        try {
-            const boxPrimitive = new BoxPrimitive(chart, series, boxes, data);
-            series.attachPrimitive(boxPrimitive);
-            boxPrimitivesRef.current.push(boxPrimitive);
-            console.log(`✅ Box primitive attached with ${boxes.length} boxes`);
-            
-            // Request animation frame to ensure chart is fully rendered
-            requestAnimationFrame(() => {
-                boxPrimitive.updateAllViews();
-                console.log('Box primitive updateAllViews() called after RAF');
-                
-                // Force chart redraw
-                chart.timeScale().applyOptions({});
-            });
-        } catch (e) {
-            console.error('Error creating box primitive:', e);
-        }
-    };
-    
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
         // Prevent concurrent indicator addition
@@ -500,9 +466,9 @@ export const ChartComponent = props => {
             if (strategyData.boxes && Array.isArray(strategyData.boxes) && strategyData.boxes.length > 0) {
                 console.log('Adding boxes:', strategyData.boxes.length, 'boxes', strategyData.boxes);
                 setTimeout(() => {
-                    if (chartRef.current && seriesRef.current && data && data.length > 0) {
-                        console.log('Attempting to draw boxes after delay...');
-                        drawBoxes(chartRef.current, seriesRef.current, strategyData.boxes);
+                    if (seriesManagerRef.current && data && data.length > 0) {
+                        console.log('Attempting to add boxes after delay...');
+                        seriesManagerRef.current.addBoxes(strategyData.boxes, BoxPrimitive);
                     }
                 }, 500); // Increased delay
             } else {

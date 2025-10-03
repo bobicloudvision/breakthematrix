@@ -1,8 +1,8 @@
 import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, CandlestickSeries, LineStyle } from 'lightweight-charts';
 
 /**
- * Centralized manager for adding and managing chart series
- * Handles both indicators and strategy data
+ * Centralized manager for adding and managing chart series and boxes
+ * Handles indicators, strategy data, and box primitives
  * 
  * Example Usage:
  * 
@@ -17,14 +17,35 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  *   config: { color: '#ff9800', lineWidth: 1 }
  * });
  * 
+ * // For Boxes:
+ * seriesManager.addBoxes(boxes, BoxPrimitive);
+ * seriesManager.removeAllBoxes();
+ * 
  * // Remove by prefix:
  * seriesManager.removeSeriesByPrefix('indicator_'); // Remove all indicators
  * seriesManager.removeSeriesByPrefix('strategy_'); // Remove all strategy series
  */
 export class ChartSeriesManager {
-    constructor(chart) {
+    constructor(chart, mainSeries = null, chartData = null) {
         this.chart = chart;
+        this.mainSeries = mainSeries;
+        this.chartData = chartData;
         this.seriesMap = new Map(); // Track all series by key
+        this.boxPrimitives = []; // Track box primitives
+    }
+
+    /**
+     * Update main series reference (e.g., when candlestick series is created)
+     */
+    setMainSeries(series) {
+        this.mainSeries = series;
+    }
+
+    /**
+     * Update chart data reference (needed for box logical coordinates)
+     */
+    setChartData(data) {
+        this.chartData = data;
     }
 
     /**
@@ -520,6 +541,86 @@ export class ChartSeriesManager {
      */
     removeStrategy(strategyName) {
         this.removeSeriesByPrefix(`strategy_${strategyName}_`);
+    }
+
+    /**
+     * Add boxes/rectangles to the chart using primitives
+     * Requires BoxPrimitive class to be imported
+     * @param {Array} boxes - Array of box objects with {time1, time2, price1, price2, ...styling}
+     * @param {Object} BoxPrimitiveClass - The BoxPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    addBoxes(boxes, BoxPrimitiveClass) {
+        console.log('ChartSeriesManager.addBoxes called:', { boxesCount: boxes.length });
+        
+        if (!this.mainSeries) {
+            console.error('Cannot add boxes: mainSeries not set');
+            return false;
+        }
+        
+        if (!boxes || !Array.isArray(boxes) || boxes.length === 0) {
+            console.log('No boxes to add');
+            return false;
+        }
+
+        try {
+            // Create new box primitive with all boxes
+            const boxPrimitive = new BoxPrimitiveClass(
+                this.chart, 
+                this.mainSeries, 
+                boxes, 
+                this.chartData
+            );
+            this.mainSeries.attachPrimitive(boxPrimitive);
+            this.boxPrimitives.push(boxPrimitive);
+            
+            console.log(`✅ Box primitive attached with ${boxes.length} boxes`);
+            
+            // Request animation frame to ensure chart is fully rendered
+            requestAnimationFrame(() => {
+                boxPrimitive.updateAllViews();
+                console.log('Box primitive updateAllViews() called after RAF');
+                
+                // Force chart redraw
+                this.chart.timeScale().applyOptions({});
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error creating box primitive:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Remove all boxes from the chart
+     */
+    removeAllBoxes() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        this.boxPrimitives.forEach(primitive => {
+            try {
+                this.mainSeries.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn('Error detaching box primitive:', e);
+            }
+        });
+        
+        this.boxPrimitives = [];
+        console.log('All box primitives removed');
+    }
+
+    /**
+     * Update boxes with new data
+     * @param {Array} boxes - New array of boxes
+     * @param {Object} BoxPrimitiveClass - The BoxPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    updateBoxes(boxes, BoxPrimitiveClass) {
+        this.removeAllBoxes();
+        return this.addBoxes(boxes, BoxPrimitiveClass);
     }
 }
 
