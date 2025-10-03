@@ -2,6 +2,7 @@ package org.cloudvision.trading.bot.indicators.impl;
 
 import org.cloudvision.trading.bot.indicators.*;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
+import org.cloudvision.trading.bot.visualization.BoxShape;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
 
@@ -317,25 +318,30 @@ public class OrderBlockIndicator extends AbstractIndicator {
         values.put("activeBullishOBs", new BigDecimal(activeBullCount));
         values.put("activeBearishOBs", new BigDecimal(activeBearCount));
         
-        // Convert order blocks to box format for visualization
+        // Convert order blocks to BoxShape objects for visualization
         boolean showMitigated = getBooleanParameter(params, "showMitigatedBoxes", false);
         String bullishColor = getStringParameter(params, "bullishColor", "rgba(22, 148, 0, 0.15)");
         String bearishColor = getStringParameter(params, "bearishColor", "rgba(255, 17, 0, 0.15)");
         Instant currentTime = currentCandle.getCloseTime();
         
-        List<Map<String, Object>> boxes = new ArrayList<>();
+        List<BoxShape> boxShapes = new ArrayList<>();
         
         // Convert bullish order blocks to boxes
         for (OrderBlock ob : state.bullishOrderBlocks) {
             if (ob.mitigated && !showMitigated) continue;
-            boxes.add(convertToBox(ob, currentTime, bullishColor, true));
+            boxShapes.add(convertToBox(ob, currentTime, bullishColor, true));
         }
         
         // Convert bearish order blocks to boxes
         for (OrderBlock ob : state.bearishOrderBlocks) {
             if (ob.mitigated && !showMitigated) continue;
-            boxes.add(convertToBox(ob, currentTime, bearishColor, false));
+            boxShapes.add(convertToBox(ob, currentTime, bearishColor, false));
         }
+        
+        // Convert BoxShape objects to Map for API serialization
+        List<Map<String, Object>> boxes = boxShapes.stream()
+            .map(BoxShape::toMap)
+            .collect(Collectors.toList());
         
         // Return formatted boxes for visualization
         Map<String, Object> output = new HashMap<>();
@@ -347,13 +353,10 @@ public class OrderBlockIndicator extends AbstractIndicator {
     }
     
     /**
-     * Convert OrderBlock to box format for visualization
+     * Convert OrderBlock to BoxShape for visualization
      */
-    private Map<String, Object> convertToBox(OrderBlock ob, Instant currentTime, 
-                                            String color, boolean isBullish) {
-        Map<String, Object> box = new HashMap<>();
-        box.put("time1", ob.timestamp.getEpochSecond());
-        
+    private BoxShape convertToBox(OrderBlock ob, Instant currentTime, 
+                                  String color, boolean isBullish) {
         // Calculate end time
         long endTime;
         if (ob.mitigated && ob.mitigationTime != null) {
@@ -362,31 +365,36 @@ public class OrderBlockIndicator extends AbstractIndicator {
             // Active blocks: extend to current time
             endTime = currentTime.getEpochSecond();
         }
-        box.put("time2", endTime);
-        
-        box.put("price1", ob.top.doubleValue());
-        box.put("price2", ob.bottom.doubleValue());
         
         // Style based on mitigation status
+        String backgroundColor;
+        String label;
         if (ob.mitigated) {
             // Mitigated: Gray with very low opacity
-            box.put("backgroundColor", "rgba(128, 128, 128, 0.08)");
-            box.put("text", (isBullish ? "Bullish" : "Bearish") + " OB (Mitigated)");
-            box.put("textColor", "rgba(128, 128, 128, 0.5)");
+            backgroundColor = "rgba(128, 128, 128, 0.08)";
+            label = (isBullish ? "Bullish" : "Bearish") + " OB (Mitigated)";
         } else {
             // Active: Use provided color
-            box.put("backgroundColor", color);
+            backgroundColor = color;
             String touchedMark = ob.touched ? " ✓" : "";
-            box.put("text", (isBullish ? "Bullish" : "Bearish") + " OB" + touchedMark);
-            box.put("textColor", color.replace("0.15", "0.8")); // Make text more visible
+            label = (isBullish ? "Bullish" : "Bearish") + " OB" + touchedMark;
         }
         
-        // Add volume strength info
-        box.put("volumeStrength", ob.volumeStrength.doubleValue());
-        box.put("touched", ob.touched);
-        box.put("mitigated", ob.mitigated);
+        // Extract border color from background color or use a default
+        String borderColor = color.replace("rgba", "rgb").replace(", 0.15)", ", 1.0)");
+        if (ob.mitigated) {
+            borderColor = "rgba(128, 128, 128, 0.3)";
+        }
         
-        return box;
+        return BoxShape.builder()
+            .time1(ob.timestamp.getEpochSecond())
+            .time2(endTime)
+            .price1(ob.top)
+            .price2(ob.bottom)
+            .color(backgroundColor)
+            .borderColor(borderColor)
+            .label(label)
+            .build();
     }
     
     @Override

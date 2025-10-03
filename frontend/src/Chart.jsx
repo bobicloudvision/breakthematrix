@@ -259,7 +259,22 @@ export const ChartComponent = props => {
                     // Collect boxes from shapes if present
                     if (apiResponse.shapes?.boxes && Array.isArray(apiResponse.shapes.boxes)) {
                         console.log(`Adding ${apiResponse.shapes.boxes.length} boxes from indicator ${instanceId}`);
-                        allBoxes.push(...apiResponse.shapes.boxes);
+                        
+                        // Transform API box format to BoxPrimitive format
+                        const transformedBoxes = apiResponse.shapes.boxes.map(box => ({
+                            time1: box.time1,
+                            time2: box.time2,
+                            price1: box.price1,
+                            price2: box.price2,
+                            backgroundColor: box.color || box.backgroundColor || 'rgba(33, 150, 243, 0.1)',
+                            text: box.label || box.text,
+                            textColor: box.textColor || box.borderColor || '#ffffff',
+                            borderColor: box.borderColor,
+                            borderWidth: box.borderWidth,
+                            borderStyle: box.borderStyle
+                        }));
+                        
+                        allBoxes.push(...transformedBoxes);
                     }
 
                 } catch (error) {
@@ -520,7 +535,7 @@ export const ChartComponent = props => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-80 rounded-lg">
+            <div className="flex items-center justify-center h-full w-full rounded-lg">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                     <p className="text-gray-400">Loading chart data...</p>
@@ -531,7 +546,7 @@ export const ChartComponent = props => {
 
     if (error) {
         return (
-            <div className="flex items-center justify-center h-80 rounded-lg">
+            <div className="flex items-center justify-center h-full w-full rounded-lg">
                 <div className="text-center">
                     <div className="text-red-500 text-6xl mb-4">⚠️</div>
                     <p className="text-red-400 mb-2">Failed to load chart data</p>

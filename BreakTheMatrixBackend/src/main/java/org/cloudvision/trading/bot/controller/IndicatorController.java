@@ -12,6 +12,7 @@ import org.cloudvision.trading.bot.indicators.Indicator;
 import org.cloudvision.trading.bot.indicators.IndicatorParameter;
 import org.cloudvision.trading.bot.indicators.IndicatorService;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
+import org.cloudvision.trading.bot.visualization.ShapeRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -652,7 +653,7 @@ examples = {
                     request.getCount() != null ? request.getCount() : 100
                 );
             
-            // First, collect all shapes to determine if this is a shape-based indicator
+            // Collect all shapes using ShapeRegistry (dynamic, no hardcoded types)
             Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
             boolean hasShapes = false;
             
@@ -660,98 +661,31 @@ examples = {
             
             for (IndicatorService.IndicatorDataPoint dp : dataPoints) {
                 if (dp.getAdditionalData() != null) {
-                    // Check for different shape types
-                    Map<String, Object> additionalData = dp.getAdditionalData();
+                    // Extract all shapes dynamically using ShapeRegistry
+                    Map<String, List<Map<String, Object>>> shapesFromPoint = 
+                        ShapeRegistry.extractShapes(dp.getAdditionalData());
                     
-                    // Boxes/Rectangles
-                    if (additionalData.containsKey("boxes")) {
+                    if (!shapesFromPoint.isEmpty()) {
                         hasShapes = true;
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> boxes = (List<Map<String, Object>>) additionalData.get("boxes");
-                        if (boxes != null && !boxes.isEmpty()) {
-                            shapesByType.computeIfAbsent("boxes", k -> new ArrayList<>()).addAll(boxes);
-                        }
-                    }
-                    
-                    // Lines
-                    if (additionalData.containsKey("lines")) {
-                        hasShapes = true;
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> lines = (List<Map<String, Object>>) additionalData.get("lines");
-                        if (lines != null && !lines.isEmpty()) {
-                            shapesByType.computeIfAbsent("lines", k -> new ArrayList<>()).addAll(lines);
-                        }
-                    }
-                    
-                    // Markers/Points
-                    if (additionalData.containsKey("markers")) {
-                        hasShapes = true;
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> markers = (List<Map<String, Object>>) additionalData.get("markers");
-                        if (markers != null && !markers.isEmpty()) {
-                            shapesByType.computeIfAbsent("markers", k -> new ArrayList<>()).addAll(markers);
-                        }
-                    }
-                    
-                    // Arrows
-                    if (additionalData.containsKey("arrows")) {
-                        hasShapes = true;
-                        @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> arrows = (List<Map<String, Object>>) additionalData.get("arrows");
-                        if (arrows != null && !arrows.isEmpty()) {
-                            shapesByType.computeIfAbsent("arrows", k -> new ArrayList<>()).addAll(arrows);
+                        
+                        // Merge shapes into the main collection
+                        for (Map.Entry<String, List<Map<String, Object>>> entry : shapesFromPoint.entrySet()) {
+                            String shapeType = entry.getKey();
+                            List<Map<String, Object>> shapes = entry.getValue();
+                            shapesByType.computeIfAbsent(shapeType, k -> new ArrayList<>()).addAll(shapes);
                         }
                     }
                 }
             }
             
-            // Remove duplicates for each shape type
+            // Deduplicate shapes using ShapeRegistry (dynamic deduplication based on type)
             Map<String, List<Map<String, Object>>> uniqueShapesByType = new HashMap<>();
             for (Map.Entry<String, List<Map<String, Object>>> entry : shapesByType.entrySet()) {
                 String shapeType = entry.getKey();
                 List<Map<String, Object>> shapes = entry.getValue();
                 
-                // Different deduplication logic based on shape type
-                List<Map<String, Object>> uniqueShapes;
-                if ("boxes".equals(shapeType)) {
-                    // Deduplicate boxes by time1, price1, price2
-                    uniqueShapes = shapes.stream()
-                        .collect(Collectors.toMap(
-                            box -> box.get("time1") + "_" + box.get("price1") + "_" + box.get("price2"),
-                            box -> box,
-                            (existing, replacement) -> replacement // Keep latest
-                        ))
-                        .values()
-                        .stream()
-                        .collect(Collectors.toList());
-                } else if ("lines".equals(shapeType)) {
-                    // Deduplicate lines by time1, time2, price1, price2
-                    uniqueShapes = shapes.stream()
-                        .collect(Collectors.toMap(
-                            line -> line.get("time1") + "_" + line.get("time2") + "_" + 
-                                   line.get("price1") + "_" + line.get("price2"),
-                            line -> line,
-                            (existing, replacement) -> replacement
-                        ))
-                        .values()
-                        .stream()
-                        .collect(Collectors.toList());
-                } else if ("markers".equals(shapeType)) {
-                    // Deduplicate markers by time and price
-                    uniqueShapes = shapes.stream()
-                        .collect(Collectors.toMap(
-                            marker -> marker.get("time") + "_" + marker.get("price"),
-                            marker -> marker,
-                            (existing, replacement) -> replacement
-                        ))
-                        .values()
-                        .stream()
-                        .collect(Collectors.toList());
-                } else {
-                    // Default: keep all
-                    uniqueShapes = new ArrayList<>(shapes);
-                }
-                
+                // Use ShapeRegistry to deduplicate based on shape type
+                List<Map<String, Object>> uniqueShapes = ShapeRegistry.deduplicate(shapeType, shapes);
                 uniqueShapesByType.put(shapeType, uniqueShapes);
             }
             
