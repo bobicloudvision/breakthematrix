@@ -751,29 +751,30 @@ examples = {
             System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
             System.out.println("🔍 Has shapes: " + hasShapes);
             
-            // Convert to response format - only for non-shape indicators
-            List<Map<String, Object>> data = new ArrayList<>();
-            if (!hasShapes) {
-                data = dataPoints.stream()
-                    .map(dp -> {
-                        Map<String, Object> point = new HashMap<>();
-                        point.put("time", dp.getTimestamp().getEpochSecond());
-                        point.put("values", dp.getValues());
-                        
-                        // Include any additional data from the indicator (colors, etc.)
-                        if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
-                            point.putAll(dp.getAdditionalData());
+            // Convert to response format - always generate data
+            List<Map<String, Object>> data = dataPoints.stream()
+                .map(dp -> {
+                    Map<String, Object> point = new HashMap<>();
+                    point.put("time", dp.getTimestamp().getEpochSecond());
+                    point.put("values", dp.getValues());
+                    
+                    // Include any additional data from the indicator (colors, etc.)
+                    if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
+                        // Don't include shapes in data points (they're extracted separately)
+                        Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
+                        ShapeRegistry.extractShapes(additionalData); // This removes shapes from the map
+                        if (!additionalData.isEmpty()) {
+                            point.putAll(additionalData);
                         }
-                        
-                        return point;
-                    })
-                    .collect(Collectors.toList());
-            }
+                    }
+                    
+                    return point;
+                })
+                .collect(Collectors.toList());
             
             // Create series-ready format for Lightweight Charts
-            // Only generate series for indicators that don't return shapes
             Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
-            if (!hasShapes && !dataPoints.isEmpty()) {
+            if (!dataPoints.isEmpty()) {
                 // Get all value keys from first data point
                 Map<String, BigDecimal> firstValues = dataPoints.get(0).getValues();
                 
@@ -787,7 +788,12 @@ examples = {
                             
                             // Include any additional data from the indicator (colors, etc.)
                             if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
-                                seriesPoint.putAll(dp.getAdditionalData());
+                                // Don't include shapes in series points (they're extracted separately)
+                                Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
+                                ShapeRegistry.extractShapes(additionalData); // This removes shapes from the map
+                                if (!additionalData.isEmpty()) {
+                                    seriesPoint.putAll(additionalData);
+                                }
                             }
                             
                             return seriesPoint;
@@ -809,9 +815,13 @@ examples = {
             response.put("interval", request.getInterval());
             response.put("metadata", metadata);
             
-            // For shape-based indicators (like order blocks), only include shapes
+            // Always include data and series
+            response.put("count", data.size());
+            response.put("data", data); // Original format (backward compatibility)
+            response.put("series", seriesData); // Lightweight Charts optimized format
+            
+            // Additionally include shapes if present
             if (hasShapes && !uniqueShapesByType.isEmpty()) {
-                response.put("count", dataPoints.size());
                 response.put("supportsShapes", true);
                 response.put("shapes", uniqueShapesByType);
                 
@@ -821,11 +831,6 @@ examples = {
                     shapeSummary.put(entry.getKey(), entry.getValue().size());
                 }
                 response.put("shapesSummary", shapeSummary);
-            } else {
-                // For standard indicators (like SMA, RSI, etc.), include data and series
-                response.put("count", data.size());
-                response.put("data", data); // Original format (backward compatibility)
-                response.put("series", seriesData); // Lightweight Charts optimized format
             }
             
             return ResponseEntity.ok(response);

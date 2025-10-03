@@ -112,15 +112,33 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             return createEmptyResult();
         }
         
+        int n = candles.size();
+        int currentIndex = n - 1;
+        
         // Calculate full market structure
         MarketStructureResult result = calculateFullMarketStructure(candles, pivotLookback, 
                                                                      incrementFactorPct, resetOn);
         
+        // Check if there's a pivot at the lookback position (currentIndex - pivotLookback)
+        // This is the candle we're calculating for (the last confirmed candle)
+        int pivotCheckIndex = currentIndex - pivotLookback;
+        BigDecimal pivotHighValue = BigDecimal.ZERO;
+        BigDecimal pivotLowValue = BigDecimal.ZERO;
+        
+        if (pivotCheckIndex >= 0 && pivotCheckIndex < n) {
+            if (isPivotHigh(candles, pivotCheckIndex, pivotLookback)) {
+                pivotHighValue = candles.get(pivotCheckIndex).getHigh();
+            }
+            if (isPivotLow(candles, pivotCheckIndex, pivotLookback)) {
+                pivotLowValue = candles.get(pivotCheckIndex).getLow();
+            }
+        }
+        
         return Map.of(
-            // "trailingStop", result.trailingStop,
+            "trailingStop", result.trailingStop,
             "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
-            "pivotHigh", result.lastPivotHigh != null ? result.lastPivotHigh : BigDecimal.ZERO,
-            "pivotLow", result.lastPivotLow != null ? result.lastPivotLow : BigDecimal.ZERO
+            "pivotHigh", pivotHighValue,
+            "pivotLow", pivotLowValue
         );
     }
     
@@ -297,12 +315,12 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         state.prevMax = state.max;
         state.prevMin = state.min;
         
-        // Return current values
+        // Return current values (for the current candle)
         Map<String, BigDecimal> values = Map.of(
-            // "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
+            "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
             "direction", BigDecimal.valueOf(state.os),
-            "pivotHigh", state.phY != null ? state.phY : BigDecimal.ZERO,
-            "pivotLow", state.plY != null ? state.plY : BigDecimal.ZERO
+            "pivotHigh", BigDecimal.ZERO,  // Will be set via markers below
+            "pivotLow", BigDecimal.ZERO     // Will be set via markers below
         );
         
         Map<String, Object> result = new HashMap<>();
@@ -312,6 +330,40 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         // Add lines if any were created
         if (!newLines.isEmpty()) {
             result.put("lines", newLines);
+        }
+        
+        // Add pivot markers if detected (with proper timestamps)
+        List<Map<String, Object>> markers = new ArrayList<>();
+        if (i >= pivotLookback * 2) {
+            int pivotIndex = i - pivotLookback;
+            
+            // Check if we just detected a new pivot high
+            if (state.phX != null && state.phX == pivotIndex) {
+                Map<String, Object> marker = new HashMap<>();
+                marker.put("time", candles.get(pivotIndex).getCloseTime().getEpochSecond());
+                marker.put("price", state.phY);
+                marker.put("type", "pivotHigh");
+                marker.put("position", "aboveBar");
+                marker.put("shape", "triangle");
+                marker.put("color", getStringParameter(params, "bearColor", "#ef5350"));
+                markers.add(marker);
+            }
+            
+            // Check if we just detected a new pivot low
+            if (state.plX != null && state.plX == pivotIndex) {
+                Map<String, Object> marker = new HashMap<>();
+                marker.put("time", candles.get(pivotIndex).getCloseTime().getEpochSecond());
+                marker.put("price", state.plY);
+                marker.put("type", "pivotLow");
+                marker.put("position", "belowBar");
+                marker.put("shape", "triangle");
+                marker.put("color", getStringParameter(params, "bullColor", "#26a69a"));
+                markers.add(marker);
+            }
+        }
+        
+        if (!markers.isEmpty()) {
+            result.put("markers", markers);
         }
         
         return result;
@@ -327,15 +379,15 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
         // Trailing stop line (changes color based on direction)
-        // metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
-        //     .displayName("Trailing Stop")
-        //     .asLine("#9c27b0", 2) // Purple for neutral, will be overridden by frontend logic
-        //     .separatePane(false)
-        //     .paneOrder(0)
-        //     .addConfig("bullColor", bullColor)
-        //     .addConfig("bearColor", bearColor)
-        //     .addConfig("directionField", "direction") // Frontend will read this field
-        //     .build());
+        metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
+            .displayName("Trailing Stop")
+            .asLine("#9c27b0", 2) // Purple for neutral, will be overridden by frontend logic
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("bullColor", bullColor)
+            .addConfig("bearColor", bearColor)
+            .addConfig("directionField", "direction") // Frontend will read this field
+            .build());
         
         // Optional pivot markers
         metadata.put("pivotHigh", IndicatorMetadata.builder("pivotHigh")
@@ -370,6 +422,8 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
     
     /**
      * Calculate full market structure across all candles
+     * 
+     * Corresponds to Pine Script lines 20-93 (main calculation logic)
      */
     private MarketStructureResult calculateFullMarketStructure(List<CandlestickData> candles, 
                                                                int pivotLookback,
@@ -377,34 +431,37 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
                                                                String resetOn) {
         int n = candles.size();
         
-        // State variables
-        BigDecimal phY = null; // Pivot high Y (price)
-        Integer phX = null;    // Pivot high X (index)
-        BigDecimal plY = null; // Pivot low Y (price)
-        Integer plX = null;    // Pivot low X (index)
+        // State variables (Pine Script lines 20-27)
+        BigDecimal phY = null; // Pivot high Y (price) - var float ph_y
+        Integer phX = null;    // Pivot high X (index) - var int ph_x
+        BigDecimal plY = null; // Pivot low Y (price) - var float pl_y
+        Integer plX = null;    // Pivot low X (index) - var int pl_x
         
-        boolean phCross = false;
-        boolean plCross = false;
+        boolean phCross = false; // var ph_cross
+        boolean plCross = false; // var pl_cross
         
-        BigDecimal top = null;
-        BigDecimal btm = null;
+        BigDecimal top = null; // var float top
+        BigDecimal btm = null; // var float btm
         
-        BigDecimal max = null;
-        BigDecimal min = null;
-        BigDecimal ts = null;
+        BigDecimal max = null; // var float max
+        BigDecimal min = null; // var float min
+        BigDecimal ts = null;  // var float ts (trailing stop)
         
-        int os = 0;  // Overall structure: 1 = bullish, -1 = bearish, 0 = neutral
-        int ms = 0;  // Market structure change: 1 = new bullish, -1 = new bearish, 0 = no change
+        int os = 0;  // Overall structure: 1 = bullish, -1 = bearish, 0 = neutral (var os)
+        int ms = 0;  // Market structure change: 1 = new bullish, -1 = new bearish, 0 = no change (ms)
         
-        BigDecimal prevMax = null;
-        BigDecimal prevMin = null;
+        BigDecimal prevMax = null; // For calculating max[1]
+        BigDecimal prevMin = null; // For calculating min[1]
         
         // Iterate through candles to detect pivots and calculate trailing stop
-        for (int i = pivotLookback; i < n; i++) {
+        // Start at 2*pivotLookback to ensure we have enough candles for pivot detection
+        for (int i = pivotLookback * 2; i < n; i++) {
             CandlestickData currentCandle = candles.get(i);
             ms = 0; // Reset at start of each iteration
             
-            // Check for pivot high at (i - pivotLookback)
+            // Detect pivots and get coordinates (Pine Script lines 29-42)
+            // Pine Script: ph = ta.pivothigh(length, length)
+            // Pine Script: pl = ta.pivotlow(length, length)
             int pivotIndex = i - pivotLookback;
             if (isPivotHigh(candles, pivotIndex, pivotLookback)) {
                 phY = candles.get(pivotIndex).getHigh();
@@ -412,14 +469,13 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
                 phCross = false;
             }
             
-            // Check for pivot low at (i - pivotLookback)
             if (isPivotLow(candles, pivotIndex, pivotLookback)) {
                 plY = candles.get(pivotIndex).getLow();
                 plX = pivotIndex;
                 plCross = false;
             }
             
-            // Check for bullish structure (close above pivot high)
+            // Bullish structures (Pine Script lines 44-63)
             if (phY != null && currentCandle.getClose().compareTo(phY) > 0 && !phCross) {
                 if (resetOn.equals("CHoCH")) {
                     ms = (os == -1) ? 1 : 0; // Only signal on Change of Character
@@ -440,7 +496,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
                 }
             }
             
-            // Check for bearish structure (close below pivot low)
+            // Bearish structures (Pine Script lines 65-82)
             if (plY != null && currentCandle.getClose().compareTo(plY) < 0 && !plCross) {
                 if (resetOn.equals("CHoCH")) {
                     ms = (os == 1) ? -1 : 0; // Only signal on Change of Character
@@ -462,16 +518,21 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             }
             
             // Trailing max/min logic (Pine Script lines 80-85)
+            // Pine Script:
+            //   if ms == 1
+            //       max := close
+            //   else if ms == -1
+            //       min := close
+            //   else
+            //       max := math.max(close, max)
+            //       min := math.min(close, min)
             if (ms == 1) {
-                // New bullish structure detected
                 max = currentCandle.getClose();
                 min = null;
             } else if (ms == -1) {
-                // New bearish structure detected
                 min = currentCandle.getClose();
                 max = null;
             } else {
-                // Update existing max/min
                 if (max != null) {
                     max = max.max(currentCandle.getClose());
                 }
@@ -481,6 +542,11 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             }
             
             // Calculate trailing stop (Pine Script lines 87-93)
+            // Pine Script:
+            //   ts := ms == 1 ? btm
+            //     : ms == -1 ? top
+            //     : os == 1 ? ts + (max - max[1]) * incr / 100
+            //     : ts + (min - min[1]) * incr / 100
             if (ms == 1) {
                 // New bullish structure - set stop to bottom
                 ts = btm;
@@ -512,7 +578,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         }
         
         MarketStructureResult result = new MarketStructureResult();
-        // result.trailingStop = (ts != null) ? ts : BigDecimal.ZERO;
+        result.trailingStop = (ts != null) ? ts : BigDecimal.ZERO;
         result.direction = BigDecimal.valueOf(os);
         result.lastPivotHigh = phY;
         result.lastPivotLow = plY;
@@ -615,7 +681,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      */
     private Map<String, BigDecimal> createEmptyResult() {
         return Map.of(
-            // "trailingStop", BigDecimal.ZERO,
+            "trailingStop", BigDecimal.ZERO,
             "direction", BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,
             "pivotLow", BigDecimal.ZERO
@@ -626,7 +692,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      * Result container for market structure calculation
      */
     private static class MarketStructureResult {
-        // BigDecimal trailingStop;
+        BigDecimal trailingStop;
         BigDecimal direction;
         BigDecimal lastPivotHigh;
         BigDecimal lastPivotLow;
