@@ -8,16 +8,12 @@ class BoxRenderer {
     draw(target) {
         target.useBitmapCoordinateSpace(scope => {
             const ctx = scope.context;
-            
-            console.log('BoxRenderer.draw() called, boxes count:', this._data.boxes.length);
 
-            this._data.boxes.forEach((box, idx) => {
+            this._data.boxes.forEach((box) => {
+                // Skip boxes with invalid coordinates
                 if (box.x1 === null || box.x2 === null || box.y1 === null || box.y2 === null) {
-                    console.log(`Box ${idx + 1} skipped (null coordinates):`, box);
                     return;
                 }
-                
-                console.log(`Drawing box ${idx + 1}:`, box);
 
                 const horizontalPositions = positionsBox(
                     box.x1,
@@ -90,9 +86,7 @@ class BoxPaneView {
         const timeScale = this._source._chart.timeScale();
         const chartData = this._source._chartData;
         
-        console.log('BoxPaneView.update() called, boxesData:', this._source._boxesData);
-        
-        this._boxes = this._source._boxesData.map((box, idx) => {
+        this._boxes = this._source._boxesData.map((box) => {
             let x1 = timeScale.timeToCoordinate(box.time1);
             let x2 = timeScale.timeToCoordinate(box.time2);
             const y1 = series.priceToCoordinate(box.price1);
@@ -100,29 +94,28 @@ class BoxPaneView {
 
             // Fallback: If timeToCoordinate returns null, use logical indices
             if ((x1 === null || x2 === null) && chartData && chartData.length > 0) {
-                console.log(`Box ${idx + 1}: timeToCoordinate returned null, using logical indices`);
-                
                 let logical1 = null;
                 let logical2 = null;
                 
-                // Find logical indices for the box times
-                for (let i = 0; i < chartData.length; i++) {
-                    if (chartData[i].time >= box.time1 && logical1 === null) {
-                        logical1 = i;
+                // Binary search for better performance with large datasets
+                const findLogicalIndex = (time) => {
+                    let left = 0;
+                    let right = chartData.length - 1;
+                    
+                    while (left <= right) {
+                        const mid = Math.floor((left + right) / 2);
+                        if (chartData[mid].time === time) return mid;
+                        if (chartData[mid].time < time) {
+                            left = mid + 1;
+                        } else {
+                            right = mid - 1;
+                        }
                     }
-                    if (chartData[i].time >= box.time2) {
-                        logical2 = i;
-                        break;
-                    }
-                }
+                    return left < chartData.length ? left : chartData.length - 1;
+                };
                 
-                // Handle edge cases
-                if (logical2 === null && box.time2 > chartData[chartData.length - 1].time) {
-                    logical2 = chartData.length - 1;
-                }
-                if (logical1 === null && box.time1 < chartData[0].time) {
-                    logical1 = 0;
-                }
+                logical1 = findLogicalIndex(box.time1);
+                logical2 = findLogicalIndex(box.time2);
                 
                 // Convert logical indices to coordinates
                 if (logical1 !== null) {
@@ -131,20 +124,7 @@ class BoxPaneView {
                 if (logical2 !== null) {
                     x2 = timeScale.logicalToCoordinate(logical2);
                 }
-                
-                console.log(`Box ${idx + 1} logical fallback:`, { logical1, logical2, x1, x2 });
             }
-
-            console.log(`Box ${idx + 1} final coordinates:`, {
-                time1: box.time1,
-                time2: box.time2,
-                price1: box.price1,
-                price2: box.price2,
-                x1,
-                x2,
-                y1,
-                y2,
-            });
 
             return {
                 x1,
@@ -159,12 +139,9 @@ class BoxPaneView {
                 textColor: box.textColor,
             };
         });
-        
-        console.log('BoxPaneView.update() complete, boxes:', this._boxes);
     }
 
     renderer() {
-        console.log('BoxPaneView.renderer() called, returning renderer with boxes:', this._boxes?.length || 0);
         return new BoxRenderer({
             boxes: this._boxes || [],
         });

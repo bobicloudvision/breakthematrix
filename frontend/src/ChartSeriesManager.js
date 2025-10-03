@@ -46,6 +46,7 @@ export class ChartSeriesManager {
         this.boxPrimitives = []; // Track box primitives
         this.linePrimitives = []; // Track line primitives
         this.markerSets = new Map(); // Track marker sets by ID
+        this.markerPlugin = null; // Track marker plugin for v5 API
     }
 
     /**
@@ -91,8 +92,6 @@ export class ChartSeriesManager {
             const color = config.color || params.color || '#2962FF';
             const lineWidth = config.lineWidth || params.lineWidth || 2;
             const title = config.title || metadata.displayName || id.toUpperCase();
-
-            console.log(`Adding ${seriesType} series: ${id}`, { color, separatePane, dataPoints: data.length });
 
             // Create series based on type
             let series = this._createSeries(seriesType, {
@@ -472,7 +471,6 @@ export class ChartSeriesManager {
             
             if (metadataKeys.length > 1) {
                 // Multi-series indicator - add each series separately
-                console.log(`Multi-series indicator detected: ${metadataKeys.length} series`);
                 let successCount = 0;
                 
                 metadataKeys.forEach(seriesKey => {
@@ -480,7 +478,6 @@ export class ChartSeriesManager {
                     const seriesData = apiResponse.data || [];
                     const seriesId = `${id}_${seriesKey}`;
                     
-                    console.log(`Adding sub-series: ${seriesId}`);
                     const success = this.addSeries(seriesId, seriesData, seriesMetadata, additionalParams);
                     if (success) successCount++;
                 });
@@ -620,15 +617,12 @@ export class ChartSeriesManager {
      * @returns {boolean} - Success status
      */
     addBoxes(boxes, BoxPrimitiveClass) {
-        console.log('ChartSeriesManager.addBoxes called:', { boxesCount: boxes.length });
-        
         if (!this.mainSeries) {
             console.error('Cannot add boxes: mainSeries not set');
             return false;
         }
         
         if (!boxes || !Array.isArray(boxes) || boxes.length === 0) {
-            console.log('No boxes to add');
             return false;
         }
 
@@ -648,8 +642,6 @@ export class ChartSeriesManager {
             // Request animation frame to ensure chart is fully rendered
             requestAnimationFrame(() => {
                 boxPrimitive.updateAllViews();
-                console.log('Box primitive updateAllViews() called after RAF');
-                
                 // Force chart redraw
                 this.chart.timeScale().applyOptions({});
             });
@@ -700,15 +692,12 @@ export class ChartSeriesManager {
      * @returns {boolean} - Success status
      */
     addLines(lines, LinePrimitiveClass) {
-        console.log('ChartSeriesManager.addLines called:', { linesCount: lines.length });
-        
         if (!this.mainSeries) {
             console.error('Cannot add lines: mainSeries not set');
             return false;
         }
         
         if (!lines || !Array.isArray(lines) || lines.length === 0) {
-            console.log('No lines to add');
             return false;
         }
 
@@ -728,8 +717,6 @@ export class ChartSeriesManager {
             // Request animation frame to ensure chart is fully rendered
             requestAnimationFrame(() => {
                 linePrimitive.updateAllViews();
-                console.log('Line primitive updateAllViews() called after RAF');
-                
                 // Force chart redraw
                 this.chart.timeScale().applyOptions({});
             });
@@ -780,15 +767,12 @@ export class ChartSeriesManager {
      * @returns {boolean} - Success status
      */
     addShapeMarkers(id, markers) {
-        console.log('ChartSeriesManager.addShapeMarkers called:', { id, markersCount: markers.length });
-        
         if (!this.mainSeries) {
             console.error('Cannot add markers: mainSeries not set');
             return false;
         }
         
         if (!markers || !Array.isArray(markers) || markers.length === 0) {
-            console.log('No markers to add');
             return false;
         }
 
@@ -859,14 +843,15 @@ export class ChartSeriesManager {
      */
     removeAllShapeMarkers() {
         this.markerSets.clear();
-        if (this.mainSeries) {
-            this.mainSeries.setMarkers([]);
+        if (this.markerPlugin) {
+            this.markerPlugin.setMarkers([]);
         }
         console.log('All shape markers removed');
     }
 
     /**
      * Apply all marker sets to the main series
+     * Uses createSeriesMarkers plugin for lightweight-charts v5
      * @private
      */
     _applyAllMarkers() {
@@ -883,9 +868,19 @@ export class ChartSeriesManager {
         // Sort by time
         allMarkers.sort((a, b) => a.time - b.time);
 
-        // Apply to series
-        this.mainSeries.setMarkers(allMarkers);
-        console.log(`Applied ${allMarkers.length} total markers from ${this.markerSets.size} sets`);
+        // Apply to series using v5 plugin API
+        // Note: createSeriesMarkers needs to be imported in Chart.jsx and passed to the manager
+        if (typeof window !== 'undefined' && window.createSeriesMarkers) {
+            if (!this.markerPlugin && allMarkers.length > 0) {
+                // Create marker plugin if it doesn't exist
+                this.markerPlugin = window.createSeriesMarkers(this.mainSeries, allMarkers);
+            } else if (this.markerPlugin) {
+                // Update existing plugin
+                this.markerPlugin.setMarkers(allMarkers);
+            }
+        } else {
+            console.warn('createSeriesMarkers not available. Markers will not be displayed. Please ensure lightweight-charts v5+ is installed.');
+        }
     }
 
     /**
@@ -896,8 +891,6 @@ export class ChartSeriesManager {
      * @returns {Object} - Success status for markers and lines
      */
     addShapesFromApiResponse(id, shapes, LinePrimitiveClass) {
-        console.log('ChartSeriesManager.addShapesFromApiResponse called:', { id, shapes });
-        
         const result = {
             markers: false,
             lines: false
@@ -933,6 +926,17 @@ export class ChartSeriesManager {
         this.removeAllLines();
         this.removeAllBoxes();
         console.log('Cleared all shapes');
+    }
+
+    /**
+     * Set the createSeriesMarkers function for v5 API
+     * This should be called after initialization with the imported function from lightweight-charts
+     * @param {Function} createSeriesMarkersFunc - The createSeriesMarkers function from lightweight-charts
+     */
+    setCreateSeriesMarkers(createSeriesMarkersFunc) {
+        if (typeof window !== 'undefined') {
+            window.createSeriesMarkers = createSeriesMarkersFunc;
+        }
     }
 }
 

@@ -100,6 +100,9 @@ export const ChartComponent = props => {
             
             // Initialize series manager with chart, main series, and data
             seriesManagerRef.current = new ChartSeriesManager(chart, candleSeries, data);
+            
+            // Set createSeriesMarkers function for v5 API marker support
+            seriesManagerRef.current.setCreateSeriesMarkers(createSeriesMarkers);
 
             // Set initial data if available
             if (data && data.length > 0) {

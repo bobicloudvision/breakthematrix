@@ -8,16 +8,12 @@ class LineRenderer {
     draw(target) {
         target.useBitmapCoordinateSpace(scope => {
             const ctx = scope.context;
-            
-            console.log('LineRenderer.draw() called, lines count:', this._data.lines.length);
 
-            this._data.lines.forEach((line, idx) => {
+            this._data.lines.forEach((line) => {
+                // Skip lines with invalid coordinates
                 if (line.x1 === null || line.x2 === null || line.y1 === null || line.y2 === null) {
-                    console.log(`Line ${idx + 1} skipped (null coordinates):`, line);
                     return;
                 }
-                
-                console.log(`Drawing line ${idx + 1}:`, line);
 
                 const x1 = line.x1 * scope.horizontalPixelRatio;
                 const y1 = line.y1 * scope.verticalPixelRatio;
@@ -77,9 +73,7 @@ class LinePaneView {
         const timeScale = this._source._chart.timeScale();
         const chartData = this._source._chartData;
         
-        console.log('LinePaneView.update() called, linesData:', this._source._linesData);
-        
-        this._lines = this._source._linesData.map((line, idx) => {
+        this._lines = this._source._linesData.map((line) => {
             let x1 = timeScale.timeToCoordinate(line.time1);
             let x2 = timeScale.timeToCoordinate(line.time2);
             const y1 = series.priceToCoordinate(line.price1);
@@ -87,29 +81,29 @@ class LinePaneView {
 
             // Fallback: If timeToCoordinate returns null, use logical indices
             if ((x1 === null || x2 === null) && chartData && chartData.length > 0) {
-                console.log(`Line ${idx + 1}: timeToCoordinate returned null, using logical indices`);
-                
                 let logical1 = null;
                 let logical2 = null;
                 
+                // Binary search for better performance with large datasets
                 // Find logical indices for the line times
-                for (let i = 0; i < chartData.length; i++) {
-                    if (chartData[i].time >= line.time1 && logical1 === null) {
-                        logical1 = i;
+                const findLogicalIndex = (time) => {
+                    let left = 0;
+                    let right = chartData.length - 1;
+                    
+                    while (left <= right) {
+                        const mid = Math.floor((left + right) / 2);
+                        if (chartData[mid].time === time) return mid;
+                        if (chartData[mid].time < time) {
+                            left = mid + 1;
+                        } else {
+                            right = mid - 1;
+                        }
                     }
-                    if (chartData[i].time >= line.time2) {
-                        logical2 = i;
-                        break;
-                    }
-                }
+                    return left < chartData.length ? left : chartData.length - 1;
+                };
                 
-                // Handle edge cases
-                if (logical2 === null && line.time2 > chartData[chartData.length - 1].time) {
-                    logical2 = chartData.length - 1;
-                }
-                if (logical1 === null && line.time1 < chartData[0].time) {
-                    logical1 = 0;
-                }
+                logical1 = findLogicalIndex(line.time1);
+                logical2 = findLogicalIndex(line.time2);
                 
                 // Convert logical indices to coordinates
                 if (logical1 !== null) {
@@ -118,20 +112,7 @@ class LinePaneView {
                 if (logical2 !== null) {
                     x2 = timeScale.logicalToCoordinate(logical2);
                 }
-                
-                console.log(`Line ${idx + 1} logical fallback:`, { logical1, logical2, x1, x2 });
             }
-
-            console.log(`Line ${idx + 1} final coordinates:`, {
-                time1: line.time1,
-                time2: line.time2,
-                price1: line.price1,
-                price2: line.price2,
-                x1,
-                x2,
-                y1,
-                y2,
-            });
 
             return {
                 x1,
@@ -144,12 +125,9 @@ class LinePaneView {
                 label: line.label,
             };
         });
-        
-        console.log('LinePaneView.update() complete, lines:', this._lines);
     }
 
     renderer() {
-        console.log('LinePaneView.renderer() called, returning renderer with lines:', this._lines?.length || 0);
         return new LineRenderer({
             lines: this._lines || [],
         });
