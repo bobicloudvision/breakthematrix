@@ -16,6 +16,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('orders');
   const [activeStrategies, setActiveStrategies] = useState([]);
   const [enabledIndicators, setEnabledIndicators] = useState([]);
+  const [bottomBarHeight, setBottomBarHeight] = useState(400);
+  const [isResizing, setIsResizing] = useState(false);
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -48,6 +50,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tradingInterval', interval);
   }, [interval]);
+
+  // Load and save bottom bar height
+  useEffect(() => {
+    const savedHeight = localStorage.getItem('bottomBarHeight');
+    if (savedHeight) {
+      setBottomBarHeight(parseInt(savedHeight, 10));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('bottomBarHeight', bottomBarHeight.toString());
+  }, [bottomBarHeight]);
 
   // Fetch active strategies on component mount
   useEffect(() => {
@@ -85,6 +99,42 @@ export default function App() {
       window.removeEventListener('indicatorsChanged', handleIndicatorChange);
     };
   }, []);
+
+  // Handle resize mouse events
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      const windowHeight = window.innerHeight;
+      const newHeight = windowHeight - e.clientY;
+      
+      // Set min and max height constraints
+      const minHeight = 200;
+      const maxHeight = windowHeight - 200; // Leave at least 200px for chart
+      
+      if (newHeight >= minHeight && newHeight <= maxHeight) {
+        setBottomBarHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   const handleProviderSelect = (provider) => {
     setSelectedProvider(provider);
@@ -239,7 +289,18 @@ export default function App() {
               )}
             </div>
             {/* Bottom Tabs */}
-            <div className="h-[400px] border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5">
+            <div 
+              style={{ height: `${bottomBarHeight}px` }}
+              className="border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5"
+            >
+              {/* Resize Handle */}
+              <div
+                onMouseDown={() => setIsResizing(true)}
+                className="h-1 w-full cursor-ns-resize hover:bg-cyan-500/50 active:bg-cyan-500/70 transition-colors duration-150 group"
+              >
+                <div className="h-0.5 w-20 mx-auto mt-0.5 bg-slate-600/50 group-hover:bg-cyan-500/70 rounded-full transition-colors duration-150"></div>
+              </div>
+              
               <div className="h-12 flex items-center gap-3 px-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
                 <button  
                   onClick={() => setActiveTab('orders')}
@@ -293,7 +354,7 @@ export default function App() {
                 </button>
                 {/* Future tabs: Alerts, Console, etc. */}
               </div>
-              <div className="h-[calc(100%-3.5rem)]">
+              <div className="h-[calc(100%-3.25rem)]">
                 {activeTab === 'orders' && <OrdersTab />}
                 {activeTab === 'strategies' && <StrategiesTab />}
                 {activeTab === 'accounts' && <AccountsTab />}
