@@ -442,7 +442,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
             else if (json.has("e") && "24hrTicker".equals(json.get("e").asText())) {
                 String streamName = json.has("stream") ? json.get("stream").asText() : "unknown";
                 handleTickerData(streamName, json);
-            }
+            } 
             // Handle trade stream data
             else if (json.has("e") && "trade".equals(json.get("e").asText())) {
                 handleTradeDataDirect(json);
@@ -451,9 +451,13 @@ public class BinanceTradingProvider implements TradingDataProvider {
             else if (json.has("e") && "aggTrade".equals(json.get("e").asText())) {
                 handleAggregateTradeDataDirect(json);
             }
-            // Handle depth/order book update
+            // Handle depth/order book update (differential depth stream)
             else if (json.has("e") && "depthUpdate".equals(json.get("e").asText())) {
                 handleDepthUpdateDirect(json);
+            }
+            // Handle partial book depth (no "e" field, has "lastUpdateId")
+            else if (json.has("lastUpdateId") && json.has("bids") && json.has("asks")) {
+                handlePartialBookDepth(json);
             }
             // Handle book ticker
             else if (json.has("e") && "bookTicker".equals(json.get("e").asText())) {
@@ -870,15 +874,17 @@ public class BinanceTradingProvider implements TradingDataProvider {
         try {
             System.out.println("📚 Subscribing to " + symbol + " order book (depth: " + depth + ")...");
             
-            // Binance supports depths: 5, 10, 20 (or full depth via @depth)
-            String depthSuffix = (depth > 0) ? "@depth" + depth : "@depth";
-            String streamName = symbol.toLowerCase() + depthSuffix;
+            // Use differential depth stream (@depth) which includes symbol in messages
+            // Note: This sends updates, not full snapshots like @depth5/10/20
+            // The depth parameter is noted but we use the differential stream for better integration
+            String streamName = symbol.toLowerCase() + "@depth";
             sendSubscriptionMessage(streamName, true);
             
             subscribedOrderBooks.put(symbol, depth);
             activeStreams.add(streamName);
             
-            System.out.println("✅ Successfully subscribed to " + symbol + " order book");
+            System.out.println("✅ Successfully subscribed to " + symbol + " order book (differential depth stream)");
+            System.out.println("💡 Tip: Differential depth stream sends updates. First message may have many levels.");
         } catch (Exception e) {
             System.err.println("❌ Failed to subscribe to " + symbol + " order book: " + e.getMessage());
             e.printStackTrace();
@@ -890,8 +896,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
         try {
             Integer depth = subscribedOrderBooks.get(symbol);
             if (depth != null) {
-                String depthSuffix = (depth > 0) ? "@depth" + depth : "@depth";
-                String streamName = symbol.toLowerCase() + depthSuffix;
+                String streamName = symbol.toLowerCase() + "@depth";
                 sendSubscriptionMessage(streamName, false);
                 
                 subscribedOrderBooks.remove(symbol);
@@ -1045,7 +1050,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
     }
     
     /**
-     * Handle order book depth update from Binance WebSocket
+     * Handle order book depth update from Binance WebSocket (differential depth stream)
      */
     private void handleDepthUpdateDirect(JsonNode json) {
         try {
@@ -1096,11 +1101,84 @@ public class BinanceTradingProvider implements TradingDataProvider {
                 dataHandler.accept(tradingData);
             }
             
-            System.out.println("📚 " + symbol + " ORDER_BOOK: " + bids.size() + " bids, " + 
+            System.out.println("📚 " + symbol + " ORDER_BOOK (diff): " + bids.size() + " bids, " + 
                              asks.size() + " asks, spread=" + orderBookData.getSpread());
             
         } catch (Exception e) {
             System.err.println("❌ Error parsing depth update: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Handle partial book depth from Binance WebSocket (@depth5, @depth10, @depth20)
+     * Format: {"lastUpdateId": xxx, "bids": [[price, qty], ...], "asks": [[price, qty], ...]}
+     */
+    private void handlePartialBookDepth(JsonNode json) {
+        try {
+            long updateId = json.get("lastUpdateId").asLong();
+            Instant timestamp = Instant.now();
+            
+            // The symbol is not in the message, we need to track it from the stream name
+            // For now, we'll try to extract it from context or use a default
+            // This is a limitation of partial book depth streams
+            
+            // Parse bids
+            List<OrderBookLevel> bids = new ArrayList<>();
+            JsonNode bidsArray = json.get("bids");
+            if (bidsArray != null && bidsArray.isArray()) {
+                for (JsonNode bid : bidsArray) {
+                    BigDecimal price = new BigDecimal(bid.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(bid.get(1).asText());
+                    bids.add(new OrderBookLevel(price, quantity));
+                }
+            }
+            
+            // Parse asks
+            List<OrderBookLevel> asks = new ArrayList<>();
+            JsonNode asksArray = json.get("asks");
+            if (asksArray != null && asksArray.isArray()) {
+                for (JsonNode ask : asksArray) {
+                    BigDecimal price = new BigDecimal(ask.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(ask.get(1).asText());
+                    asks.add(new OrderBookLevel(price, quantity));
+                }
+            }
+            
+            // Try to determine symbol from subscribed order books
+            // This is a workaround since partial depth doesn't include symbol in the message
+            String symbol = "UNKNOWN";
+            if (!subscribedOrderBooks.isEmpty()) {
+                // Use the first subscribed symbol (limitation of the current approach)
+                symbol = subscribedOrderBooks.keySet().iterator().next();
+            }
+            
+            OrderBookData orderBookData = new OrderBookData(
+                symbol,
+                updateId,
+                timestamp,
+                bids,
+                asks,
+                getProviderName()
+            );
+            
+            TradingData tradingData = new TradingData(
+                symbol,
+                timestamp,
+                getProviderName(),
+                TradingDataType.ORDER_BOOK,
+                orderBookData
+            );
+            
+            if (dataHandler != null) {
+                dataHandler.accept(tradingData);
+            }
+            
+            System.out.println("📚 " + symbol + " ORDER_BOOK (partial): " + bids.size() + " bids, " + 
+                             asks.size() + " asks, spread=" + orderBookData.getSpread());
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing partial book depth: " + e.getMessage());
             e.printStackTrace();
         }
     }

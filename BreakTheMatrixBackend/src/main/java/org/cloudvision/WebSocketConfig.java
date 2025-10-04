@@ -1,6 +1,7 @@
 package org.cloudvision;
 
 import org.cloudvision.trading.websocket.TradingWebSocketHandler;
+import org.cloudvision.trading.websocket.OrderFlowWebSocketHandler;
 import org.cloudvision.trading.bot.websocket.StrategyVisualizationWebSocketHandler;
 import org.cloudvision.trading.bot.websocket.PositionsWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
@@ -14,15 +15,18 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final EchoWebSocketHandler echoWebSocketHandler;
     private final TradingWebSocketHandler tradingWebSocketHandler;
+    private final OrderFlowWebSocketHandler orderFlowWebSocketHandler;
     private final StrategyVisualizationWebSocketHandler strategyVisualizationWebSocketHandler;
     private final PositionsWebSocketHandler positionsWebSocketHandler;
 
     public WebSocketConfig(EchoWebSocketHandler echoWebSocketHandler, 
                           TradingWebSocketHandler tradingWebSocketHandler,
+                          OrderFlowWebSocketHandler orderFlowWebSocketHandler,
                           StrategyVisualizationWebSocketHandler strategyVisualizationWebSocketHandler,
                           PositionsWebSocketHandler positionsWebSocketHandler) {
         this.echoWebSocketHandler = echoWebSocketHandler;
         this.tradingWebSocketHandler = tradingWebSocketHandler;
+        this.orderFlowWebSocketHandler = orderFlowWebSocketHandler;
         this.strategyVisualizationWebSocketHandler = strategyVisualizationWebSocketHandler;
         this.positionsWebSocketHandler = positionsWebSocketHandler;
     }
@@ -31,6 +35,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(echoWebSocketHandler, "/ws").setAllowedOrigins("*");
         registry.addHandler(tradingWebSocketHandler, "/trading-ws").setAllowedOrigins("*");
+        registry.addHandler(orderFlowWebSocketHandler, "/orderflow-ws").setAllowedOrigins("*");
         registry.addHandler(strategyVisualizationWebSocketHandler, "/strategy-viz-ws").setAllowedOrigins("*");
         registry.addHandler(positionsWebSocketHandler, "/positions-ws").setAllowedOrigins("*");
     }

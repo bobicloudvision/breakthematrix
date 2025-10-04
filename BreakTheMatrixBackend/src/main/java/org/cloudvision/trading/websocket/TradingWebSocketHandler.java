@@ -211,7 +211,64 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
                 candlestickMap.put("isClosed", candlestick.isClosed());
                 
                 messageData.put("candlestick", candlestickMap);
-            } else {
+            } 
+            // Add trade data if available (order flow)
+            else if (data.hasTradeData()) {
+                messageData = new java.util.HashMap<>(messageData);
+                var trade = data.getTradeData();
+                
+                Map<String, Object> tradeMap = new java.util.HashMap<>();
+                tradeMap.put("tradeId", trade.getTradeId());
+                tradeMap.put("price", trade.getPrice());
+                tradeMap.put("quantity", trade.getQuantity());
+                tradeMap.put("quoteQuantity", trade.getQuoteQuantity());
+                tradeMap.put("isBuyerMaker", trade.isBuyerMaker());
+                tradeMap.put("isAggressiveBuy", trade.isAggressiveBuy());
+                tradeMap.put("isAggressiveSell", trade.isAggressiveSell());
+                tradeMap.put("isAggregate", trade.isAggregateTrade());
+                tradeMap.put("timestamp", trade.getTimestamp());
+                
+                if (trade.isAggregateTrade()) {
+                    tradeMap.put("firstTradeId", trade.getFirstTradeId());
+                    tradeMap.put("lastTradeId", trade.getLastTradeId());
+                }
+                
+                messageData.put("trade", tradeMap);
+            }
+            // Add order book data if available (order flow)
+            else if (data.hasOrderBookData()) {
+                messageData = new java.util.HashMap<>(messageData);
+                var orderBook = data.getOrderBookData();
+                
+                Map<String, Object> orderBookMap = new java.util.HashMap<>();
+                orderBookMap.put("lastUpdateId", orderBook.getLastUpdateId());
+                orderBookMap.put("bestBid", orderBook.getBestBid());
+                orderBookMap.put("bestAsk", orderBook.getBestAsk());
+                orderBookMap.put("spread", orderBook.getSpread());
+                
+                // Convert bid levels
+                java.util.List<Map<String, Object>> bids = new java.util.ArrayList<>();
+                for (var level : orderBook.getBids()) {
+                    bids.add(Map.of("price", level.getPrice(), "quantity", level.getQuantity()));
+                }
+                orderBookMap.put("bids", bids);
+                
+                // Convert ask levels
+                java.util.List<Map<String, Object>> asks = new java.util.ArrayList<>();
+                for (var level : orderBook.getAsks()) {
+                    asks.add(Map.of("price", level.getPrice(), "quantity", level.getQuantity()));
+                }
+                orderBookMap.put("asks", asks);
+                
+                // Add volume aggregates
+                orderBookMap.put("bidVolume5", orderBook.getTotalBidVolume(5));
+                orderBookMap.put("askVolume5", orderBook.getTotalAskVolume(5));
+                orderBookMap.put("bidVolume10", orderBook.getTotalBidVolume(10));
+                orderBookMap.put("askVolume10", orderBook.getTotalAskVolume(10));
+                
+                messageData.put("orderBook", orderBookMap);
+            } 
+            else {
                 // Add simple price/volume data
                 messageData = new java.util.HashMap<>(messageData);
                 messageData.put("price", data.getPrice());

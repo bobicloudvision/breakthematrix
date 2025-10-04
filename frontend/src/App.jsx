@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Chart } from "./Chart";
+import { OrderFlow } from "./OrderFlowChart";
 import { TradingProviderDropdown } from "./TradingProviderDropdown";
 import { BotControl } from "./BotControl";
 import { OrdersTab } from "./OrdersTab";
@@ -296,22 +297,11 @@ export default function App() {
                       enabledIndicators={enabledIndicators}
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
-                      <div className="text-center max-w-md mx-auto px-4">
-                        <div className="text-6xl mb-4">📈</div>
-                        <p className="text-cyan-300 text-xl font-medium mb-2">Order Flow View</p>
-                        <p className="text-slate-400 mb-4">Real-time order flow analysis coming soon...</p>
-                        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600/30">
-                          <p className="text-slate-300 text-sm mb-2">Features in development:</p>
-                          <ul className="text-slate-400 text-xs text-left space-y-1">
-                            <li>• Order book depth visualization</li>
-                            <li>• Large order tracking</li>
-                            <li>• Trade flow heatmaps</li>
-                            <li>• Volume profile analysis</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
+                    <OrderFlow 
+                      provider={selectedProvider}
+                      symbol={symbol}
+                      interval={interval}
+                    />
                   )}
                 </div>
               ) : (
