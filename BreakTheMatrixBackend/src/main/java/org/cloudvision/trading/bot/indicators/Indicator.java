@@ -15,7 +15,21 @@ import java.util.Map;
  * - Added independently to charts via REST API
  * - Configured with custom parameters
  * 
- * Each indicator is stateless and thread-safe.
+ * Event-Driven Architecture:
+ * Indicators use an event-driven approach with three lifecycle methods:
+ * 1. onInit(historicalCandles, params) - Initialize state with historical data
+ * 2. onNewCandle(candle, params, state) - Process each new candle (historical or live)
+ * 3. onNewTick(price, params, state) - Process real-time price ticks (optional)
+ * 
+ * This design enables:
+ * - Efficient incremental calculations (no need to reprocess entire history)
+ * - Stateful indicators (order blocks, market structure, etc.)
+ * - Real-time updates for live trading
+ * - Clean separation between initialization and calculation
+ * 
+ * Thread Safety:
+ * Indicator instances are thread-safe. State is managed per calculation context,
+ * allowing multiple concurrent calculations with independent state objects.
  */
 public interface Indicator {
     
@@ -50,42 +64,75 @@ public interface Indicator {
     Map<String, IndicatorParameter> getParameters();
     
     /**
-     * Calculate indicator value(s) based on candlestick data
+     * Initialize the indicator with historical data and parameters, returns initial state
      * 
-     * @param candles Historical candlestick data (sorted chronologically)
-     * @param params Configuration parameters for this calculation
-     * @return Map of indicator output names to values
-     *         Example for SMA: {"sma": 50000.00}
-     *         Example for Bollinger Bands: {"upper": 51000, "middle": 50000, "lower": 49000}
+     * This method is called once when the indicator is first set up.
+     * Use it to:
+     * - Process historical candles to build initial state
+     * - Validate parameters
+     * - Pre-calculate values that depend on historical context (e.g., initial MA values)
+     * - Initialize any internal buffers or data structures
+     * 
+     * For indicators that need a warm-up period (e.g., SMA(20) needs 20 candles),
+     * the historical candles list should contain at least getMinRequiredCandles() candles.
+     * 
+     * @param historicalCandles Historical candlestick data for initialization (can be empty for stateless indicators)
+     *                         Sorted chronologically (oldest first)
+     * @param params Configuration parameters for this indicator
+     * @return Initial state object (can be null if no state is needed)
      */
-    Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params);
+    Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params);
     
     /**
-     * Progressive calculation that maintains state across candles
-     * This is used for efficient historical data processing and indicators that need to track state
-     * or return additional data like shapes/boxes.
+     * Process a single historical or live candle, returns updated state and values
      * 
-     * Default implementation: wraps standard calculate() method
-     * Override this for:
-     * - Indicators that need to maintain state (e.g., order blocks, market structure)
-     * - Indicators that return shapes/boxes/additional data
-     * - Performance optimization when calculating many sequential data points
+     * This is the core calculation method called for each new candle.
+     * The method receives the current candle and previous state, and returns:
+     * - Updated indicator values
+     * - Updated state for the next call
+     * - Optional additional data (colors, shapes, boxes, etc.)
      * 
-     * @param candles Historical candlestick data (sorted chronologically)
+     * @param candle The candle to process
      * @param params Configuration parameters for this calculation
-     * @param previousState State from previous calculation (null for first call, type depends on indicator)
+     * @param state Current state from previous call (or from onInit)
      * @return Map containing:
      *   - "values": Map<String, BigDecimal> with indicator values (required)
-     *   - "state": Object for next iteration (can be null)
-     *   - Additional data (e.g., "boxes", "orderBlocks", "shapes") - optional
+     *   - "state": Updated state for next iteration (can be null)
+     *   - Additional data like "color", "boxes", "orderBlocks", "shapes" (optional)
+     * 
+     * Example return for Volume:
+     *   {"values": {"volume": 1234.56}, "state": volumeState, "color": "#26a69a"}
+     * 
+     * Example return for SuperTrend:
+     *   {"values": {"supertrend": 50000.00, "direction": 1}, "state": supertrendState}
      */
-    default Map<String, Object> calculateProgressive(List<CandlestickData> candles,
-                                                     Map<String, Object> params,
-                                                     Object previousState) {
-        // Default: just call calculate and wrap result
+    Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state);
+    
+    /**
+     * Process a single tick for real-time updates (optional)
+     * 
+     * This method is called when a price tick occurs within the current candle.
+     * Most indicators don't need tick-level updates and can use the default implementation.
+     * 
+     * Override this for indicators that need real-time updates, such as:
+     * - Live price lines that follow the current price
+     * - Dynamic trailing stops
+     * - Real-time momentum calculations
+     * 
+     * @param price Current tick price
+     * @param params Configuration parameters
+     * @param state Current state
+     * @return Map containing:
+     *   - "values": Map<String, BigDecimal> with updated indicator values (can be empty)
+     *   - "state": Updated state (usually unchanged for ticks)
+     *   - Additional data (optional)
+     * 
+     * Default implementation: Returns empty values with unchanged state
+     */
+    default Map<String, Object> onNewTick(BigDecimal price, Map<String, Object> params, Object state) {
         return Map.of(
-            "values", calculate(candles, params),
-            "state", previousState != null ? previousState : new Object()
+            "values", Map.of(),
+            "state", state
         );
     }
     

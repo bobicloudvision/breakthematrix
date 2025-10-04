@@ -16,9 +16,41 @@ import java.util.Map;
  * Displays trading volume with color-coded bars:
  * - Green for bullish candles (close >= open)
  * - Red for bearish candles (close < open)
+ * 
+ * This indicator uses an event-driven approach for efficient real-time processing.
  */
 @Component
 public class VolumeIndicator extends AbstractIndicator {
+    
+    /**
+     * Internal state class to track volume data
+     * For this simple indicator, state is minimal but included for consistency
+     */
+    public static class VolumeState {
+        private BigDecimal lastVolume;
+        private String lastColor;
+        
+        public VolumeState() {
+            this.lastVolume = BigDecimal.ZERO;
+            this.lastColor = null;
+        }
+        
+        public BigDecimal getLastVolume() {
+            return lastVolume;
+        }
+        
+        public void setLastVolume(BigDecimal lastVolume) {
+            this.lastVolume = lastVolume;
+        }
+        
+        public String getLastColor() {
+            return lastColor;
+        }
+        
+        public void setLastColor(String lastColor) {
+            this.lastColor = lastColor;
+        }
+    }
     
     public VolumeIndicator() {
         super(
@@ -52,51 +84,101 @@ public class VolumeIndicator extends AbstractIndicator {
         return params;
     }
     
+    /**
+     * Initialize the indicator with historical data and parameters, returns initial state
+     * 
+     * For Volume indicator, we don't need to process historical candles since each volume bar
+     * is independent and doesn't depend on previous values. However, if historical candles
+     * are provided, we can initialize state with the last candle's volume.
+     * 
+     * @param historicalCandles Historical candlestick data for initialization (can be empty)
+     * @param params Configuration parameters
+     * @return Initial state object (VolumeState)
+     */
     @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
-        if (candles == null || candles.isEmpty()) {
-            return Map.of("volume", BigDecimal.ZERO);
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        // Validate parameters
+        validateParameters(params);
+        
+        // Create initial state
+        VolumeState state = new VolumeState();
+        
+        // If historical candles are provided, initialize with the last candle
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            params = mergeWithDefaults(params);
+            
+            CandlestickData lastCandle = historicalCandles.get(historicalCandles.size() - 1);
+            String bullishColor = getStringParameter(params, "bullishColor", "#26a69a");
+            String bearishColor = getStringParameter(params, "bearishColor", "#ef5350");
+            
+            state.setLastVolume(lastCandle.getVolume());
+            state.setLastColor(determineVolumeColor(lastCandle, bullishColor, bearishColor));
         }
         
-        // Get the last candle's volume
-        CandlestickData lastCandle = candles.get(candles.size() - 1);
-        
-        Map<String, BigDecimal> result = new HashMap<>();
-        result.put("volume", lastCandle.getVolume());
-        
-        return result;
+        return state;
     }
     
     /**
-     * Progressive calculation that returns color information per data point
+     * Process a single historical or live candle, returns updated state and values
+     * 
+     * @param candle The candle to process
+     * @param params Configuration parameters
+     * @param state Current state from previous call (or from onInit)
+     * @return Map containing "values" (indicator values), "state" (updated state), and "color" (bar color)
      */
-    public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
-                                                     Map<String, Object> params, 
-                                                     Object previousState) {
-        if (candles == null || candles.isEmpty()) {
-            return Map.of("values", Map.of("volume", BigDecimal.ZERO));
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+        if (candle == null) {
+            throw new IllegalArgumentException("Candle cannot be null");
         }
         
+        // Merge with defaults
         params = mergeWithDefaults(params);
-        CandlestickData lastCandle = candles.get(candles.size() - 1);
+        
+        // Cast state
+        VolumeState volumeState = (state instanceof VolumeState) ? (VolumeState) state : new VolumeState();
         
         // Get color parameters
         String bullishColor = getStringParameter(params, "bullishColor", "#26a69a");
         String bearishColor = getStringParameter(params, "bearishColor", "#ef5350");
         
-        // Determine color based on candle direction
-        String color = getVolumeColor(lastCandle, bullishColor, bearishColor);
+        // Get volume from candle
+        BigDecimal volume = candle.getVolume();
         
-        // Return values and color
+        // Determine color based on candle direction
+        String color = determineVolumeColor(candle, bullishColor, bearishColor);
+        
+        // Update state
+        volumeState.setLastVolume(volume);
+        volumeState.setLastColor(color);
+        
+        // Build result
         Map<String, BigDecimal> values = new HashMap<>();
-        values.put("volume", lastCandle.getVolume());
+        values.put("volume", volume);
         
         Map<String, Object> result = new HashMap<>();
         result.put("values", values);
+        result.put("state", volumeState);
         result.put("color", color);
-        result.put("state", null); // No state needed
         
         return result;
+    }
+    
+    /**
+     * Process a single tick (optional)
+     * Volume doesn't change on individual ticks, so we return the current state
+     * 
+     * @param price Current price
+     * @param params Configuration parameters
+     * @param state Current state
+     * @return Map containing empty values and unchanged state
+     */
+    public Map<String, Object> onNewTick(BigDecimal price, Map<String, Object> params, Object state) {
+        // Volume doesn't update on individual ticks, only on new candles
+        // Return empty values with current state
+        return Map.of(
+            "values", Map.of(),
+            "state", state != null ? state : new VolumeState()
+        );
     }
     
     @Override
@@ -124,15 +206,33 @@ public class VolumeIndicator extends AbstractIndicator {
         return 1;  // Only needs 1 candle to show volume
     }
     
+    // ============================================================
+    // Helper methods
+    // ============================================================
+    
     /**
      * Helper method to determine volume bar color based on candle direction
+     * 
+     * @param candle The candle to analyze
+     * @param bullishColor Color for bullish candles (close >= open)
+     * @param bearishColor Color for bearish candles (close < open)
+     * @return The appropriate color based on candle direction
      */
-    public static String getVolumeColor(CandlestickData candle, String bullishColor, String bearishColor) {
+    private static String determineVolumeColor(CandlestickData candle, String bullishColor, String bearishColor) {
         if (candle.getClose().compareTo(candle.getOpen()) >= 0) {
             return bullishColor;
         } else {
             return bearishColor;
         }
+    }
+    
+    /**
+     * Legacy helper method for backward compatibility
+     * @deprecated Use {@link #determineVolumeColor(CandlestickData, String, String)} instead
+     */
+    @Deprecated
+    public static String getVolumeColor(CandlestickData candle, String bullishColor, String bearishColor) {
+        return determineVolumeColor(candle, bullishColor, bearishColor);
     }
 }
 
