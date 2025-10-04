@@ -34,7 +34,7 @@ public class IndicatorService {
         // Register all indicators
         for (Indicator indicator : indicatorList) {
             indicators.put(indicator.getId(), indicator);
-            System.out.println("📊 Registered indicator: " + indicator.getName() + " (" + indicator.getId() + ")");
+//            System.out.println("📊 Registered indicator: " + indicator.getName() + " (" + indicator.getId() + ")");
         }
         
         System.out.println("✅ IndicatorService initialized with " + indicators.size() + " indicators");

@@ -43,7 +43,7 @@ public class TradingConfig {
     private static final boolean SUBSCRIBE_TO_BOOK_TICKER = true; // Best bid/ask only (lightweight)
     private static final int ORDER_BOOK_DEPTH = 20; // 5, 10, or 20 levels
 
-    @PostConstruct
+//    @PostConstruct
     public void initializeTradingInfrastructure() {
         System.out.println("\n🔧 Initializing Trading Infrastructure...\n");
         

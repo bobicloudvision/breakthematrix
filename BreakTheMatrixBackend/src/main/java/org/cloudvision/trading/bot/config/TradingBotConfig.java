@@ -41,7 +41,7 @@ public class TradingBotConfig {
     // @Autowired(required = false)
     // private List<TradingStrategy> allStrategies;
 
-    @PostConstruct
+//    @PostConstruct
     public void setupTradingBot() {
         System.out.println("🔧 Configuring Trading Bot strategies...");
         

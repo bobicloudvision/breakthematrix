@@ -35,7 +35,7 @@ public class FootprintDataListener {
         this.footprintService = footprintService;
     }
     
-    @PostConstruct
+//    @PostConstruct
     public void initialize() {
         // Register to receive all trading data
         tradingBot.addDataHandler(this::processData);
