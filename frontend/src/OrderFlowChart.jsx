@@ -2,11 +2,11 @@ import {
     createChart, 
     ColorType, 
     LineStyle,
-    HistogramSeries,
     CandlestickSeries,
 } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { FootprintPrimitive } from './FootprintPrimitive';
+import { DeltaTablePrimitive } from './DeltaTablePrimitive';
 
 export const OrderFlowChart = ({ provider, symbol, interval }) => {
     const chartContainerRef = useRef();
@@ -15,6 +15,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
     const askSeriesRef = useRef();
     const candleSeriesRef = useRef();
     const footprintRef = useRef();
+    const deltaTableRef = useRef();
     const [orderBookData, setOrderBookData] = useState({ 
         bids: [], 
         asks: [],
@@ -59,7 +60,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                 visible: true,
                 scaleMargins: {
                     top: 0.1,
-                    bottom: 0.2, // More space at bottom for volume bars
+                    bottom: 0.15, // Space for delta table primitive at bottom
                 },
             },
             timeScale: {
@@ -75,12 +76,12 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
 
         // Create candlestick series with footprint side boxes
         const candleSeries = chart.addSeries(CandlestickSeries, {
-            upColor: 'rgba(16, 185, 129, 0.3)', // Light green fill
-            downColor: 'rgba(239, 68, 68, 0.3)', // Light red fill
-            borderUpColor: 'rgba(16, 185, 129, 1)', // Solid green border
-            borderDownColor: 'rgba(239, 68, 68, 1)', // Solid red border
-            wickUpColor: 'rgba(16, 185, 129, 0.8)', // Green wick
-            wickDownColor: 'rgba(239, 68, 68, 0.8)', // Red wick
+            upColor: 'rgba(0, 0, 0, 0)', // Transparent - grid shows
+            downColor: 'rgba(0, 0, 0, 0)', // Transparent - grid shows
+            borderUpColor: 'rgba(0, 0, 0, 0)', // Transparent border
+            borderDownColor: 'rgba(0, 0, 0, 0)', // Transparent border
+            wickUpColor: 'rgba(100, 100, 100, 0.5)', // Light gray wick
+            wickDownColor: 'rgba(100, 100, 100, 0.5)', // Light gray wick
             priceScaleId: 'right',
         });
 
@@ -90,7 +91,13 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         footprint._fontSize = 11; // Increased from 9 to 11 for larger, more readable text
         candleSeries.attachPrimitive(footprint);
         footprintRef.current = footprint;
-        console.log('[OrderFlow] Footprint GRID LAYOUT - structured table view with cell backgrounds, borders, and centered text');
+
+        // Create and attach delta table primitive (drawn at bottom of chart)
+        const deltaTable = new DeltaTablePrimitive(chart, candleSeries);
+        candleSeries.attachPrimitive(deltaTable);
+        deltaTableRef.current = deltaTable;
+
+        console.log('[OrderFlow] Footprint GRID + Delta table primitive (labels on right side)');
 
         chartRef.current = chart;
         candleSeriesRef.current = candleSeries;
@@ -289,10 +296,18 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         
         footprintRef.current.updateData(orderFlowCandles);
         
+        // Update delta table primitive with same data
+        if (deltaTableRef.current) {
+            deltaTableRef.current.updateData(orderFlowCandles);
+        }
+        
         // Force chart redraw using requestAnimationFrame (like BoxPrimitive/LinePrimitive)
         if (chartRef.current) {
             requestAnimationFrame(() => {
                 footprintRef.current.updateAllViews();
+                if (deltaTableRef.current) {
+                    deltaTableRef.current.updateAllViews();
+                }
                 // Force chart redraw
                 chartRef.current.timeScale().applyOptions({});
                 console.log('[OrderFlow] Chart redraw triggered via requestAnimationFrame');
