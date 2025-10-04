@@ -2,6 +2,7 @@ package org.cloudvision.trading.bot.indicators.impl;
 
 import org.cloudvision.trading.bot.indicators.*;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
+import org.cloudvision.trading.bot.visualization.MarkerShape;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +25,16 @@ import java.util.stream.Collectors;
  * - Trend prediction using historical pattern matching
  * - Multiple price and target value options
  * - Configurable smoothing and sensitivity
+ * 
+ * Trading Signals (Crossover Strategy):
+ * 
+ * - 🟢 BULLISH: When KNN Classifier crosses above Average KNN (knn_crossover_avg)
+ *   Visual: Green circle with "BUY" label below the indicator
+ * 
+ * - 🔴 BEARISH: When KNN Classifier crosses below Average KNN (knn_crossunder_avg)
+ *   Visual: Red circle with "SELL" label above the indicator
+ * 
+ * These crossover signals are the most reliable and should be used as primary entry/exit points.
  */
 @Component
 public class AITrendNavigatorIndicator extends AbstractIndicator {
@@ -32,7 +43,7 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         super(
             "ai_trend_navigator",
             "AI Trend Navigator",
-            "K-Nearest Neighbors based trend prediction indicator that uses machine learning to analyze price patterns and predict market direction",
+            "K-Nearest Neighbors based trend prediction indicator that uses machine learning to analyze price patterns. Generates clear BUY/SELL signals when the KNN Classifier crosses the Average KNN line",
             IndicatorCategory.TREND
         );
     }
@@ -308,7 +319,74 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
             color = getStringParameter(params, "neutralColor", "#FFA500");
         }
         
+        // Detect trading signals
+        Map<String, Object> signals = new HashMap<>();
+        signals.put("knnColor", color);
+        signals.put("trendDirection", knnMA_.compareTo(MAknn_) > 0 ? "up" : "down");
+        
+        // List to store marker shapes
+        List<Map<String, Object>> markers = new ArrayList<>();
+        CandlestickData currentCandle = candles.get(candles.size() - 1);
+        
+        // Signal: KNN crossed over Average KNN (BULLISH)
+        if (state.prevKnnMA != null && state.prevMAknn != null) {
+            boolean crossoverMA = state.prevKnnMA.compareTo(state.prevMAknn) <= 0 && 
+                                 knnMA_.compareTo(MAknn_) > 0;
+            if (crossoverMA) {
+                signals.put("signal", "BULLISH");
+                signals.put("signalType", "knn_crossover_avg");
+                signals.put("signalStrength", "strong");
+                
+                // Calculate exact crossover price using linear interpolation
+                BigDecimal crossPrice = calculateCrossoverPrice(
+                    state.prevKnnMA, knnMA_,
+                    state.prevMAknn, MAknn_
+                );
+                
+                // Add bullish marker at exact crossover point
+                MarkerShape marker = MarkerShape.builder()
+                    .time(currentCandle.getCloseTime().getEpochSecond())
+                    .price(crossPrice)
+                    .shape("circle")
+                    .color("#00FF00")
+                    .position("inPlace")
+                    .text("BUY")
+                    .size(12)
+                    .build();
+                markers.add(marker.toMap());
+            }
+            
+            // Signal: KNN crossed under Average KNN (BEARISH)
+            boolean crossunderMA = state.prevKnnMA.compareTo(state.prevMAknn) >= 0 && 
+                                  knnMA_.compareTo(MAknn_) < 0;
+            if (crossunderMA) {
+                signals.put("signal", "BEARISH");
+                signals.put("signalType", "knn_crossunder_avg");
+                signals.put("signalStrength", "strong");
+                
+                // Calculate exact crossover price using linear interpolation
+                BigDecimal crossPrice = calculateCrossoverPrice(
+                    state.prevKnnMA, knnMA_,
+                    state.prevMAknn, MAknn_
+                );
+                
+                // Add bearish marker at exact crossover point
+                MarkerShape marker = MarkerShape.builder()
+                    .time(currentCandle.getCloseTime().getEpochSecond())
+                    .price(crossPrice)
+                    .shape("circle")
+                    .color("#FF0000")
+                    .position("inPlace")
+                    .text("SELL")
+                    .size(12)
+                    .build();
+                markers.add(marker.toMap());
+            }
+        }
+        
+        // Update state with previous values
         state.prevKnnMA = knnMA_;
+        state.prevMAknn = MAknn_;
         state.currentColor = color;
         
         Map<String, BigDecimal> values = new HashMap<>();
@@ -319,14 +397,60 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         Map<String, Object> result = new HashMap<>();
         result.put("values", values);
         result.put("state", state);
-        
-        // Add color signal for visualization
-        Map<String, Object> signals = new HashMap<>();
-        signals.put("knnColor", color);
-        signals.put("trendDirection", knnMA_.compareTo(MAknn_) > 0 ? "up" : "down");
         result.put("signals", signals);
         
+        // Add markers if any were created
+        if (!markers.isEmpty()) {
+            result.put("markers", markers);
+        }
+        
         return result;
+    }
+    
+    /**
+     * Calculate the exact crossover price using linear interpolation
+     * 
+     * Given two lines crossing between two points:
+     * Line 1: from prevLine1 to currentLine1
+     * Line 2: from prevLine2 to currentLine2
+     * 
+     * Find the Y value (price) where they intersect
+     */
+    private BigDecimal calculateCrossoverPrice(BigDecimal prevLine1, BigDecimal currentLine1,
+                                              BigDecimal prevLine2, BigDecimal currentLine2) {
+        try {
+            // Calculate slopes
+            BigDecimal line1Change = currentLine1.subtract(prevLine1);
+            BigDecimal line2Change = currentLine2.subtract(prevLine2);
+            
+            // If lines are parallel (same slope), return the average of current values
+            if (line1Change.subtract(line2Change).abs().compareTo(new BigDecimal("0.0001")) < 0) {
+                return currentLine1.add(currentLine2)
+                    .divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
+            }
+            
+            // Calculate intersection point ratio (where between 0 and 1 does the cross occur)
+            BigDecimal numerator = prevLine2.subtract(prevLine1);
+            BigDecimal denominator = line1Change.subtract(line2Change);
+            
+            BigDecimal ratio = numerator.divide(denominator, 8, RoundingMode.HALF_UP);
+            
+            // Clamp ratio between 0 and 1
+            if (ratio.compareTo(BigDecimal.ZERO) < 0) {
+                ratio = BigDecimal.ZERO;
+            } else if (ratio.compareTo(BigDecimal.ONE) > 0) {
+                ratio = BigDecimal.ONE;
+            }
+            
+            // Calculate intersection price: prevLine1 + (ratio * line1Change)
+            BigDecimal crossPrice = prevLine1.add(ratio.multiply(line1Change));
+            
+            return crossPrice;
+        } catch (Exception e) {
+            // Fallback: return average of current values
+            return currentLine1.add(currentLine2)
+                .divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
+        }
     }
     
     /**
@@ -567,6 +691,7 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         List<BigDecimal> openHistory = new ArrayList<>();
         List<BigDecimal> predictionHistory = new ArrayList<>();
         BigDecimal prevKnnMA = null;
+        BigDecimal prevMAknn = null;
         String currentColor = null;
     }
     
@@ -583,6 +708,7 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         params = mergeWithDefaults(params);
         
         String upColor = getStringParameter(params, "upColor", "#00FF00");
+        String downColor = getStringParameter(params, "downColor", "#FF0000");
         String avgColor = getStringParameter(params, "avgColor", "#008080");
         
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
@@ -609,6 +735,34 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
             .asLine("#9C27B0", 1)
             .separatePane(true)
             .paneOrder(1)
+            .build());
+        
+        // Buy Signal Marker (Crossover Average KNN)
+        metadata.put("buySignal", IndicatorMetadata.builder("buySignal")
+            .displayName("Buy Signal")
+            .seriesType("marker")
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("shape", "circle")
+            .addConfig("color", upColor)
+            .addConfig("position", "inPlace")
+            .addConfig("size", 12)
+            .addConfig("text", "BUY")
+            .addConfig("description", "Positioned at exact crossover point")
+            .build());
+        
+        // Sell Signal Marker (Crossunder Average KNN)
+        metadata.put("sellSignal", IndicatorMetadata.builder("sellSignal")
+            .displayName("Sell Signal")
+            .seriesType("marker")
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("shape", "circle")
+            .addConfig("color", downColor)
+            .addConfig("position", "inPlace")
+            .addConfig("size", 12)
+            .addConfig("text", "SELL")
+            .addConfig("description", "Positioned at exact crossover point")
             .build());
         
         return metadata;
