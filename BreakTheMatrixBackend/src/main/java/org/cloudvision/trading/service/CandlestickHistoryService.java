@@ -50,7 +50,7 @@ public class CandlestickHistoryService {
                     candles.subList(0, toRemove).clear();
                 }
                 
-                System.out.println("📦 Stored new candle for " + key + " (total: " + candles.size() + "/" + maxCandles + ")");
+//                System.out.println("📦 Stored new candle for " + key + " (total: " + candles.size() + "/" + maxCandles + ")");
             } else {
                 // Update existing candlestick (for live updates)
                 for (int i = 0; i < candles.size(); i++) {
