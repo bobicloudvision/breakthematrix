@@ -276,29 +276,79 @@ export const ChartComponent = props => {
                             LinePrimitive
                         );
                         
-                        // Add fill between price and indicator line if requested
-                        if (apiResponse.shapes?.fill?.enabled && apiResponse.series) {
+                        // Add fills (support both single fill and multiple fills array)
+                        if (apiResponse.shapes && apiResponse.series) {
                             const seriesKeys = Object.keys(apiResponse.series);
-                            if (seriesKeys.length > 0) {
-                                const indicatorData = apiResponse.series[seriesKeys[0]];
-                                const fillOptions = {
-                                    colorMode: apiResponse.shapes.fill.colorMode || 'dynamic',
-                                    upFillColor: apiResponse.shapes.fill.upFillColor || 'rgba(76, 175, 80, 0.15)',
-                                    downFillColor: apiResponse.shapes.fill.downFillColor || 'rgba(239, 83, 80, 0.15)',
-                                    neutralFillColor: apiResponse.shapes.fill.neutralFillColor || 'rgba(158, 158, 158, 0.1)',
-                                    fillColor: apiResponse.shapes.fill.fillColor
-                                };
+                            
+                            // Support both shapes.fill (single) and shapes.fills (array)
+                            let fillConfigs = [];
+                            if (apiResponse.shapes.fill?.enabled) {
+                                fillConfigs.push(apiResponse.shapes.fill);
+                            }
+                            if (apiResponse.shapes.fills && Array.isArray(apiResponse.shapes.fills)) {
+                                fillConfigs.push(...apiResponse.shapes.fills.filter(f => f.enabled !== false));
+                            }
+                            
+                            if (fillConfigs.length > 0 && seriesKeys.length > 0) {
+                                console.log(`Processing ${fillConfigs.length} fill(s) for indicator ${instanceId}`);
                                 
-                                setTimeout(() => {
-                                    if (seriesManagerRef.current && data && data.length > 0) {
-                                        seriesManagerRef.current.addFillBetween(
-                                            `fill_${instanceId}`,
-                                            indicatorData,
-                                            fillOptions,
-                                            FillBetweenPrimitive
-                                        );
+                                fillConfigs.forEach((fillConfig, fillIndex) => {
+                                    // Resolve source1 to actual data if it's a series name
+                                    let source1Data = fillConfig.source1 || 'close';
+                                    if (typeof source1Data === 'string' && apiResponse.series[source1Data]) {
+                                        source1Data = apiResponse.series[source1Data];
                                     }
-                                }, 300); // Add fill after series is rendered
+                                    
+                                    // Resolve source2 to actual data if it's a series name
+                                    let source2Data = fillConfig.source2;
+                                    if (typeof source2Data === 'string' && apiResponse.series[source2Data]) {
+                                        // source2 is a series name (e.g., "trailingStop"), resolve to actual data
+                                        source2Data = apiResponse.series[source2Data];
+                                        console.log(`Resolved source2 "${fillConfig.source2}" to data array with ${source2Data.length} points`);
+                                    } else if (!source2Data) {
+                                        // No source2 specified, use first series by default
+                                        source2Data = apiResponse.series[seriesKeys[0]];
+                                        console.log(`Using default series for fill: ${seriesKeys[0]}`);
+                                    }
+                                    
+                                    // Build fill options based on backend configuration
+                                    const fillOptions = {
+                                        mode: fillConfig.mode || 'series',
+                                        source1: source1Data,
+                                        source2: source2Data,
+                                        
+                                        // For hline mode
+                                        hline1: fillConfig.hline1,
+                                        hline2: fillConfig.hline2,
+                                        
+                                        // Colors
+                                        color: fillConfig.color || 'rgba(41, 98, 255, 0.1)',
+                                        topColor: fillConfig.topColor,
+                                        bottomColor: fillConfig.bottomColor,
+                                        
+                                        // Dynamic coloring
+                                        colorMode: fillConfig.colorMode || 'static',
+                                        upFillColor: fillConfig.upFillColor || 'rgba(76, 175, 80, 0.15)',
+                                        downFillColor: fillConfig.downFillColor || 'rgba(239, 83, 80, 0.15)',
+                                        neutralFillColor: fillConfig.neutralFillColor || 'rgba(158, 158, 158, 0.1)',
+                                        
+                                        // Additional options
+                                        fillGaps: fillConfig.fillGaps !== false,
+                                        display: fillConfig.display !== false
+                                    };
+                                    
+                                    console.log(`Adding fill #${fillIndex} between "${fillConfig.source1 || 'close'}" and "${fillConfig.source2 || seriesKeys[0]}"`, fillOptions);
+                                    
+                                    setTimeout(() => {
+                                        if (seriesManagerRef.current && data && data.length > 0) {
+                                            seriesManagerRef.current.addFillBetween(
+                                                `fill_${instanceId}_${fillIndex}`,
+                                                fillOptions,
+                                                FillBetweenPrimitive
+                                            );
+                                        }
+                                    }, 300 + (fillIndex * 50)); // Stagger fills slightly
+                                });
                             }
                         }
                     }

@@ -2,6 +2,7 @@ package org.cloudvision.trading.bot.indicators.impl;
 
 import org.cloudvision.trading.bot.indicators.*;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
+import org.cloudvision.trading.bot.visualization.FillShape;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
 
@@ -366,6 +367,28 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             result.put("markers", markers);
         }
         
+        // Add fill shape configuration for area between price and trailing stop
+        // Convert hex colors to rgba with transparency
+        String bullFillColor = convertHexToRgba(bullColor, 0.15);
+        String bearFillColor = convertHexToRgba(bearColor, 0.15);
+        
+        FillShape fill = FillShape.builder()
+            .enabled(true)
+            .mode("series")
+            .source1("close")                           // Fill from close price
+            .source2("trailingStop")                    // To trailing stop line
+            .colorMode("dynamic")
+            .upFillColor(bullFillColor)                 // Bullish color with transparency
+            .downFillColor(bearFillColor)               // Bearish color with transparency
+            .neutralFillColor("rgba(158, 158, 158, 0.1)") // Gray for neutral
+            .fillGaps(true)
+            .display(true)
+            .build();
+        
+        List<Map<String, Object>> fills = new ArrayList<>();
+        fills.add(fill.toMap());
+        result.put("fills", fills);
+        
         return result;
     }
     
@@ -408,6 +431,24 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .addConfig("color", bullColor)
             .addConfig("shape", "triangle")
             .addConfig("position", "belowBar")
+            .build());
+        
+        // Fill area between price and trailing stop
+        metadata.put("fill", IndicatorMetadata.builder("fill")
+            .displayName("Trailing Stop Fill")
+            .seriesType("fill")
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("mode", "series")
+            .addConfig("source1", "close")
+            .addConfig("source2", "trailingStop")
+            .addConfig("colorMode", "dynamic")
+            .addConfig("upFillColor", "rgba(76, 175, 80, 0.15)")
+            .addConfig("downFillColor", "rgba(239, 83, 80, 0.15)")
+            .addConfig("neutralFillColor", "rgba(158, 158, 158, 0.1)")
+            .addConfig("fillGaps", true)
+            .addConfig("display", true)
+            .addConfig("directionField", "direction") // Link to direction field for color logic
             .build());
         
         return metadata;
@@ -686,6 +727,38 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             "pivotHigh", BigDecimal.ZERO,
             "pivotLow", BigDecimal.ZERO
         );
+    }
+    
+    /**
+     * Convert hex color to rgba with specified opacity
+     * Example: "#26a69a" with opacity 0.15 -> "rgba(38, 166, 154, 0.15)"
+     */
+    private String convertHexToRgba(String hex, double opacity) {
+        // Remove # if present
+        hex = hex.replace("#", "");
+        
+        // Parse RGB values
+        int r, g, b;
+        try {
+            if (hex.length() == 6) {
+                r = Integer.parseInt(hex.substring(0, 2), 16);
+                g = Integer.parseInt(hex.substring(2, 4), 16);
+                b = Integer.parseInt(hex.substring(4, 6), 16);
+            } else if (hex.length() == 3) {
+                // Short form like #abc -> #aabbcc
+                r = Integer.parseInt(String.valueOf(hex.charAt(0)) + hex.charAt(0), 16);
+                g = Integer.parseInt(String.valueOf(hex.charAt(1)) + hex.charAt(1), 16);
+                b = Integer.parseInt(String.valueOf(hex.charAt(2)) + hex.charAt(2), 16);
+            } else {
+                // Invalid format, return default
+                return "rgba(158, 158, 158, 0.1)";
+            }
+            
+            return String.format("rgba(%d, %d, %d, %.2f)", r, g, b, opacity);
+        } catch (NumberFormatException e) {
+            // If parsing fails, return default gray
+            return "rgba(158, 158, 158, 0.1)";
+        }
     }
     
     /**

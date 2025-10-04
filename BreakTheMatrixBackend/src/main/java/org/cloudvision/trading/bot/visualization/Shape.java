@@ -18,7 +18,8 @@ import java.util.Map;
     @JsonSubTypes.Type(value = BoxShape.class, name = "box"),
     @JsonSubTypes.Type(value = LineShape.class, name = "line"),
     @JsonSubTypes.Type(value = MarkerShape.class, name = "marker"),
-    @JsonSubTypes.Type(value = ArrowShape.class, name = "arrow")
+    @JsonSubTypes.Type(value = ArrowShape.class, name = "arrow"),
+    @JsonSubTypes.Type(value = FillShape.class, name = "fill")
 })
 public interface Shape {
     /**

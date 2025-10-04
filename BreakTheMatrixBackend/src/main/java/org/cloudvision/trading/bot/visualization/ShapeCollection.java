@@ -15,6 +15,7 @@ public class ShapeCollection {
     private final List<LineShape> lines = new ArrayList<>();
     private final List<MarkerShape> markers = new ArrayList<>();
     private final List<ArrowShape> arrows = new ArrayList<>();
+    private final List<FillShape> fills = new ArrayList<>();
     
     public ShapeCollection addBox(BoxShape box) {
         boxes.add(box);
@@ -36,6 +37,11 @@ public class ShapeCollection {
         return this;
     }
     
+    public ShapeCollection addFill(FillShape fill) {
+        fills.add(fill);
+        return this;
+    }
+    
     public List<BoxShape> getBoxes() {
         return boxes;
     }
@@ -52,13 +58,17 @@ public class ShapeCollection {
         return arrows;
     }
     
+    public List<FillShape> getFills() {
+        return fills;
+    }
+    
     public boolean isEmpty() {
-        return boxes.isEmpty() && lines.isEmpty() && markers.isEmpty() && arrows.isEmpty();
+        return boxes.isEmpty() && lines.isEmpty() && markers.isEmpty() && arrows.isEmpty() && fills.isEmpty();
     }
     
     /**
      * Convert to map format for API response
-     * Returns a map like: { "boxes": [...], "lines": [...], "markers": [...], "arrows": [...] }
+     * Returns a map like: { "boxes": [...], "lines": [...], "markers": [...], "arrows": [...], "fills": [...] }
      */
     public Map<String, Object> toMap() {
         Map<String, Object> map = new HashMap<>();
@@ -87,6 +97,12 @@ public class ShapeCollection {
                 .collect(Collectors.toList()));
         }
         
+        if (!fills.isEmpty()) {
+            map.put("fills", fills.stream()
+                .map(FillShape::toMap)
+                .collect(Collectors.toList()));
+        }
+        
         return map;
     }
     
@@ -100,6 +116,7 @@ public class ShapeCollection {
         lines.forEach(line -> allShapes.add(line.toMap()));
         markers.forEach(marker -> allShapes.add(marker.toMap()));
         arrows.forEach(arrow -> allShapes.add(arrow.toMap()));
+        fills.forEach(fill -> allShapes.add(fill.toMap()));
         
         return allShapes;
     }

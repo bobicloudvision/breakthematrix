@@ -966,22 +966,27 @@ export class ChartSeriesManager {
     }
 
     /**
-     * Add fill between main series (price) and an indicator line
+     * Add fill between two series or horizontal lines
      * Requires FillBetweenPrimitive class to be imported
+     * 
+     * Supports three modes:
+     * 1. Fill between two series: { mode: 'series', source1: 'close', source2: indicatorData, color: '...' }
+     * 2. Fill between hlines: { mode: 'hline', hline1: 50000, hline2: 51000, color: '...' }
+     * 3. Gradient fill: { mode: 'series', source1: '...', source2: '...', colorMode: 'gradient', topColor: '...', bottomColor: '...' }
+     * 
      * @param {string} id - Unique identifier for this fill
-     * @param {Array} indicatorData - Array of {time, value} points for the indicator line
-     * @param {Object} options - Fill options (fillColor, upFillColor, downFillColor, colorMode, etc.)
+     * @param {Object} options - Fill options
      * @param {Object} FillBetweenPrimitiveClass - The FillBetweenPrimitive class constructor
      * @returns {boolean} - Success status
      */
-    addFillBetween(id, indicatorData, options, FillBetweenPrimitiveClass) {
+    addFillBetween(id, options, FillBetweenPrimitiveClass) {
         if (!this.mainSeries) {
             console.error('Cannot add fill between: mainSeries not set');
             return false;
         }
         
-        if (!indicatorData || !Array.isArray(indicatorData) || indicatorData.length === 0) {
-            console.warn('No indicator data provided for fill between');
+        if (!options) {
+            console.warn('No options provided for fill between');
             return false;
         }
 
@@ -990,13 +995,13 @@ export class ChartSeriesManager {
             const fillPrimitive = new FillBetweenPrimitiveClass(
                 this.chart, 
                 this.mainSeries, 
-                indicatorData, 
                 options
             );
             this.mainSeries.attachPrimitive(fillPrimitive);
             this.fillBetweenPrimitives.push({ id, primitive: fillPrimitive });
             
-            console.log(`✅ Fill-between primitive attached for ${id} with ${indicatorData.length} points`);
+            const mode = options.mode || 'series';
+            console.log(`✅ Fill-between primitive attached for ${id} (mode: ${mode})`);
             
             // Request animation frame to ensure chart is fully rendered
             requestAnimationFrame(() => {
@@ -1058,9 +1063,9 @@ export class ChartSeriesManager {
     }
 
     /**
-     * Update a fill-between primitive with new indicator data
+     * Update a fill-between primitive with new data or options
      */
-    updateFillBetween(id, indicatorData, options = null) {
+    updateFillBetween(id, options) {
         const item = this.fillBetweenPrimitives.find(item => item.id === id);
         if (!item) {
             console.warn(`Fill-between primitive not found: ${id}`);
@@ -1068,10 +1073,14 @@ export class ChartSeriesManager {
         }
 
         try {
-            item.primitive.updateIndicatorData(indicatorData);
-            if (options) {
-                item.primitive.updateOptions(options);
+            // Update source data if provided
+            if (options.source1 && Array.isArray(options.source1) || 
+                options.source2 && Array.isArray(options.source2)) {
+                item.primitive.updateSourceData(options.source1, options.source2);
             }
+            
+            // Update all options
+            item.primitive.updateOptions(options);
             return true;
         } catch (error) {
             console.error(`Error updating fill-between primitive ${id}:`, error);

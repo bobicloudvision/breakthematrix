@@ -12,7 +12,7 @@ public class ShapeRegistry {
     
     // Known shape types
     private static final Set<String> SHAPE_TYPES = new HashSet<>(Arrays.asList(
-        "boxes", "lines", "markers", "arrows"
+        "boxes", "lines", "markers", "arrows", "fills"
     ));
     
     // Deduplication key generators for each shape type
@@ -38,6 +38,11 @@ public class ShapeRegistry {
         // Arrow deduplication: time + price + direction
         DEDUP_KEY_GENERATORS.put("arrows", arrow -> 
             arrow.get("time") + "_" + arrow.get("price") + "_" + arrow.get("direction")
+        );
+        
+        // Fill deduplication: colorMode (typically only one fill config per indicator)
+        DEDUP_KEY_GENERATORS.put("fills", fill -> 
+            String.valueOf(fill.get("colorMode"))
         );
     }
     
