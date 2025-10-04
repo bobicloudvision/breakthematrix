@@ -56,14 +56,14 @@ public class IndicatorInstanceController {
                      "The indicator will be initialized with historical data and will be ready to receive updates."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Indicator activation request. The indicator will be automatically initialized with historical data.",
+        description = "Indicator activation request. The indicator will be automatically initialized with maximum available historical data (up to 5000 candles).",
         required = true,
         content = @Content(
             mediaType = "application/json",
             examples = {
                 @ExampleObject(
-                    name = "SMA(20) with default history",
-                    description = "Activates SMA(20) with default history (50 candles)",
+                    name = "SMA(20) for BTCUSDT",
+                    description = "Activates SMA(20) for BTCUSDT 5m chart with full available history",
                     value = """
                     {
                       "indicatorId": "sma",
@@ -78,8 +78,8 @@ public class IndicatorInstanceController {
                     """
                 ),
                 @ExampleObject(
-                    name = "SMA(50) with 5000 candles history",
-                    description = "Activates SMA(50) with full 5000 candles of history for accurate long-term analysis",
+                    name = "SMA(50) for ETHUSDT",
+                    description = "Activates SMA(50) for ETHUSDT 1m chart with full available history",
                     value = """
                     {
                       "indicatorId": "sma",
@@ -88,22 +88,20 @@ public class IndicatorInstanceController {
                       "interval": "1m",
                       "params": {
                         "period": 50
-                      },
-                      "historyCount": 5000
+                      }
                     }
                     """
                 ),
                 @ExampleObject(
-                    name = "Volume with 1000 candles",
-                    description = "Activates Volume indicator with 1000 candles of history",
+                    name = "Volume indicator",
+                    description = "Activates Volume indicator with full available history",
                     value = """
                     {
                       "indicatorId": "volume",
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "15m",
-                      "params": {},
-                      "historyCount": 1000
+                      "params": {}
                     }
                     """
                 )
@@ -133,13 +131,14 @@ public class IndicatorInstanceController {
                               "period": 20
                             },
                             "createdAt": "2025-10-04T10:30:00Z",
-                            "initializedWithCandles": 50
+                            "initializedWithCandles": 20,
+                            "historicalResultsStored": 4980
                           }
                         }
                         """
                     ),
                     @ExampleObject(
-                        name = "Custom history response",
+                        name = "Full history response",
                         value = """
                         {
                           "success": true,
@@ -154,8 +153,8 @@ public class IndicatorInstanceController {
                               "period": 50
                             },
                             "createdAt": "2025-10-04T10:30:00Z",
-                            "initializedWithCandles": 5000,
-                            "requestedHistoryCount": 5000
+                            "initializedWithCandles": 50,
+                            "historicalResultsStored": 4950
                           }
                         }
                         """
@@ -176,8 +175,7 @@ public class IndicatorInstanceController {
                 request.getProvider(),
                 request.getSymbol(),
                 request.getInterval(),
-                request.getParams() != null ? request.getParams() : new HashMap<>(),
-                request.getHistoryCount() // Optional: null for default (50 candles)
+                request.getParams() != null ? request.getParams() : new HashMap<>()
             );
             
             IndicatorInstance instance = instanceManager.getInstance(instanceKey);
@@ -195,9 +193,7 @@ public class IndicatorInstanceController {
             details.put("params", instance.getParams());
             details.put("createdAt", instance.getCreatedAt());
             details.put("initializedWithCandles", instance.getState().getCandleCount());
-            if (request.getHistoryCount() != null) {
-                details.put("requestedHistoryCount", request.getHistoryCount());
-            }
+            details.put("historicalResultsStored", instance.getHistoricalResultCount());
             
             response.put("details", details);
             
@@ -493,7 +489,6 @@ public class IndicatorInstanceController {
         private String symbol;
         private String interval;
         private Map<String, Object> params;
-        private Integer historyCount; // Optional: number of historical candles to load
         
         public String getIndicatorId() { return indicatorId; }
         public void setIndicatorId(String indicatorId) { this.indicatorId = indicatorId; }
@@ -509,9 +504,6 @@ public class IndicatorInstanceController {
         
         public Map<String, Object> getParams() { return params; }
         public void setParams(Map<String, Object> params) { this.params = params; }
-        
-        public Integer getHistoryCount() { return historyCount; }
-        public void setHistoryCount(Integer historyCount) { this.historyCount = historyCount; }
     }
 }
 

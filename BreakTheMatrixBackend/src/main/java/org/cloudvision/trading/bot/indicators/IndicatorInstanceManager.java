@@ -107,6 +107,7 @@ public class IndicatorInstanceManager {
     
     /**
      * Create and register an active indicator instance
+     * Automatically loads maximum available historical candles (up to 5000)
      * 
      * @param indicatorId Indicator ID (e.g., "sma", "volume")
      * @param provider Provider name (e.g., "Binance")
@@ -118,23 +119,6 @@ public class IndicatorInstanceManager {
     public String activateIndicator(String indicatorId, String provider, 
                                    String symbol, String interval,
                                    Map<String, Object> params) {
-        return activateIndicator(indicatorId, provider, symbol, interval, params, null);
-    }
-    
-    /**
-     * Create and register an active indicator instance with custom history count
-     * 
-     * @param indicatorId Indicator ID (e.g., "sma", "volume")
-     * @param provider Provider name (e.g., "Binance")
-     * @param symbol Trading symbol (e.g., "BTCUSDT")
-     * @param interval Time interval (e.g., "1m", "5m")
-     * @param params Indicator parameters
-     * @param historyCount Number of historical candles to load (null for default)
-     * @return Unique instance key for the registered indicator
-     */
-    public String activateIndicator(String indicatorId, String provider, 
-                                   String symbol, String interval,
-                                   Map<String, Object> params, Integer historyCount) {
         
         // Generate unique key for this indicator instance
         String instanceKey = generateInstanceKey(indicatorId, provider, symbol, interval, params);
@@ -148,16 +132,8 @@ public class IndicatorInstanceManager {
         // Get the indicator implementation
         Indicator indicator = getIndicator(indicatorId);
         
-        // Determine how many candles to load
-        int requiredCandles = indicator.getMinRequiredCandles(params);
-        int candlesToLoad;
-        if (historyCount != null && historyCount > 0) {
-            // Use custom history count, but ensure it's at least the minimum required
-            candlesToLoad = Math.max(historyCount, requiredCandles);
-        } else {
-            // Default: minimum required or 50, whichever is larger
-            candlesToLoad = Math.max(requiredCandles, 50);
-        }
+        // Load maximum available historical candles (up to buffer limit)
+        int candlesToLoad = IndicatorInstance.MAX_HISTORY_SIZE; // 5000
         
         List<CandlestickData> candles = historyService.getLastNCandlesticks(
             provider, symbol, interval, candlesToLoad
