@@ -21,12 +21,14 @@ import java.util.*;
  * - Tracks bullish and bearish market structure breaks
  * - Provides a dynamic trailing stop that adjusts based on structure changes
  * - Supports Change of Character (CHoCH) detection
+ * - Shows retracement zones when price crosses to wrong side of trailing stop
  * 
  * Key Features:
  * - Pivot-based market structure detection
- * - Dynamic trailing stop that follows price movement
+ * - Dynamic trailing stop line that changes color based on direction
  * - Configurable increment factor for stop adjustment
  * - Optional CHoCH-only reset mode
+ * - Fill area with retracement color when price violates trailing stop
  */
 @Component
 public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
@@ -97,6 +99,24 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .required(false)
             .build());
         
+        params.put("retracementColor", IndicatorParameter.builder("retracementColor")
+            .displayName("Retracement Color")
+            .description("Color when price crosses to wrong side of trailing stop")
+            .type(IndicatorParameter.ParameterType.STRING)
+            .defaultValue("#ff5d00")
+            .required(false)
+            .build());
+        
+        params.put("areaTransparency", IndicatorParameter.builder("areaTransparency")
+            .displayName("Area Transparency")
+            .description("Transparency for fill area (0-100)")
+            .type(IndicatorParameter.ParameterType.INTEGER)
+            .defaultValue(80)
+            .minValue(0)
+            .maxValue(100)
+            .required(false)
+            .build());
+        
         return params;
     }
     
@@ -135,9 +155,20 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             }
         }
         
+        // Check if price is in retracement (wrong side of trailing stop)
+        // Pine Script: (close - ts) * os < 0
+        BigDecimal closePrice = candles.get(currentIndex).getClose();
+        boolean isRetracement = false;
+        if (result.direction.intValue() != 0 && result.trailingStop.compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal diff = closePrice.subtract(result.trailingStop);
+            BigDecimal product = diff.multiply(result.direction);
+            isRetracement = product.compareTo(BigDecimal.ZERO) < 0;
+        }
+        
         return Map.of(
             "trailingStop", result.trailingStop,
             "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
+            "isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO,
             "pivotHigh", pivotHighValue,
             "pivotLow", pivotLowValue
         );
@@ -316,10 +347,23 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         state.prevMax = state.max;
         state.prevMin = state.min;
         
+        // Calculate trailing stop value
+        BigDecimal tsValue = state.ts != null ? state.ts : BigDecimal.ZERO;
+        
+        // Check if price is in retracement (wrong side of trailing stop)
+        // Pine Script: (close - ts) * os < 0
+        boolean isRetracement = false;
+        if (state.os != 0 && tsValue.compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal diff = currentCandle.getClose().subtract(tsValue);
+            BigDecimal product = diff.multiply(BigDecimal.valueOf(state.os));
+            isRetracement = product.compareTo(BigDecimal.ZERO) < 0;
+        }
+        
         // Return current values (for the current candle)
         Map<String, BigDecimal> values = Map.of(
-            "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
+            "trailingStop", tsValue,
             "direction", BigDecimal.valueOf(state.os),
+            "isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,  // Will be set via markers below
             "pivotLow", BigDecimal.ZERO     // Will be set via markers below
         );
@@ -334,25 +378,34 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         }
         
         // Add fill shape configuration for area between price and trailing stop
-        // Convert hex colors to rgba with transparency
-        String bullFillColor = convertHexToRgba(bullColor, 0.15);
-        String bearFillColor = convertHexToRgba(bearColor, 0.15);
+        // Get transparency parameter
+        int areaTransparency = getIntParameter(params, "areaTransparency", 80);
+        double opacity = (100 - areaTransparency) / 100.0;
         
+        // Convert hex colors to rgba with configurable transparency
+        String bullFillColor = convertHexToRgba(bullColor, opacity);
+        String bearFillColor = convertHexToRgba(bearColor, opacity);
+        String retracementColor = getStringParameter(params, "retracementColor", "#ff5d00");
+        String retFillColor = convertHexToRgba(retracementColor, opacity);
+        
+        List<Map<String, Object>> fills = new ArrayList<>();
+        
+        // Single fill between close and trailing stop
+        // Color changes based on direction and retracement status
         FillShape fill = FillShape.builder()
             .enabled(true)
             .mode("series")
-            .source1("close")                           // Fill from close price
-            .source2("trailingStop")                    // To trailing stop line
+            .source1("close")
+            .source2("trailingStop")
             .colorMode("dynamic")
-            .upFillColor(bullFillColor)                 // Bullish color with transparency
-            .downFillColor(bearFillColor)               // Bearish color with transparency
-            .neutralFillColor("rgba(158, 158, 158, 0.1)") // Gray for neutral
+            .upFillColor(bullFillColor)        // Bullish color
+            .downFillColor(bearFillColor)      // Bearish color
+            .neutralFillColor(retFillColor)    // Retracement color (when isRetracement = 1)
             .fillGaps(true)
             .display(true)
             .build();
-        
-        List<Map<String, Object>> fills = new ArrayList<>();
         fills.add(fill.toMap());
+        
         result.put("fills", fills);
         
         return result;
@@ -364,21 +417,25 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         String bullColor = getStringParameter(params, "bullColor", "#26a69a");
         String bearColor = getStringParameter(params, "bearColor", "#ef5350");
+        String retracementColor = getStringParameter(params, "retracementColor", "#ff5d00");
+        int areaTransparency = getIntParameter(params, "areaTransparency", 80);
+        double opacity = (100 - areaTransparency) / 100.0;
         
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
         // Trailing stop line (changes color based on direction)
         metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
             .displayName("Trailing Stop")
-            .asLine("#9c27b0", 2) // Purple for neutral, will be overridden by frontend logic
+            .asLine("#9c27b0", 2) // Default purple, will be overridden by frontend based on direction
             .separatePane(false)
             .paneOrder(0)
             .addConfig("bullColor", bullColor)
             .addConfig("bearColor", bearColor)
-            .addConfig("directionField", "direction") // Frontend will read this field
+            .addConfig("directionField", "direction") // Frontend reads this to determine color
             .build());
         
         // Fill area between price and trailing stop
+        // Color logic: retracement color when isRetracement=1, otherwise direction color
         metadata.put("fill", IndicatorMetadata.builder("fill")
             .displayName("Trailing Stop Fill")
             .seriesType("fill")
@@ -388,12 +445,13 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .addConfig("source1", "close")
             .addConfig("source2", "trailingStop")
             .addConfig("colorMode", "dynamic")
-            .addConfig("upFillColor", "rgba(76, 175, 80, 0.15)")
-            .addConfig("downFillColor", "rgba(239, 83, 80, 0.15)")
-            .addConfig("neutralFillColor", "rgba(158, 158, 158, 0.1)")
+            .addConfig("upFillColor", convertHexToRgba(bullColor, opacity))
+            .addConfig("downFillColor", convertHexToRgba(bearColor, opacity))
+            .addConfig("neutralFillColor", convertHexToRgba(retracementColor, opacity))
             .addConfig("fillGaps", true)
             .addConfig("display", true)
-            .addConfig("directionField", "direction") // Link to direction field for color logic
+            .addConfig("directionField", "direction")
+            .addConfig("retracementField", "isRetracement")
             .build());
         
         return metadata;
@@ -669,6 +727,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         return Map.of(
             "trailingStop", BigDecimal.ZERO,
             "direction", BigDecimal.ZERO,
+            "isRetracement", BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,
             "pivotLow", BigDecimal.ZERO
         );
