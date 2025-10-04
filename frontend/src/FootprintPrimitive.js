@@ -186,13 +186,12 @@ class FootprintRenderer {
                 const candleBodyTop = Math.min(scaledOpenY, scaledCloseY);
                 const candleBodyBottom = Math.max(scaledOpenY, scaledCloseY);
                 const candleBodyHeight = Math.abs(candleBodyBottom - candleBodyTop);
-                const minCandleHeight = 80 * pixelRatio;
+                const minCandleHeight = 100 * pixelRatio; // Increased for larger text
                 const effectiveCandleHeight = Math.max(candleBodyHeight, minCandleHeight);
                 
                 const rowHeight = effectiveCandleHeight / levelsToDisplay.length;
                 const candleLeft = scaledX - candleWidth / 2;
                 const candleRight = scaledX + candleWidth / 2;
-                const cellWidth = candleWidth / 2; // Half for sell, half for buy
                 
                 const startY = candleBodyTop - (effectiveCandleHeight > candleBodyHeight ? (effectiveCandleHeight - candleBodyHeight) / 2 : 0);
                 
@@ -202,35 +201,51 @@ class FootprintRenderer {
                     const cellBottom = cellTop + rowHeight;
                     const cellCenterY = cellTop + (rowHeight / 2);
                     
-                    // Format volumes
-                    const sellText = level.sellVolume < 0.001 ? '' : (level.sellVolume >= 1 ? level.sellVolume.toFixed(1) : level.sellVolume.toFixed(2));
-                    const buyText = level.buyVolume < 0.001 ? '' : (level.buyVolume >= 1 ? level.buyVolume.toFixed(1) : level.buyVolume.toFixed(2));
+                    // Calculate values
+                    const buyVol = level.buyVolume || 0;
+                    const sellVol = level.sellVolume || 0;
+                    const totalVolume = buyVol + sellVol;
+                    const imbalance = buyVol - sellVol;
+                    const absImbalance = Math.abs(imbalance);
                     
-                    // Identify big orders
-                    const isBigSellOrder = level.sellVolume >= bigOrderThreshold && level.sellVolume >= 0.001;
-                    const isBigBuyOrder = level.buyVolume >= bigOrderThreshold && level.buyVolume >= 0.001;
-                    
-                    // LEFT CELL - SELL VOLUME
-                    // Draw cell background
-                    if (sellText) {
-                        if (isBigSellOrder) {
-                            ctx.fillStyle = 'rgba(255, 237, 74, 0.9)'; // Yellow for big sell
-                        } else {
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.15)'; // Light red
-                        }
-                        ctx.fillRect(candleLeft, cellTop, cellWidth, rowHeight);
+                    // Skip if no significant volume
+                    if (totalVolume < 0.001) {
+                        return;
                     }
                     
-                    // RIGHT CELL - BUY VOLUME
-                    // Draw cell background
-                    if (buyText) {
-                        if (isBigBuyOrder) {
-                            ctx.fillStyle = 'rgba(74, 222, 255, 0.9)'; // Cyan for big buy
+                    // Calculate imbalance ratio (0-1)
+                    const imbalanceRatio = totalVolume > 0 ? absImbalance / totalVolume : 0;
+                    
+                    // Identify big imbalances (>50% and high volume)
+                    const isBigImbalance = absImbalance >= bigOrderThreshold && imbalanceRatio > 0.3;
+                    
+                    // Determine cell color based on imbalance direction and strength
+                    let bgColor, textColor;
+                    if (isBigImbalance) {
+                        // Big imbalance - bright highlight
+                        if (imbalance > 0) {
+                            bgColor = 'rgba(74, 222, 255, 0.9)'; // Bright cyan for big buy imbalance
+                            textColor = 'rgb(255, 255, 255)';
                         } else {
-                            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; // Light green
+                            bgColor = 'rgba(255, 237, 74, 0.9)'; // Bright yellow for big sell imbalance
+                            textColor = 'rgb(0, 0, 0)';
                         }
-                        ctx.fillRect(scaledX, cellTop, cellWidth, rowHeight);
+                    } else {
+                        // Normal - gradient based on strength
+                        if (imbalance > 0) {
+                            const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
+                            bgColor = `rgba(16, 185, 129, ${alpha})`; // Green for buy imbalance
+                            textColor = 'rgba(16, 185, 129, 1)';
+                        } else {
+                            const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
+                            bgColor = `rgba(239, 68, 68, ${alpha})`; // Red for sell imbalance
+                            textColor = 'rgba(239, 68, 68, 1)';
+                        }
                     }
+                    
+                    // Draw full-width cell background
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(candleLeft, cellTop, candleWidth, rowHeight);
                     
                     // Draw horizontal grid line (between rows)
                     if (index > 0) {
@@ -242,31 +257,20 @@ class FootprintRenderer {
                         ctx.stroke();
                     }
                     
-                    // Draw vertical separator line (middle of candle)
-                    ctx.strokeStyle = 'rgba(100, 100, 100, 0.4)';
-                    ctx.lineWidth = 1 * pixelRatio;
-                    ctx.beginPath();
-                    ctx.moveTo(scaledX, cellTop);
-                    ctx.lineTo(scaledX, cellBottom);
-                    ctx.stroke();
+                    // Format text: "BuyVolxSellVol" (e.g., "123x128")
+                    let volumeText;
+                    if (buyVol >= 1 || sellVol >= 1) {
+                        volumeText = `${buyVol.toFixed(0)}x${sellVol.toFixed(0)}`;
+                    } else {
+                        volumeText = `${buyVol.toFixed(2)}x${sellVol.toFixed(2)}`;
+                    }
                     
-                    // Draw text
-                    ctx.font = `${isBigSellOrder || isBigBuyOrder ? 'bold' : ''} ${fontSize}px -apple-system, BlinkMacSystemFont, monospace`;
+                    // Draw volume text (centered in full cell)
+                    ctx.font = `${isBigImbalance ? 'bold' : ''} ${fontSize}px -apple-system, BlinkMacSystemFont, monospace`;
                     ctx.textBaseline = 'middle';
-                    
-                    // Draw sell volume text (left cell)
-                    if (sellText) {
-                        ctx.fillStyle = isBigSellOrder ? 'rgb(255, 255, 255)' : 'rgba(239, 68, 68, 1)';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(sellText, candleLeft + cellWidth / 2, cellCenterY);
-                    }
-                    
-                    // Draw buy volume text (right cell)
-                    if (buyText) {
-                        ctx.fillStyle = isBigBuyOrder ? 'rgb(255, 255, 255)' : 'rgba(16, 185, 129, 1)';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(buyText, scaledX + cellWidth / 2, cellCenterY);
-                    }
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = textColor;
+                    ctx.fillText(volumeText, scaledX, cellCenterY);
                     
                     drawnCount++;
                 });

@@ -88,7 +88,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         // Create and attach footprint primitive (pass chart and series)
         const footprint = new FootprintPrimitive(chart, candleSeries);
         footprint._minVolumeToShow = 0.01; // Lower threshold for crypto (small volumes)
-        footprint._fontSize = 11; // Increased from 9 to 11 for larger, more readable text
+        footprint._fontSize = 14; // Larger font for better readability
         candleSeries.attachPrimitive(footprint);
         footprintRef.current = footprint;
 
@@ -97,7 +97,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         candleSeries.attachPrimitive(deltaTable);
         deltaTableRef.current = deltaTable;
 
-        console.log('[OrderFlow] Footprint GRID + Delta table primitive (labels on right side)');
+        console.log('[OrderFlow] Footprint: BuyVol x SellVol format with LARGER TEXT (14px) and imbalance-colored backgrounds');
 
         chartRef.current = chart;
         candleSeriesRef.current = candleSeries;
