@@ -730,12 +730,12 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
             .build());
         
         // Prediction (displayed as separate indicator in its own pane)
-        metadata.put("prediction", IndicatorMetadata.builder("prediction")
-            .displayName("KNN Prediction")
-            .asLine("#9C27B0", 1)
-            .separatePane(true)
-            .paneOrder(1)
-            .build());
+//        metadata.put("prediction", IndicatorMetadata.builder("prediction")
+//            .displayName("KNN Prediction")
+//            .asLine("#9C27B0", 1)
+//            .separatePane(true)
+//            .paneOrder(1)
+//            .build());
         
         // Buy Signal Marker (Crossover Average KNN)
         metadata.put("buySignal", IndicatorMetadata.builder("buySignal")
