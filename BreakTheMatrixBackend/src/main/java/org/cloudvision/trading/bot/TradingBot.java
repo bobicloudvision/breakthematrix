@@ -97,6 +97,12 @@ public class TradingBot {
                 try {
                     List<Order> orders = strategy.analyze(data);
                     
+                    // Log when strategy generates orders
+                    if (!orders.isEmpty()) {
+                        System.out.println("📈 Strategy [" + strategy.getStrategyId() + "] generated " + 
+                            orders.size() + " order(s) for " + data.getSymbol());
+                    }
+                    
                     // Always process orders for analysis, but only execute if trading is enabled
                     for (Order order : orders) {
                         if (tradingEnabled) {
@@ -125,7 +131,7 @@ public class TradingBot {
                         }
                     }
                 } catch (Exception e) {
-                    System.err.println("Error in strategy " + strategy.getStrategyId() + ": " + e.getMessage());
+                    System.err.println("❌ Error in strategy " + strategy.getStrategyId() + ": " + e.getMessage());
                     e.printStackTrace();
                 }
             }
@@ -180,7 +186,7 @@ public class TradingBot {
                 .filter(s -> s.getStrategyId().equals(strategyId))
                 .findFirst()
                 .ifPresent(s -> s.setEnabled(enabled));
-        
+
         if (enabled) {
             System.out.println("✅ Strategy " + strategyId + " enabled - This is the only active strategy");
         } else {
@@ -203,7 +209,7 @@ public class TradingBot {
             
             for (String symbol : strategy.getSymbols()) {
                 try {
-                    System.out.println("📊 Fetching " + limit + " historical candles for " + symbol + " (" + interval.getValue() + ")");
+//                    System.out.println("📊 Fetching " + limit + " historical candles for " + symbol + " (" + interval.getValue() + ")");
                     
                     List<CandlestickData> historicalData = tradingDataService.getHistoricalKlines(
                         provider, symbol, interval, limit

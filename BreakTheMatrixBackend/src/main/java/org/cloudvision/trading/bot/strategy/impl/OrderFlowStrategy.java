@@ -117,6 +117,11 @@ public class OrderFlowStrategy extends AbstractTradingStrategy {
         if (footprintCandles.isEmpty() || currentFootprint == null) {
             System.out.println("⚠️ Order Flow Strategy [" + symbol + "]: No footprint data available");
             return Collections.emptyList();
+        } else {
+            System.out.println("✅ Order Flow Strategy [" + symbol + "]: Analyzing footprint candle - " +
+                "Delta: " + currentFootprint.getDelta() +
+                ", Volume: " + currentFootprint.getTotalVolume() +
+                ", Price: " + currentPrice);
         }
         
         // Analyze order flow indicators
@@ -489,9 +494,18 @@ public class OrderFlowStrategy extends AbstractTradingStrategy {
                                                OrderFlowSignals signals, Instant timestamp) {
         List<Order> orders = new ArrayList<>();
         
-        // Check current position
-        boolean hasPosition = accountManager != null && 
-            !accountManager.getAccount("default").getPositionManager().getOpenPositionsBySymbol(symbol).isEmpty();
+        // Check current position using active account
+        boolean hasPosition = false;
+        if (accountManager != null) {
+            try {
+                org.cloudvision.trading.bot.account.TradingAccount activeAccount = accountManager.getActiveAccount();
+                if (activeAccount != null) {
+                    hasPosition = !activeAccount.getPositionManager().getOpenPositionsBySymbol(symbol).isEmpty();
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Error checking positions: " + e.getMessage());
+            }
+        }
         
         // Check stop loss and take profit if we have a position
         if (hasPosition) {

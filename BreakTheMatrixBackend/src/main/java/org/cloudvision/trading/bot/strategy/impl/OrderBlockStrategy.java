@@ -671,9 +671,9 @@ public class OrderBlockStrategy extends AbstractTradingStrategy {
         }
         
         // Debug log to verify boxes are being generated
-        System.out.println(String.format("📦 Order Block [%s]: Active Bull=%d, Mitigated Bull=%d, Active Bear=%d, Mitigated Bear=%d, Total Boxes=%d", 
-            symbol, activeBullCount, mitigatedBullCount, activeBearCount, mitigatedBearCount, boxes.size()));
-        
+//        System.out.println(String.format("📦 Order Block [%s]: Active Bull=%d, Mitigated Bull=%d, Active Bear=%d, Mitigated Bear=%d, Total Boxes=%d",
+//            symbol, activeBullCount, mitigatedBullCount, activeBearCount, mitigatedBearCount, boxes.size()));
+//
         // Prepare signals
         Map<String, Object> signals = new HashMap<>();
         signals.put("marketStructure", marketStructure.getOrDefault(symbol, 0) == 0 ? "UPTREND" : "DOWNTREND");

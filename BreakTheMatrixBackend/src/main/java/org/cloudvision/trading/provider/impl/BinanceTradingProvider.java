@@ -1040,8 +1040,8 @@ public class BinanceTradingProvider implements TradingDataProvider {
             
             String side = isBuyerMaker ? "SELL" : "BUY";
             int numTrades = (int)(lastTradeId - firstTradeId + 1);
-            System.out.println("📊 " + symbol + " AGG_TRADE: " + side + " " + quantity + " @ " + price + 
-                             " (" + numTrades + " trades)");
+//            System.out.println("📊 " + symbol + " AGG_TRADE: " + side + " " + quantity + " @ " + price +
+//                             " (" + numTrades + " trades)");
             
         } catch (Exception e) {
             System.err.println("❌ Error parsing aggregate trade data: " + e.getMessage());
@@ -1100,10 +1100,10 @@ public class BinanceTradingProvider implements TradingDataProvider {
             if (dataHandler != null) {
                 dataHandler.accept(tradingData);
             }
-            
-            System.out.println("📚 " + symbol + " ORDER_BOOK (diff): " + bids.size() + " bids, " + 
-                             asks.size() + " asks, spread=" + orderBookData.getSpread());
-            
+
+//            System.out.println("📚 " + symbol + " ORDER_BOOK (diff): " + bids.size() + " bids, " +
+//                             asks.size() + " asks, spread=" + orderBookData.getSpread());
+
         } catch (Exception e) {
             System.err.println("❌ Error parsing depth update: " + e.getMessage());
             e.printStackTrace();
@@ -1174,8 +1174,8 @@ public class BinanceTradingProvider implements TradingDataProvider {
                 dataHandler.accept(tradingData);
             }
             
-            System.out.println("📚 " + symbol + " ORDER_BOOK (partial): " + bids.size() + " bids, " + 
-                             asks.size() + " asks, spread=" + orderBookData.getSpread());
+//            System.out.println("📚 " + symbol + " ORDER_BOOK (partial): " + bids.size() + " bids, " +
+//                             asks.size() + " asks, spread=" + orderBookData.getSpread());
             
         } catch (Exception e) {
             System.err.println("❌ Error parsing partial book depth: " + e.getMessage());

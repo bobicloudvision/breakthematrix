@@ -278,7 +278,7 @@ public class OrderFlowWebSocketHandler extends TextWebSocketHandler {
             }
             
             if (sentCount > 0) {
-                System.out.println("📤 Broadcast order flow (" + data.getType() + ") to " + sentCount + " sessions");
+//                System.out.println("📤 Broadcast order flow (" + data.getType() + ") to " + sentCount + " sessions");
             }
             
         } catch (Exception e) {

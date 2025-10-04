@@ -53,6 +53,7 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         // Extract price and validate data
         PriceData priceData = extractPriceData(data);
         if (priceData == null || priceData.price == null) {
+            // Data filtered (likely unclosed candle) - this is normal
             return Collections.emptyList();
         }
 
@@ -96,8 +97,9 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
                     isClosed = candle.isClosed();
                     
                     // Only process closed candles for strategy decisions
+                    // This is intentional - strategies should only act on confirmed candle closes
                     if (!isClosed) {
-                        return null;
+                        return null; // Silently skip unclosed candles
                     }
                 }
                 break;
