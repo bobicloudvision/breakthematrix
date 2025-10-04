@@ -342,8 +342,8 @@ export class ChartSeriesManager {
                     return !isNaN(point.open) && !isNaN(point.high) && 
                            !isNaN(point.low) && !isNaN(point.close);
                 } else {
-                    // Value validation
-                    return !isNaN(point.value);
+                    // Value validation - skip zero values and NaN
+                    return !isNaN(point.value) && point.value !== 0;
                 }
             });
 

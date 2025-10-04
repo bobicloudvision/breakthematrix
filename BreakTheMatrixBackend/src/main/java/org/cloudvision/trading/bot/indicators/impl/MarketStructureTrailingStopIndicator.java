@@ -333,40 +333,6 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             result.put("lines", newLines);
         }
         
-        // Add pivot markers if detected (with proper timestamps)
-        List<Map<String, Object>> markers = new ArrayList<>();
-        if (i >= pivotLookback * 2) {
-            int pivotIndex = i - pivotLookback;
-            
-            // Check if we just detected a new pivot high
-            if (state.phX != null && state.phX == pivotIndex) {
-                Map<String, Object> marker = new HashMap<>();
-                marker.put("time", candles.get(pivotIndex).getCloseTime().getEpochSecond());
-                marker.put("price", state.phY);
-                marker.put("type", "pivotHigh");
-                marker.put("position", "aboveBar");
-                marker.put("shape", "triangle");
-                marker.put("color", getStringParameter(params, "bearColor", "#ef5350"));
-                markers.add(marker);
-            }
-            
-            // Check if we just detected a new pivot low
-            if (state.plX != null && state.plX == pivotIndex) {
-                Map<String, Object> marker = new HashMap<>();
-                marker.put("time", candles.get(pivotIndex).getCloseTime().getEpochSecond());
-                marker.put("price", state.plY);
-                marker.put("type", "pivotLow");
-                marker.put("position", "belowBar");
-                marker.put("shape", "triangle");
-                marker.put("color", getStringParameter(params, "bullColor", "#26a69a"));
-                markers.add(marker);
-            }
-        }
-        
-        if (!markers.isEmpty()) {
-            result.put("markers", markers);
-        }
-        
         // Add fill shape configuration for area between price and trailing stop
         // Convert hex colors to rgba with transparency
         String bullFillColor = convertHexToRgba(bullColor, 0.15);
@@ -410,27 +376,6 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .addConfig("bullColor", bullColor)
             .addConfig("bearColor", bearColor)
             .addConfig("directionField", "direction") // Frontend will read this field
-            .build());
-        
-        // Optional pivot markers
-        metadata.put("pivotHigh", IndicatorMetadata.builder("pivotHigh")
-            .displayName("Pivot High")
-            .seriesType("markers")
-            .separatePane(false)
-            .paneOrder(0)
-            .addConfig("color", bearColor)
-            .addConfig("shape", "triangle")
-            .addConfig("position", "aboveBar")
-            .build());
-        
-        metadata.put("pivotLow", IndicatorMetadata.builder("pivotLow")
-            .displayName("Pivot Low")
-            .seriesType("markers")
-            .separatePane(false)
-            .paneOrder(0)
-            .addConfig("color", bullColor)
-            .addConfig("shape", "triangle")
-            .addConfig("position", "belowBar")
             .build());
         
         // Fill area between price and trailing stop

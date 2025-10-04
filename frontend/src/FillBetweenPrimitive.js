@@ -82,6 +82,29 @@ export class FillBetweenPrimitive {
         }
         
         this._paneViews = [new FillBetweenPaneView(this)];
+        this._hasLoggedDraw = false;
+        
+        // Check if colors have sufficient opacity
+        this._checkOpacity();
+    }
+    
+    _checkOpacity() {
+        const extractAlpha = (rgba) => {
+            const match = rgba?.match(/rgba?\([^)]+,\s*([0-9.]+)\)/);
+            return match ? parseFloat(match[1]) : 1;
+        };
+        
+        const upAlpha = extractAlpha(this._options.upFillColor);
+        const downAlpha = extractAlpha(this._options.downFillColor);
+        const staticAlpha = extractAlpha(this._options.color);
+        
+        const maxAlpha = Math.max(upAlpha, downAlpha, staticAlpha);
+        
+        if (maxAlpha < 0.1) {
+            console.warn('⚠️ FillBetween: Alpha is very low (<0.1). Fill may be invisible. Consider increasing to 0.2-0.3 for better visibility.');
+        } else if (maxAlpha < 0.15) {
+            console.log('💡 FillBetween: If fill is not visible, try increasing alpha to 0.2-0.3 in your backend config.');
+        }
     }
 
     updateAllViews() {
@@ -144,21 +167,6 @@ export class FillBetweenPrimitive {
                 const currentValue2 = this._getSourceValue(currentPoint, this._options.source2, currentTime, this._source2Map);
                 const nextValue2 = this._getSourceValue(nextPoint, this._options.source2, nextTime, this._source2Map);
                 
-                // Debug first few iterations
-                if (i === from && drawnCount === 0) {
-                    console.log('FillBetween Debug:', {
-                        currentTime,
-                        source1Type: typeof this._options.source1,
-                        source1Value: this._options.source1,
-                        source2Type: typeof this._options.source2,
-                        source2MapSize: this._source2Map.size,
-                        currentValue1,
-                        currentValue2,
-                        hasValue1: currentValue1 !== undefined,
-                        hasValue2: currentValue2 !== undefined
-                    });
-                }
-                
                 if (currentValue1 === undefined || nextValue1 === undefined) {
                     skippedCount++;
                     continue;
@@ -219,12 +227,13 @@ export class FillBetweenPrimitive {
 
             ctx.restore();
             
-            // Log summary
-            if (drawnCount > 0 || skippedCount > 0) {
-                console.log(`FillBetween: Drew ${drawnCount} fills, skipped ${skippedCount}`);
+            // Log summary only once on first successful draw
+            if (drawnCount > 0 && !this._hasLoggedDraw) {
+                console.log(`✅ FillBetween: Successfully drawing ${drawnCount} fills`);
+                this._hasLoggedDraw = true;
             }
         } catch (error) {
-            console.error('Error drawing fill between primitive:', error);
+            console.error('❌ Error drawing fill between primitive:', error);
         }
     }
 
