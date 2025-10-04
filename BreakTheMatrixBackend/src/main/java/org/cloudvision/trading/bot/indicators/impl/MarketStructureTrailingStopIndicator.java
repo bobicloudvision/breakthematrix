@@ -96,24 +96,6 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .required(false)
             .build());
         
-        params.put("retracementColor", IndicatorParameter.builder("retracementColor")
-            .displayName("Retracement Color")
-            .description("Color for area when price is on wrong side of trailing stop")
-            .type(IndicatorParameter.ParameterType.STRING)
-            .defaultValue("#ff5d00")
-            .required(false)
-            .build());
-        
-        params.put("areaTransparency", IndicatorParameter.builder("areaTransparency")
-            .displayName("Area Transparency")
-            .description("Transparency level for the area fill (0-100)")
-            .type(IndicatorParameter.ParameterType.INTEGER)
-            .defaultValue(80)
-            .minValue(0)
-            .maxValue(100)
-            .required(false)
-            .build());
-        
         return params;
     }
     
@@ -132,7 +114,6 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         int n = candles.size();
         int currentIndex = n - 1;
-        CandlestickData currentCandle = candles.get(currentIndex);
         
         // Calculate full market structure
         MarketStructureResult result = calculateFullMarketStructure(candles, pivotLookback, 
@@ -153,26 +134,12 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             }
         }
         
-        // Calculate area color indicator (Pine Script: css_area = (close - ts) * os < 0 ? retCss : css)
-        // 1 = retracement (price on wrong side), 0 = normal (bullish/bearish color)
-        BigDecimal areaColorIndicator = BigDecimal.ZERO;
-        if (result.direction.intValue() != 0 && result.trailingStop.compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal diff = currentCandle.getClose().subtract(result.trailingStop);
-            BigDecimal product = diff.multiply(result.direction);
-            if (product.compareTo(BigDecimal.ZERO) < 0) {
-                areaColorIndicator = BigDecimal.ONE; // Use retracement color
-            }
-        }
-        
-        Map<String, BigDecimal> resultMap = new HashMap<>();
-        resultMap.put("trailingStop", result.trailingStop);
-        resultMap.put("close", currentCandle.getClose());
-        resultMap.put("direction", result.direction); // 1 = bullish, -1 = bearish, 0 = neutral
-        resultMap.put("areaColor", areaColorIndicator); // 1 = retracement, 0 = normal
-        resultMap.put("pivotHigh", pivotHighValue);
-        resultMap.put("pivotLow", pivotLowValue);
-        
-        return resultMap;
+        return Map.of(
+            "trailingStop", result.trailingStop,
+            "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
+            "pivotHigh", pivotHighValue,
+            "pivotLow", pivotLowValue
+        );
     }
     
     /**
@@ -348,25 +315,13 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         state.prevMax = state.max;
         state.prevMin = state.min;
         
-        // Calculate area color indicator (Pine Script: css_area = (close - ts) * os < 0 ? retCss : css)
-        BigDecimal areaColorIndicator = BigDecimal.ZERO;
-        BigDecimal trailingStopValue = state.ts != null ? state.ts : BigDecimal.ZERO;
-        if (state.os != 0 && trailingStopValue.compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal diff = currentCandle.getClose().subtract(trailingStopValue);
-            BigDecimal product = diff.multiply(BigDecimal.valueOf(state.os));
-            if (product.compareTo(BigDecimal.ZERO) < 0) {
-                areaColorIndicator = BigDecimal.ONE; // Use retracement color
-            }
-        }
-        
         // Return current values (for the current candle)
-        Map<String, BigDecimal> values = new HashMap<>();
-        values.put("trailingStop", trailingStopValue);
-        values.put("close", currentCandle.getClose());
-        values.put("direction", BigDecimal.valueOf(state.os));
-        values.put("areaColor", areaColorIndicator);
-        values.put("pivotHigh", BigDecimal.ZERO);  // Will be set via markers below
-        values.put("pivotLow", BigDecimal.ZERO);   // Will be set via markers below
+        Map<String, BigDecimal> values = Map.of(
+            "trailingStop", state.ts != null ? state.ts : BigDecimal.ZERO,
+            "direction", BigDecimal.valueOf(state.os),
+            "pivotHigh", BigDecimal.ZERO,  // Will be set via markers below
+            "pivotLow", BigDecimal.ZERO     // Will be set via markers below
+        );
         
         Map<String, Object> result = new HashMap<>();
         result.put("values", values);
@@ -420,19 +375,8 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         String bullColor = getStringParameter(params, "bullColor", "#26a69a");
         String bearColor = getStringParameter(params, "bearColor", "#ef5350");
-        String retracementColor = getStringParameter(params, "retracementColor", "#ff5d00");
-        int areaTransparency = getIntParameter(params, "areaTransparency", 80);
         
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
-        
-        // Close price line (hidden, used for area fill)
-        metadata.put("close", IndicatorMetadata.builder("close")
-            .displayName("Close Price")
-            .asLine("#000000", 1)
-            .separatePane(false)
-            .paneOrder(0)
-            .addConfig("visible", false) // Hidden line, just for area reference
-            .build());
         
         // Trailing stop line (changes color based on direction)
         metadata.put("trailingStop", IndicatorMetadata.builder("trailingStop")
@@ -443,23 +387,6 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .addConfig("bullColor", bullColor)
             .addConfig("bearColor", bearColor)
             .addConfig("directionField", "direction") // Frontend will read this field
-            .build());
-        
-        // Area fill between close and trailing stop
-        // Pine Script: fill(plot_price, plot_ts, color.new(css_area, areaTransp))
-        metadata.put("area", IndicatorMetadata.builder("area")
-            .displayName("Trailing Stop Area")
-            .seriesType("area")
-            .separatePane(false)
-            .paneOrder(0)
-            .addConfig("topSeries", "close")
-            .addConfig("bottomSeries", "trailingStop")
-            .addConfig("bullColor", bullColor)
-            .addConfig("bearColor", bearColor)
-            .addConfig("retracementColor", retracementColor)
-            .addConfig("transparency", areaTransparency)
-            .addConfig("areaColorField", "areaColor") // 0 = use bull/bear color, 1 = use retracement color
-            .addConfig("directionField", "direction") // Frontend uses this to choose bull/bear color
             .build());
         
         // Optional pivot markers
@@ -753,14 +680,12 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      * Create empty result when insufficient data
      */
     private Map<String, BigDecimal> createEmptyResult() {
-        Map<String, BigDecimal> result = new HashMap<>();
-        result.put("trailingStop", BigDecimal.ZERO);
-        result.put("close", BigDecimal.ZERO);
-        result.put("direction", BigDecimal.ZERO);
-        result.put("areaColor", BigDecimal.ZERO);
-        result.put("pivotHigh", BigDecimal.ZERO);
-        result.put("pivotLow", BigDecimal.ZERO);
-        return result;
+        return Map.of(
+            "trailingStop", BigDecimal.ZERO,
+            "direction", BigDecimal.ZERO,
+            "pivotHigh", BigDecimal.ZERO,
+            "pivotLow", BigDecimal.ZERO
+        );
     }
     
     /**
