@@ -225,21 +225,21 @@ class FootprintRenderer {
                         // Big imbalance - bright highlight
                         if (imbalance > 0) {
                             bgColor = 'rgba(74, 222, 255, 0.9)'; // Bright cyan for big buy imbalance
-                            textColor = 'rgb(255, 255, 255)';
+                            textColor = 'rgb(255, 255, 255)'; // White text
                         } else {
                             bgColor = 'rgba(255, 237, 74, 0.9)'; // Bright yellow for big sell imbalance
-                            textColor = 'rgb(0, 0, 0)';
+                            textColor = 'rgb(0, 0, 0)'; // Black text on yellow
                         }
                     } else {
                         // Normal - gradient based on strength
                         if (imbalance > 0) {
                             const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
                             bgColor = `rgba(16, 185, 129, ${alpha})`; // Green for buy imbalance
-                            textColor = 'rgba(16, 185, 129, 1)';
+                            textColor = alpha > 0.5 ? 'rgb(255, 255, 255)' : 'rgba(16, 185, 129, 1)'; // White on dark green
                         } else {
                             const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
                             bgColor = `rgba(239, 68, 68, ${alpha})`; // Red for sell imbalance
-                            textColor = 'rgba(239, 68, 68, 1)';
+                            textColor = 'rgb(255, 255, 255)'; // White text on red backgrounds
                         }
                     }
                     
