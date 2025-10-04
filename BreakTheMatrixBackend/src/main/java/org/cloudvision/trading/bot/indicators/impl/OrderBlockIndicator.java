@@ -185,7 +185,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
         BigDecimal volumeStrength = BigDecimal.ZERO;
         
         Map<String, BigDecimal> result = new HashMap<>();
-        result.put("marketStructure", new BigDecimal(marketStructure));
+//        result.put("marketStructure", new BigDecimal(marketStructure));
         
         if (pivotVolume != null) {
             int pivotIndex = volumePivotLength;
@@ -300,7 +300,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
         
         // Build result
         Map<String, BigDecimal> values = new HashMap<>();
-        values.put("marketStructure", new BigDecimal(state.marketStructure));
+//        values.put("marketStructure", new BigDecimal(state.marketStructure));
         values.put("volumeStrength", volumeStrength);
         
         // Get most recent active order blocks
@@ -408,14 +408,14 @@ public class OrderBlockIndicator extends AbstractIndicator {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
         // Market structure indicator (as histogram in separate pane)
-        metadata.put("marketStructure", IndicatorMetadata.builder("marketStructure")
-            .displayName("Market Structure")
-            .asHistogram("#2962FF")
-            .addConfig("downColor", "#FF6D00")
-            .addConfig("baseValue", 0.5)
-            .separatePane(true)
-            .paneOrder(1)
-            .build());
+//        metadata.put("marketStructure", IndicatorMetadata.builder("marketStructure")
+//            .displayName("Market Structure")
+//            .asHistogram("#2962FF")
+//            .addConfig("downColor", "#FF6D00")
+//            .addConfig("baseValue", 0.5)
+//            .separatePane(true)
+//            .paneOrder(1)
+//            .build());
         
         // Note: Order blocks themselves are rendered as boxes/rectangles
         // which requires special handling in the frontend
@@ -435,7 +435,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
     
     private Map<String, BigDecimal> createEmptyResult() {
         Map<String, BigDecimal> result = new HashMap<>();
-        result.put("marketStructure", BigDecimal.ZERO);
+//        result.put("marketStructure", BigDecimal.ZERO);
         result.put("volumeStrength", BigDecimal.ZERO);
         result.put("bullishOBTop", BigDecimal.ZERO);
         result.put("bullishOBBottom", BigDecimal.ZERO);

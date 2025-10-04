@@ -751,27 +751,6 @@ examples = {
             System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
             System.out.println("🔍 Has shapes: " + hasShapes);
             
-            // Convert to response format - always generate data
-            List<Map<String, Object>> data = dataPoints.stream()
-                .map(dp -> {
-                    Map<String, Object> point = new HashMap<>();
-                    point.put("time", dp.getTimestamp().getEpochSecond());
-                    point.put("values", dp.getValues());
-                    
-                    // Include any additional data from the indicator (colors, etc.)
-                    if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
-                        // Don't include shapes in data points (they're extracted separately)
-                        Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
-                        ShapeRegistry.extractShapes(additionalData); // This removes shapes from the map
-                        if (!additionalData.isEmpty()) {
-                            point.putAll(additionalData);
-                        }
-                    }
-                    
-                    return point;
-                })
-                .collect(Collectors.toList());
-            
             // Create series-ready format for Lightweight Charts
             Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
             if (!dataPoints.isEmpty()) {
@@ -815,10 +794,11 @@ examples = {
             response.put("interval", request.getInterval());
             response.put("metadata", metadata);
             
-            // Always include data and series
-            response.put("count", data.size());
-            response.put("data", data); // Original format (backward compatibility)
-            response.put("series", seriesData); // Lightweight Charts optimized format
+            // Only include series if they are registered in metadata
+            response.put("count", dataPoints.size());
+            if (metadata != null && !metadata.isEmpty()) {
+                response.put("series", seriesData); // Lightweight Charts optimized format
+            }
             
             // Additionally include shapes if present
             if (hasShapes && !uniqueShapesByType.isEmpty()) {

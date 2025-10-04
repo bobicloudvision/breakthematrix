@@ -7,9 +7,10 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  * Example Usage:
  * 
  * // For Indicators (with automatic shapes support):
+ * // API returns: { metadata: {...}, series: { sma: [...] }, shapes: {...} }
  * const response = await fetch('/api/indicators/sma/historical', {...});
- * const data = await response.json();
- * seriesManager.addFromApiResponse('indicator_sma', data, { color: '#2962FF' }, LinePrimitive);
+ * const apiResponse = await response.json();
+ * seriesManager.addFromApiResponse('indicator_sma', apiResponse, { color: '#2962FF' }, LinePrimitive);
  * 
  * // For Strategies:
  * seriesManager.addSeries('strategy_signals', signalsData, {
@@ -452,11 +453,11 @@ export class ChartSeriesManager {
 
     /**
      * Add series from API response format
-     * Handles the standard API response with metadata, data, and shapes
+     * Handles the standard API response with metadata, series, and shapes
      * For indicators with multiple series, adds all series from metadata
      * Also handles shapes (markers and lines) if present
      * @param {string} id - Unique identifier for the indicator
-     * @param {Object} apiResponse - API response with metadata, data, and optionally shapes
+     * @param {Object} apiResponse - API response with metadata, series, and optionally shapes
      * @param {Object} additionalParams - Additional parameters
      * @param {Object} LinePrimitiveClass - Optional LinePrimitive class for rendering lines
      * @returns {boolean|Object} - Success status or object with series/shapes success status
@@ -475,7 +476,8 @@ export class ChartSeriesManager {
                 
                 metadataKeys.forEach(seriesKey => {
                     const seriesMetadata = apiResponse.metadata[seriesKey];
-                    const seriesData = apiResponse.data || [];
+                    // Get series data from the series object using the series key
+                    const seriesData = (apiResponse.series && apiResponse.series[seriesKey]) || [];
                     const seriesId = `${id}_${seriesKey}`;
                     
                     const success = this.addSeries(seriesId, seriesData, seriesMetadata, additionalParams);
@@ -484,8 +486,16 @@ export class ChartSeriesManager {
                 
                 seriesAdded = successCount > 0;
             } else {
-                // Single series indicator - use original logic
-                const data = apiResponse.data || apiResponse;
+                // Single series indicator
+                // Get data from series object
+                let data = [];
+                if (apiResponse.series && typeof apiResponse.series === 'object') {
+                    // Get the first series data from the series object
+                    const seriesKeys = Object.keys(apiResponse.series);
+                    if (seriesKeys.length > 0) {
+                        data = apiResponse.series[seriesKeys[0]];
+                    }
+                }
                 
                 // For indicators, the id might be 'indicator_sma' but metadata key is 'sma'
                 // Try to find the metadata by looking for the base id
@@ -508,8 +518,14 @@ export class ChartSeriesManager {
                 seriesAdded = this.addSeries(id, data, metadata, additionalParams);
             }
         } else {
-            // No metadata, just add data as-is
-            const data = apiResponse.data || apiResponse;
+            // No metadata, get data from series object
+            let data = [];
+            if (apiResponse.series && typeof apiResponse.series === 'object') {
+                const seriesKeys = Object.keys(apiResponse.series);
+                if (seriesKeys.length > 0) {
+                    data = apiResponse.series[seriesKeys[0]];
+                }
+            }
             seriesAdded = this.addSeries(id, data, {}, additionalParams);
         }
         

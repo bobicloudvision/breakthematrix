@@ -551,16 +551,16 @@ public class SupportResistanceIndicator extends AbstractIndicator {
             }
         }
         
-        values.put("nearestSupport", nearestSupport != null ? nearestSupport.price : BigDecimal.ZERO);
-        values.put("nearestResistance", nearestResistance != null ? nearestResistance.price : BigDecimal.ZERO);
-        values.put("supportStrength", nearestSupport != null ? new BigDecimal(nearestSupport.touches) : BigDecimal.ZERO);
-        values.put("resistanceStrength", nearestResistance != null ? new BigDecimal(nearestResistance.touches) : BigDecimal.ZERO);
-        
+//        values.put("nearestSupport", nearestSupport != null ? nearestSupport.price : BigDecimal.ZERO);
+//        values.put("nearestResistance", nearestResistance != null ? nearestResistance.price : BigDecimal.ZERO);
+//        values.put("supportStrength", nearestSupport != null ? new BigDecimal(nearestSupport.touches) : BigDecimal.ZERO);
+//        values.put("resistanceStrength", nearestResistance != null ? new BigDecimal(nearestResistance.touches) : BigDecimal.ZERO);
+//
         long activeSupportCount = state.supportLevels.stream().filter(l -> !l.broken).count();
         long activeResistanceCount = state.resistanceLevels.stream().filter(l -> !l.broken).count();
         
-        values.put("activeSupportLevels", new BigDecimal(activeSupportCount));
-        values.put("activeResistanceLevels", new BigDecimal(activeResistanceCount));
+//        values.put("activeSupportLevels", new BigDecimal(activeSupportCount));
+//        values.put("activeResistanceLevels", new BigDecimal(activeResistanceCount));
         
         return values;
     }
@@ -629,12 +629,12 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     
     private Map<String, BigDecimal> createEmptyResult() {
         Map<String, BigDecimal> result = new HashMap<>();
-        result.put("nearestSupport", BigDecimal.ZERO);
-        result.put("nearestResistance", BigDecimal.ZERO);
-        result.put("supportStrength", BigDecimal.ZERO);
-        result.put("resistanceStrength", BigDecimal.ZERO);
-        result.put("activeSupportLevels", BigDecimal.ZERO);
-        result.put("activeResistanceLevels", BigDecimal.ZERO);
+//        result.put("nearestSupport", BigDecimal.ZERO);
+//        result.put("nearestResistance", BigDecimal.ZERO);
+//        result.put("supportStrength", BigDecimal.ZERO);
+//        result.put("resistanceStrength", BigDecimal.ZERO);
+//        result.put("activeSupportLevels", BigDecimal.ZERO);
+//        result.put("activeResistanceLevels", BigDecimal.ZERO);
         return result;
     }
     
@@ -645,22 +645,22 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
         // Nearest support price line
-        metadata.put("nearestSupport", IndicatorMetadata.builder("nearestSupport")
-            .displayName("Nearest Support")
-            .asLine("#228B22", 1)
-            .addConfig("lineStyle", 2) // Dashed
-            .separatePane(false)
-            .paneOrder(0)
-            .build());
-        
-        // Nearest resistance price line
-        metadata.put("nearestResistance", IndicatorMetadata.builder("nearestResistance")
-            .displayName("Nearest Resistance")
-            .asLine("#DC143C", 1)
-            .addConfig("lineStyle", 2) // Dashed
-            .separatePane(false)
-            .paneOrder(0)
-            .build());
+//        metadata.put("nearestSupport", IndicatorMetadata.builder("nearestSupport")
+//            .displayName("Nearest Support")
+//            .asLine("#228B22", 1)
+//            .addConfig("lineStyle", 2) // Dashed
+//            .separatePane(false)
+//            .paneOrder(0)
+//            .build());
+//
+//        // Nearest resistance price line
+//        metadata.put("nearestResistance", IndicatorMetadata.builder("nearestResistance")
+//            .displayName("Nearest Resistance")
+//            .asLine("#DC143C", 1)
+//            .addConfig("lineStyle", 2) // Dashed
+//            .separatePane(false)
+//            .paneOrder(0)
+//            .build());
         
         return metadata;
     }

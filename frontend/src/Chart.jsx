@@ -264,7 +264,7 @@ export const ChartComponent = props => {
                     
                     // Add series data and shapes (lines, markers) if present
                     // Note: addFromApiResponse automatically handles lines and markers via LinePrimitive
-                    if (apiResponse.metadata || apiResponse.data) {
+                    if (apiResponse.metadata || apiResponse.series) {
                         const indicatorKey = `indicator_${instanceId}`;
                         const params = indicator.params?.params || {};
                         
