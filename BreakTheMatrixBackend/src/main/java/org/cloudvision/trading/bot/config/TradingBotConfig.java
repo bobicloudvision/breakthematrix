@@ -5,6 +5,7 @@ import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
 import org.cloudvision.trading.bot.strategy.impl.MovingAverageStrategy;
 import org.cloudvision.trading.bot.strategy.impl.OrderBlockStrategy;
+import org.cloudvision.trading.bot.strategy.impl.OrderFlowStrategy;
 import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
 import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,11 @@ public class TradingBotConfig {
         // Configure Order Block strategies with different parameters
         configureOrderBlockStrategy1(); // Standard (pivot: 5)
         configureOrderBlockStrategy2(); // Scalping (pivot: 3)
+        
+        // Configure Order Flow strategies with different parameters
+        configureOrderFlowStrategy1(); // Balanced (5m, recommended)
+        configureOrderFlowStrategy2(); // Scalping (1m, aggressive)
+        configureOrderFlowStrategy3(); // Swing (15m, conservative)
         
         // Option 2: Auto-register all strategies (uncomment to use)
         // autoRegisterAllStrategies();
@@ -244,6 +250,111 @@ public class TradingBotConfig {
         config.setParameter("maxBullishOrderBlocks", 2);    // Track only 2 most recent OBs
         config.setParameter("maxBearishOrderBlocks", 2);
         config.setParameter("mitigationMethod", "Close");   // Close-based mitigation (more conservative)
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure Order Flow Strategy #1 - Balanced (RECOMMENDED)
+     * Timeframe: 5m, CVD Lookback: 20
+     * Best for: Day trading, balanced approach with good signal quality
+     */
+    private void configureOrderFlowStrategy1() {
+        OrderFlowStrategy strategy = applicationContext.getBean(OrderFlowStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "orderflow-balanced",
+            List.of("BTCUSDT")
+        );
+        
+        // Position sizing and risk parameters
+        config.setMaxPositionSize(new BigDecimal("3000")); // $3000 per position
+        config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
+        config.setTakeProfitPercentage(new BigDecimal("0.05")); // 5% take profit (1:2.5 R:R)
+        
+        // Timeframe & lookback parameters
+        config.setParameter("timeInterval", "5m");           // 5-minute candles
+        config.setParameter("cvdLookback", 20);              // 20 candles for CVD trend
+        config.setParameter("divergenceLookback", 50);       // 50 candles for divergences
+        config.setParameter("swingLookback", 5);             // 5 candles for swing detection
+        
+        // Signal requirements (balanced)
+        config.setParameter("requireDivergence", false);     // Divergence OR imbalance (more signals)
+        config.setParameter("imbalanceThreshold", 2.0);      // 2:1 buy/sell ratio
+        config.setParameter("absorptionThreshold", 50.0);    // 50 absorption score
+        config.setParameter("useVolumeConfirmation", true);  // Require volume confirmation
+        config.setParameter("minVolumeMultiplier", 1.2);     // 120% of average volume
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure Order Flow Strategy #2 - Scalping
+     * Timeframe: 1m, CVD Lookback: 10
+     * Best for: Active scalpers, quick entries/exits on 1-minute timeframe
+     */
+    private void configureOrderFlowStrategy2() {
+        OrderFlowStrategy strategy = applicationContext.getBean(OrderFlowStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "orderflow-scalping",
+            List.of("BTCUSDT")
+        );
+        
+        // Position sizing and risk parameters (smaller for scalping)
+        config.setMaxPositionSize(new BigDecimal("1500")); // $1500 per position
+        config.setStopLossPercentage(new BigDecimal("0.005")); // 0.5% stop loss (tight)
+        config.setTakeProfitPercentage(new BigDecimal("0.01")); // 1% take profit (quick)
+        
+        // Timeframe & lookback parameters (short-term)
+        config.setParameter("timeInterval", "1m");           // 1-minute candles
+        config.setParameter("cvdLookback", 10);              // 10 candles (shorter)
+        config.setParameter("divergenceLookback", 20);       // 20 candles
+        config.setParameter("swingLookback", 3);             // 3 candles (faster swings)
+        
+        // Signal requirements (more lenient for more signals)
+        config.setParameter("requireDivergence", false);     // Divergence optional
+        config.setParameter("imbalanceThreshold", 1.8);      // 1.8:1 ratio (more sensitive)
+        config.setParameter("absorptionThreshold", 45.0);    // Lower threshold
+        config.setParameter("useVolumeConfirmation", true);
+        config.setParameter("minVolumeMultiplier", 1.1);     // 110% of average (easier to trigger)
+        
+        strategy.initialize(config);
+        tradingBot.addStrategy(strategy);
+    }
+    
+    /**
+     * Configure Order Flow Strategy #3 - Swing Trading
+     * Timeframe: 15m, CVD Lookback: 40
+     * Best for: Swing traders, fewer high-quality signals, longer holds
+     */
+    private void configureOrderFlowStrategy3() {
+        OrderFlowStrategy strategy = applicationContext.getBean(OrderFlowStrategy.class);
+        
+        StrategyConfig config = new StrategyConfig(
+            "orderflow-swing",
+            List.of("BTCUSDT")
+        );
+        
+        // Position sizing and risk parameters (larger for swing)
+        config.setMaxPositionSize(new BigDecimal("5000")); // $5000 per position
+        config.setStopLossPercentage(new BigDecimal("0.03")); // 3% stop loss (wider)
+        config.setTakeProfitPercentage(new BigDecimal("0.10")); // 10% take profit (1:3.3 R:R)
+        
+        // Timeframe & lookback parameters (long-term)
+        config.setParameter("timeInterval", "15m");          // 15-minute candles
+        config.setParameter("cvdLookback", 40);              // 40 candles (longer trend)
+        config.setParameter("divergenceLookback", 100);      // 100 candles (deeper history)
+        config.setParameter("swingLookback", 7);             // 7 candles (stronger swings)
+        
+        // Signal requirements (strict for quality)
+        config.setParameter("requireDivergence", true);      // MUST have divergence (high quality)
+        config.setParameter("imbalanceThreshold", 2.5);      // 2.5:1 ratio (strong imbalance)
+        config.setParameter("absorptionThreshold", 55.0);    // Higher threshold
+        config.setParameter("useVolumeConfirmation", true);
+        config.setParameter("minVolumeMultiplier", 1.3);     // 130% of average (strong volume)
         
         strategy.initialize(config);
         tradingBot.addStrategy(strategy);
