@@ -127,6 +127,10 @@ public class SMAIndicator extends AbstractIndicator {
      */
     @Override
     public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+
+        System.out.println("SMAIndicator.onInit - historicalCandles: " + 
+            (historicalCandles != null ? historicalCandles.size() : 0) + " candles");
+
         // Validate parameters
         validateParameters(params);
         params = mergeWithDefaults(params);
@@ -158,6 +162,9 @@ public class SMAIndicator extends AbstractIndicator {
      */
     @Override
     public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+
+//        System.out.println("SMAIndicator.onNewCandle");
+
         if (candle == null) {
             throw new IllegalArgumentException("Candle cannot be null");
         }
@@ -200,6 +207,9 @@ public class SMAIndicator extends AbstractIndicator {
      */
     @Override
     public Map<String, Object> onNewTick(BigDecimal price, Map<String, Object> params, Object state) {
+
+//        System.out.println("SMAIndicator.onNewTick");
+
         // SMA doesn't update on individual ticks, only on new candles
         return Map.of(
             "values", Map.of(),
