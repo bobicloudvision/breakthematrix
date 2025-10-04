@@ -936,5 +936,48 @@ public class MockTradingProvider implements TradingDataProvider {
             default: return 60;
         }
     }
+    
+    // ========== ORDER FLOW STUB IMPLEMENTATIONS ==========
+    // Mock provider doesn't generate order flow data yet
+    
+    @Override
+    public void subscribeToTrades(String symbol) {
+        System.out.println("⚠️ Mock provider: Trade stream not implemented for " + symbol);
+    }
+    
+    @Override
+    public void unsubscribeFromTrades(String symbol) {
+        System.out.println("⚠️ Mock provider: Trade stream not implemented");
+    }
+    
+    @Override
+    public void subscribeToAggregateTrades(String symbol) {
+        System.out.println("⚠️ Mock provider: Aggregate trade stream not implemented for " + symbol);
+    }
+    
+    @Override
+    public void unsubscribeFromAggregateTrades(String symbol) {
+        System.out.println("⚠️ Mock provider: Aggregate trade stream not implemented");
+    }
+    
+    @Override
+    public void subscribeToOrderBook(String symbol, int depth) {
+        System.out.println("⚠️ Mock provider: Order book stream not implemented for " + symbol);
+    }
+    
+    @Override
+    public void unsubscribeFromOrderBook(String symbol) {
+        System.out.println("⚠️ Mock provider: Order book stream not implemented");
+    }
+    
+    @Override
+    public void subscribeToBookTicker(String symbol) {
+        System.out.println("⚠️ Mock provider: Book ticker stream not implemented for " + symbol);
+    }
+    
+    @Override
+    public void unsubscribeFromBookTicker(String symbol) {
+        System.out.println("⚠️ Mock provider: Book ticker stream not implemented");
+    }
 }
 

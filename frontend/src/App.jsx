@@ -14,6 +14,7 @@ export default function App() {
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
+  const [mainView, setMainView] = useState('chart'); // 'chart' or 'orderflow'
   const [activeStrategies, setActiveStrategies] = useState([]);
   const [enabledIndicators, setEnabledIndicators] = useState([]);
   const [bottomBarHeight, setBottomBarHeight] = useState(400);
@@ -192,6 +193,30 @@ export default function App() {
                   BreakTheMatrix 
                 </div>
 
+                {/* Main View Tabs */}
+                <div className="flex gap-2 ml-6">
+                  <button
+                    onClick={() => setMainView('chart')}
+                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      mainView === 'chart'
+                        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                        : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                    }`}
+                  >
+                    Chart
+                  </button>
+                  <button
+                    onClick={() => setMainView('orderflow')}
+                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      mainView === 'orderflow'
+                        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                        : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                    }`}
+                  >
+                    OrderFlow
+                  </button>
+                </div>
+
                 {/* Controls - compact inline */}
                 <div className="ml-auto flex items-center gap-4">
                   {/* Provider */}
@@ -262,13 +287,32 @@ export default function App() {
             <div className="flex-1 w-full min-h-0 flex items-center justify-center">
               {selectedProvider ? (
                 <div className="w-full h-full">
-                  <Chart 
-                    provider={selectedProvider}
-                    symbol={symbol}
-                    interval={interval}
-                    activeStrategies={activeStrategies}
-                    enabledIndicators={enabledIndicators}
-                  />
+                  {mainView === 'chart' ? (
+                    <Chart 
+                      provider={selectedProvider}
+                      symbol={symbol}
+                      interval={interval}
+                      activeStrategies={activeStrategies}
+                      enabledIndicators={enabledIndicators}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
+                      <div className="text-center max-w-md mx-auto px-4">
+                        <div className="text-6xl mb-4">📈</div>
+                        <p className="text-cyan-300 text-xl font-medium mb-2">Order Flow View</p>
+                        <p className="text-slate-400 mb-4">Real-time order flow analysis coming soon...</p>
+                        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600/30">
+                          <p className="text-slate-300 text-sm mb-2">Features in development:</p>
+                          <ul className="text-slate-400 text-xs text-left space-y-1">
+                            <li>• Order book depth visualization</li>
+                            <li>• Large order tracking</li>
+                            <li>• Trade flow heatmaps</li>
+                            <li>• Volume profile analysis</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">

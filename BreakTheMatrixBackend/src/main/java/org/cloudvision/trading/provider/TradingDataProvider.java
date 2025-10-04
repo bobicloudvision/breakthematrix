@@ -17,6 +17,16 @@ public interface TradingDataProvider {
     void subscribeToKlines(String symbol, TimeInterval interval);
     void unsubscribeFromKlines(String symbol, TimeInterval interval);
     
+    // Order flow subscriptions
+    void subscribeToTrades(String symbol);
+    void unsubscribeFromTrades(String symbol);
+    void subscribeToAggregateTrades(String symbol);
+    void unsubscribeFromAggregateTrades(String symbol);
+    void subscribeToOrderBook(String symbol, int depth);
+    void unsubscribeFromOrderBook(String symbol);
+    void subscribeToBookTicker(String symbol);
+    void unsubscribeFromBookTicker(String symbol);
+    
     // Historical data
     List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, int limit);
     List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, Instant startTime, Instant endTime);

@@ -1,6 +1,7 @@
 package org.cloudvision.trading.provider.impl;
 
 import org.cloudvision.trading.model.*;
+import org.cloudvision.trading.model.OrderBookData.OrderBookLevel;
 import org.cloudvision.trading.provider.TradingDataProvider;
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,12 @@ public class BinanceTradingProvider implements TradingDataProvider {
     private final List<String> subscribedSymbols = new ArrayList<>();
     private final Map<String, List<TimeInterval>> subscribedKlines = new ConcurrentHashMap<>();
     private final Set<String> activeStreams = ConcurrentHashMap.newKeySet();
+    
+    // Order flow subscriptions
+    private final Set<String> subscribedTrades = ConcurrentHashMap.newKeySet();
+    private final Set<String> subscribedAggregateTrades = ConcurrentHashMap.newKeySet();
+    private final Map<String, Integer> subscribedOrderBooks = new ConcurrentHashMap<>();
+    private final Set<String> subscribedBookTickers = ConcurrentHashMap.newKeySet();
     
     // Number of historical candles to fetch on reconnect
     private static final int HISTORICAL_CANDLES_ON_RECONNECT = 500;
@@ -281,6 +288,10 @@ public class BinanceTradingProvider implements TradingDataProvider {
         activeStreams.clear();
         subscribedSymbols.clear();
         subscribedKlines.clear();
+        subscribedTrades.clear();
+        subscribedAggregateTrades.clear();
+        subscribedOrderBooks.clear();
+        subscribedBookTickers.clear();
         
         if (webSocketClient != null && !webSocketClient.isClosed()) {
             webSocketClient.close();
@@ -431,7 +442,23 @@ public class BinanceTradingProvider implements TradingDataProvider {
             else if (json.has("e") && "24hrTicker".equals(json.get("e").asText())) {
                 String streamName = json.has("stream") ? json.get("stream").asText() : "unknown";
                 handleTickerData(streamName, json);
-            } 
+            }
+            // Handle trade stream data
+            else if (json.has("e") && "trade".equals(json.get("e").asText())) {
+                handleTradeDataDirect(json);
+            }
+            // Handle aggregate trade stream data
+            else if (json.has("e") && "aggTrade".equals(json.get("e").asText())) {
+                handleAggregateTradeDataDirect(json);
+            }
+            // Handle depth/order book update
+            else if (json.has("e") && "depthUpdate".equals(json.get("e").asText())) {
+                handleDepthUpdateDirect(json);
+            }
+            // Handle book ticker
+            else if (json.has("e") && "bookTicker".equals(json.get("e").asText())) {
+                handleBookTickerDirect(json);
+            }
             // Unknown message type
             else if (!json.has("result")) {
                 System.out.println("📈 Received other data: " + message.substring(0, Math.min(200, message.length())));
@@ -755,6 +782,375 @@ public class BinanceTradingProvider implements TradingDataProvider {
         }
     }
     
+    // ========== ORDER FLOW SUBSCRIPTIONS ==========
     
+    @Override
+    public void subscribeToTrades(String symbol) {
+        if (!connected) {
+            System.err.println("❌ Cannot subscribe to " + symbol + " trades: Not connected to Binance");
+            return;
+        }
+        
+        try {
+            System.out.println("💹 Subscribing to " + symbol + " trade stream...");
+            
+            String streamName = symbol.toLowerCase() + "@trade";
+            sendSubscriptionMessage(streamName, true);
+            
+            subscribedTrades.add(symbol);
+            activeStreams.add(streamName);
+            
+            System.out.println("✅ Successfully subscribed to " + symbol + " trades");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to subscribe to " + symbol + " trades: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    @Override
+    public void unsubscribeFromTrades(String symbol) {
+        try {
+            String streamName = symbol.toLowerCase() + "@trade";
+            sendSubscriptionMessage(streamName, false);
+            
+            subscribedTrades.remove(symbol);
+            activeStreams.remove(streamName);
+            
+            System.out.println("💹 Unsubscribed from " + symbol + " trades");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to unsubscribe from " + symbol + " trades: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public void subscribeToAggregateTrades(String symbol) {
+        if (!connected) {
+            System.err.println("❌ Cannot subscribe to " + symbol + " aggregate trades: Not connected to Binance");
+            return;
+        }
+        
+        try {
+            System.out.println("📊 Subscribing to " + symbol + " aggregate trade stream...");
+            
+            String streamName = symbol.toLowerCase() + "@aggTrade";
+            sendSubscriptionMessage(streamName, true);
+            
+            subscribedAggregateTrades.add(symbol);
+            activeStreams.add(streamName);
+            
+            System.out.println("✅ Successfully subscribed to " + symbol + " aggregate trades");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to subscribe to " + symbol + " aggregate trades: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    @Override
+    public void unsubscribeFromAggregateTrades(String symbol) {
+        try {
+            String streamName = symbol.toLowerCase() + "@aggTrade";
+            sendSubscriptionMessage(streamName, false);
+            
+            subscribedAggregateTrades.remove(symbol);
+            activeStreams.remove(streamName);
+            
+            System.out.println("📊 Unsubscribed from " + symbol + " aggregate trades");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to unsubscribe from " + symbol + " aggregate trades: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public void subscribeToOrderBook(String symbol, int depth) {
+        if (!connected) {
+            System.err.println("❌ Cannot subscribe to " + symbol + " order book: Not connected to Binance");
+            return;
+        }
+        
+        try {
+            System.out.println("📚 Subscribing to " + symbol + " order book (depth: " + depth + ")...");
+            
+            // Binance supports depths: 5, 10, 20 (or full depth via @depth)
+            String depthSuffix = (depth > 0) ? "@depth" + depth : "@depth";
+            String streamName = symbol.toLowerCase() + depthSuffix;
+            sendSubscriptionMessage(streamName, true);
+            
+            subscribedOrderBooks.put(symbol, depth);
+            activeStreams.add(streamName);
+            
+            System.out.println("✅ Successfully subscribed to " + symbol + " order book");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to subscribe to " + symbol + " order book: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    @Override
+    public void unsubscribeFromOrderBook(String symbol) {
+        try {
+            Integer depth = subscribedOrderBooks.get(symbol);
+            if (depth != null) {
+                String depthSuffix = (depth > 0) ? "@depth" + depth : "@depth";
+                String streamName = symbol.toLowerCase() + depthSuffix;
+                sendSubscriptionMessage(streamName, false);
+                
+                subscribedOrderBooks.remove(symbol);
+                activeStreams.remove(streamName);
+                
+                System.out.println("📚 Unsubscribed from " + symbol + " order book");
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Failed to unsubscribe from " + symbol + " order book: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public void subscribeToBookTicker(String symbol) {
+        if (!connected) {
+            System.err.println("❌ Cannot subscribe to " + symbol + " book ticker: Not connected to Binance");
+            return;
+        }
+        
+        try {
+            System.out.println("📖 Subscribing to " + symbol + " book ticker stream...");
+            
+            String streamName = symbol.toLowerCase() + "@bookTicker";
+            sendSubscriptionMessage(streamName, true);
+            
+            subscribedBookTickers.add(symbol);
+            activeStreams.add(streamName);
+            
+            System.out.println("✅ Successfully subscribed to " + symbol + " book ticker");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to subscribe to " + symbol + " book ticker: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    @Override
+    public void unsubscribeFromBookTicker(String symbol) {
+        try {
+            String streamName = symbol.toLowerCase() + "@bookTicker";
+            sendSubscriptionMessage(streamName, false);
+            
+            subscribedBookTickers.remove(symbol);
+            activeStreams.remove(streamName);
+            
+            System.out.println("📖 Unsubscribed from " + symbol + " book ticker");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to unsubscribe from " + symbol + " book ticker: " + e.getMessage());
+        }
+    }
+    
+    // ========== ORDER FLOW HANDLERS ==========
+    
+    /**
+     * Handle individual trade data from Binance WebSocket
+     */
+    private void handleTradeDataDirect(JsonNode json) {
+        try {
+            String symbol = json.get("s").asText().toUpperCase();
+            long tradeId = json.get("t").asLong();
+            BigDecimal price = new BigDecimal(json.get("p").asText());
+            BigDecimal quantity = new BigDecimal(json.get("q").asText());
+            Instant timestamp = Instant.ofEpochMilli(json.get("T").asLong());
+            boolean isBuyerMaker = json.get("m").asBoolean();
+            
+            // Calculate quote quantity
+            BigDecimal quoteQuantity = price.multiply(quantity);
+            
+            TradeData tradeData = new TradeData(
+                tradeId,
+                symbol,
+                price,
+                quantity,
+                quoteQuantity,
+                timestamp,
+                isBuyerMaker,
+                getProviderName()
+            );
+            
+            TradingData tradingData = new TradingData(
+                symbol,
+                timestamp,
+                getProviderName(),
+                TradingDataType.TRADE,
+                tradeData
+            );
+            
+            if (dataHandler != null) {
+                dataHandler.accept(tradingData);
+            }
+            
+            String side = isBuyerMaker ? "SELL" : "BUY";
+            System.out.println("💹 " + symbol + " TRADE: " + side + " " + quantity + " @ " + price);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing trade data: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Handle aggregate trade data from Binance WebSocket
+     */
+    private void handleAggregateTradeDataDirect(JsonNode json) {
+        try {
+            String symbol = json.get("s").asText().toUpperCase();
+            long aggTradeId = json.get("a").asLong();
+            BigDecimal price = new BigDecimal(json.get("p").asText());
+            BigDecimal quantity = new BigDecimal(json.get("q").asText());
+            Instant timestamp = Instant.ofEpochMilli(json.get("T").asLong());
+            boolean isBuyerMaker = json.get("m").asBoolean();
+            long firstTradeId = json.get("f").asLong();
+            long lastTradeId = json.get("l").asLong();
+            
+            // Calculate quote quantity
+            BigDecimal quoteQuantity = price.multiply(quantity);
+            
+            TradeData tradeData = new TradeData(
+                aggTradeId,
+                symbol,
+                price,
+                quantity,
+                quoteQuantity,
+                timestamp,
+                isBuyerMaker,
+                getProviderName(),
+                firstTradeId,
+                lastTradeId
+            );
+            
+            TradingData tradingData = new TradingData(
+                symbol,
+                timestamp,
+                getProviderName(),
+                TradingDataType.AGGREGATE_TRADE,
+                tradeData
+            );
+            
+            if (dataHandler != null) {
+                dataHandler.accept(tradingData);
+            }
+            
+            String side = isBuyerMaker ? "SELL" : "BUY";
+            int numTrades = (int)(lastTradeId - firstTradeId + 1);
+            System.out.println("📊 " + symbol + " AGG_TRADE: " + side + " " + quantity + " @ " + price + 
+                             " (" + numTrades + " trades)");
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing aggregate trade data: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Handle order book depth update from Binance WebSocket
+     */
+    private void handleDepthUpdateDirect(JsonNode json) {
+        try {
+            String symbol = json.get("s").asText().toUpperCase();
+            long updateId = json.get("u").asLong();
+            Instant timestamp = Instant.now(); // Binance doesn't provide timestamp in depth updates
+            
+            // Parse bids
+            List<OrderBookLevel> bids = new ArrayList<>();
+            JsonNode bidsArray = json.get("b");
+            if (bidsArray != null && bidsArray.isArray()) {
+                for (JsonNode bid : bidsArray) {
+                    BigDecimal price = new BigDecimal(bid.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(bid.get(1).asText());
+                    bids.add(new OrderBookLevel(price, quantity));
+                }
+            }
+            
+            // Parse asks
+            List<OrderBookLevel> asks = new ArrayList<>();
+            JsonNode asksArray = json.get("a");
+            if (asksArray != null && asksArray.isArray()) {
+                for (JsonNode ask : asksArray) {
+                    BigDecimal price = new BigDecimal(ask.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(ask.get(1).asText());
+                    asks.add(new OrderBookLevel(price, quantity));
+                }
+            }
+            
+            OrderBookData orderBookData = new OrderBookData(
+                symbol,
+                updateId,
+                timestamp,
+                bids,
+                asks,
+                getProviderName()
+            );
+            
+            TradingData tradingData = new TradingData(
+                symbol,
+                timestamp,
+                getProviderName(),
+                TradingDataType.ORDER_BOOK,
+                orderBookData
+            );
+            
+            if (dataHandler != null) {
+                dataHandler.accept(tradingData);
+            }
+            
+            System.out.println("📚 " + symbol + " ORDER_BOOK: " + bids.size() + " bids, " + 
+                             asks.size() + " asks, spread=" + orderBookData.getSpread());
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing depth update: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Handle book ticker data from Binance WebSocket
+     */
+    private void handleBookTickerDirect(JsonNode json) {
+        try {
+            String symbol = json.get("s").asText().toUpperCase();
+            long updateId = json.get("u").asLong();
+            Instant timestamp = Instant.now();
+            
+            BigDecimal bestBidPrice = new BigDecimal(json.get("b").asText());
+            BigDecimal bestBidQty = new BigDecimal(json.get("B").asText());
+            BigDecimal bestAskPrice = new BigDecimal(json.get("a").asText());
+            BigDecimal bestAskQty = new BigDecimal(json.get("A").asText());
+            
+            // Create minimal order book with just best bid/ask
+            List<OrderBookLevel> bids = List.of(new OrderBookLevel(bestBidPrice, bestBidQty));
+            List<OrderBookLevel> asks = List.of(new OrderBookLevel(bestAskPrice, bestAskQty));
+            
+            OrderBookData orderBookData = new OrderBookData(
+                symbol,
+                updateId,
+                timestamp,
+                bids,
+                asks,
+                getProviderName()
+            );
+            
+            TradingData tradingData = new TradingData(
+                symbol,
+                timestamp,
+                getProviderName(),
+                TradingDataType.BOOK_TICKER,
+                orderBookData
+            );
+            
+            if (dataHandler != null) {
+                dataHandler.accept(tradingData);
+            }
+            
+            System.out.println("📖 " + symbol + " BOOK_TICKER: Bid=" + bestBidPrice + " Ask=" + bestAskPrice + 
+                             " Spread=" + orderBookData.getSpread());
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error parsing book ticker: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
     
 }
