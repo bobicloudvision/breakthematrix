@@ -377,8 +377,10 @@ public class IndicatorController {
                 "values", result
             ));
         } catch (Exception e) {
+            e.printStackTrace(); // Log the full stack trace
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             return ResponseEntity.badRequest().body(Map.of(
-                "error", e.getMessage()
+                "error", errorMessage
             ));
         }
     }
@@ -815,8 +817,10 @@ examples = {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            e.printStackTrace(); // Log the full stack trace
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             return ResponseEntity.badRequest().body(Map.of(
-                "error", e.getMessage()
+                "error", errorMessage
             ));
         }
     }

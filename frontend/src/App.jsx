@@ -15,7 +15,7 @@ export default function App() {
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
-  const [mainView, setMainView] = useState('orderflow'); // 'chart' or 'orderflow'
+  const [mainView, setMainView] = useState('chart'); // 'chart' or 'orderflow'
   const [activeStrategies, setActiveStrategies] = useState([]);
   const [enabledIndicators, setEnabledIndicators] = useState([]);
   const [bottomBarHeight, setBottomBarHeight] = useState(400);

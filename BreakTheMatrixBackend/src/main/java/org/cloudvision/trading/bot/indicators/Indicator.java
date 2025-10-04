@@ -124,6 +124,7 @@ public interface Indicator {
         MOMENTUM("Momentum Indicators"),
         VOLATILITY("Volatility Indicators"),
         VOLUME("Volume Indicators"),
+        ORDER_FLOW("Order Flow Indicators"),
         OVERLAY("Overlay Indicators"),
         CUSTOM("Custom Indicators");
         

@@ -632,8 +632,8 @@ export const ChartComponent = props => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-full w-full rounded-lg">
-                <div className="text-center">
+            <div className="w-full lex items-center justify-center h-full w-full rounded-lg">
+                <div className="max-w-md mx-auto text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                     <p className="text-gray-400">Loading chart data...</p>
                 </div>
@@ -643,8 +643,8 @@ export const ChartComponent = props => {
 
     if (error) {
         return (
-            <div className="flex items-center justify-center h-full w-full rounded-lg">
-                <div className="text-center">
+            <div className="w-full flex items-center justify-center h-full w-full rounded-lg">
+                <div className="max-w-md mx-auto text-center">
                     <div className="text-red-500 text-6xl mb-4">⚠️</div>
                     <p className="text-red-400 mb-2">Failed to load chart data</p>
                     <p className="text-gray-400 text-sm">{error}</p>
