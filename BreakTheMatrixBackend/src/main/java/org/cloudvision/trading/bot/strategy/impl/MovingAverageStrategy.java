@@ -43,12 +43,12 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
         
         List<CandlestickData> candles = getCandlestickHistory(symbol, getMaxHistorySize());
         
-        // Calculate moving averages using SMAIndicator
+        // Calculate moving averages using SMAIndicator with new event-driven API
         Map<String, Object> shortParams = Map.of("period", shortPeriod);
         Map<String, Object> longParams = Map.of("period", longPeriod);
         
-        BigDecimal shortMA = smaIndicator.calculate(candles, shortParams).get("sma");
-        BigDecimal longMA = smaIndicator.calculate(candles, longParams).get("sma");
+        BigDecimal shortMA = calculateSMA(candles, shortParams);
+        BigDecimal longMA = calculateSMA(candles, longParams);
         
         // Get previous MA values for crossover detection
         BigDecimal prevShortMA = previousShortMA.get(symbol);
@@ -270,8 +270,8 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                 Map<String, Object> shortParams = Map.of("period", shortPeriod);
                 Map<String, Object> longParams = Map.of("period", longPeriod);
                 
-                BigDecimal shortMA = smaIndicator.calculate(candles, shortParams).get("sma");
-                BigDecimal longMA = smaIndicator.calculate(candles, longParams).get("sma");
+                BigDecimal shortMA = calculateSMA(candles, shortParams);
+                BigDecimal longMA = calculateSMA(candles, longParams);
                 
                 // Store initial MA values for crossover detection
                 previousShortMA.put(symbol, shortMA);
@@ -341,8 +341,8 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
                     Map<String, Object> shortParams = Map.of("period", shortPeriod);
                     Map<String, Object> longParams = Map.of("period", longPeriod);
                     
-                    BigDecimal shortMA = smaIndicator.calculate(progressiveCandles, shortParams).get("sma");
-                    BigDecimal longMA = smaIndicator.calculate(progressiveCandles, longParams).get("sma");
+                    BigDecimal shortMA = calculateSMA(progressiveCandles, shortParams);
+                    BigDecimal longMA = calculateSMA(progressiveCandles, longParams);
                     
                     // Determine action based on ACTUAL crossover detection
                     String action = "HOLD";
@@ -485,6 +485,31 @@ public class MovingAverageStrategy extends AbstractTradingStrategy {
             
             analyze(simulatedData);
         }
+    }
+    
+    /**
+     * Helper method to calculate SMA using the new event-driven API
+     * This wraps the new onInit/onNewCandle pattern for convenient use
+     */
+    private BigDecimal calculateSMA(List<CandlestickData> candles, Map<String, Object> params) {
+        if (candles == null || candles.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        
+        // Initialize indicator with all but the last candle
+        List<CandlestickData> initCandles = candles.size() > 1 
+            ? candles.subList(0, candles.size() - 1) 
+            : Collections.emptyList();
+        Object state = smaIndicator.onInit(initCandles, params);
+        
+        // Process the last candle to get the current value
+        CandlestickData lastCandle = candles.get(candles.size() - 1);
+        Map<String, Object> result = smaIndicator.onNewCandle(lastCandle, params, state);
+        
+        // Extract the SMA value from the result
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+        return values.getOrDefault("sma", BigDecimal.ZERO);
     }
 }
 

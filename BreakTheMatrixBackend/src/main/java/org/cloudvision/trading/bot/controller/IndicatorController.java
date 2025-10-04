@@ -42,6 +42,9 @@ public class IndicatorController {
     @Autowired
     private IndicatorService indicatorService;
     
+    @Autowired
+    private org.cloudvision.trading.service.CandlestickHistoryService historyService;
+    
     /**
      * Get all available indicators
      * GET /api/indicators - Returns all indicators
@@ -362,7 +365,9 @@ public class IndicatorController {
             @PathVariable String id,
             @RequestBody CalculateRequest request) {
         try {
-            Map<String, BigDecimal> result = indicatorService.calculate(
+            // Use new event-driven API
+            // Step 1: Initialize indicator with historical data
+            IndicatorService.IndicatorState state = indicatorService.initializeIndicator(
                 id,
                 request.getProvider(),
                 request.getSymbol(),
@@ -370,11 +375,33 @@ public class IndicatorController {
                 request.getParams() != null ? request.getParams() : new HashMap<>()
             );
             
+            // Step 2: Get the latest candle and calculate current values
+            // Note: initializeIndicator already processes all available historical candles,
+            // so we need to get one NEW candle if available, or return error
+            org.cloudvision.trading.model.CandlestickData latestCandle = 
+                historyService.getLatestCandlestick(
+                    request.getProvider(),
+                    request.getSymbol(),
+                    request.getInterval()
+                );
+            
+            if (latestCandle == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "No candle data available for " + request.getSymbol()
+                ));
+            }
+            
+            // Step 3: Process the latest candle to get current values
+            IndicatorService.IndicatorResult result = 
+                indicatorService.updateWithCandle(state, latestCandle);
+            
             return ResponseEntity.ok(Map.of(
                 "indicatorId", id,
                 "symbol", request.getSymbol(),
                 "interval", request.getInterval(),
-                "values", result
+                "timestamp", result.getTimestamp(),
+                "values", result.getValues(),
+                "additionalData", result.getAdditionalData()
             ));
         } catch (Exception e) {
             e.printStackTrace(); // Log the full stack trace
@@ -704,15 +731,38 @@ examples = {
             @PathVariable String id,
             @RequestBody HistoricalRequest request) {
         try {
-            List<IndicatorService.IndicatorDataPoint> dataPoints = 
-                indicatorService.calculateHistorical(
-                    id,
+            // Use new event-driven API
+            int requestedCount = request.getCount() != null ? request.getCount() : 5000;
+            
+            // Get historical candles
+            List<org.cloudvision.trading.model.CandlestickData> allCandles = 
+                historyService.getLastNCandlesticks(
                     request.getProvider(),
                     request.getSymbol(),
                     request.getInterval(),
-                    request.getParams() != null ? request.getParams() : new HashMap<>(),
-                    request.getCount() != null ? request.getCount() : 5000
+                    requestedCount
                 );
+            
+            if (allCandles.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "No historical data available for " + request.getSymbol()
+                ));
+            }
+            
+            // Initialize indicator with empty state
+            IndicatorService.IndicatorState state = indicatorService.initializeIndicator(
+                id,
+                allCandles,
+                request.getParams() != null ? request.getParams() : new HashMap<>()
+            );
+            
+            // Process all candles progressively to generate historical data points
+            List<IndicatorService.IndicatorResult> dataPoints = new ArrayList<>();
+            for (org.cloudvision.trading.model.CandlestickData candle : allCandles) {
+                IndicatorService.IndicatorResult result = 
+                    indicatorService.updateWithCandle(state, candle);
+                dataPoints.add(result);
+            }
             
             // Collect all shapes using ShapeRegistry (dynamic, no hardcoded types)
             Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
@@ -720,7 +770,7 @@ examples = {
             
 //            System.out.println("🔍 Collecting shapes from " + dataPoints.size() + " data points");
             
-            for (IndicatorService.IndicatorDataPoint dp : dataPoints) {
+            for (IndicatorService.IndicatorResult dp : dataPoints) {
                 if (dp.getAdditionalData() != null) {
                     // Extract all shapes dynamically using ShapeRegistry
                     Map<String, List<Map<String, Object>>> shapesFromPoint = 
