@@ -343,7 +343,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
             ws.send(JSON.stringify({
                 action: 'subscribe',
                 symbol: symbol,
-                types: ['AGGREGATE_TRADE', 'ORDER_BOOK', 'BOOK_TICKER']
+                types: ['AGGREGATE_TRADE', 'ORDER_BOOK', 'BOOK_TICKER', 'KLINE']
             }));
         };
         
