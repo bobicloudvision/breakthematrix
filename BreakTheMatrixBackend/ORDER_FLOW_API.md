@@ -9,6 +9,7 @@ The Order Flow API provides real-time market microstructure data including:
 - **Aggregate Trades** - Compressed trade data (recommended for analysis)
 - **Order Book Depth** - Bid/Ask levels with quantities
 - **Book Ticker** - Best bid/ask updates (lightweight)
+- **Footprint Candles** - Volume profile candles showing buy/sell volume at each price level
 
 ---
 
@@ -505,4 +506,281 @@ ws.onmessage = (e) => console.log(JSON.parse(e.data));
 | **Dashboard with all data** | `/trading-ws` | Single connection for everything |
 
 That's it! You're now receiving real-time order flow data! 🎉
+
+---
+
+## 🦶 Footprint Candles
+
+Footprint candles show the volume traded at each price level within a candle, separated by buy and sell volume. Essential for order flow analysis and tape reading.
+
+### Features
+
+- **Volume Profile** - Price ladder showing volume at each level
+- **Buy vs Sell Volume** - Volume breakdown per price level
+- **Delta** - Buy volume minus sell volume
+- **Cumulative Delta** - Running total of delta across candles
+- **Point of Control (POC)** - Price level with highest volume
+- **Value Area** - Price range containing 70% of volume
+- **Imbalance Detection** - Identify buy/sell pressure at each level
+
+### REST API Endpoints
+
+#### Get Historical Footprint Candles
+```http
+GET /api/footprint/historical?symbol=BTCUSDT&interval=1m&limit=100
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "symbol": "BTCUSDT",
+  "interval": "1m",
+  "count": 100,
+  "candles": [
+    {
+      "symbol": "BTCUSDT",
+      "openTime": "2025-10-04T12:34:00Z",
+      "closeTime": "2025-10-04T12:35:00Z",
+      "interval": "1m",
+      "open": 50000.00,
+      "high": 50010.00,
+      "low": 49990.00,
+      "close": 50005.00,
+      "totalVolume": 15.5,
+      "totalBuyVolume": 9.2,
+      "totalSellVolume": 6.3,
+      "delta": 2.9,
+      "cumulativeDelta": 15.3,
+      "numberOfTrades": 245,
+      "pointOfControl": 50000.00,
+      "valueAreaHigh": 50005.00,
+      "valueAreaLow": 49995.00,
+      "volumeProfile": [
+        {
+          "price": 50010.00,
+          "buyVolume": 0.5,
+          "sellVolume": 0.2,
+          "totalVolume": 0.7,
+          "delta": 0.3,
+          "buyRatio": 0.7143,
+          "tradeCount": 8
+        },
+        {
+          "price": 50005.00,
+          "buyVolume": 2.1,
+          "sellVolume": 1.8,
+          "totalVolume": 3.9,
+          "delta": 0.3,
+          "buyRatio": 0.5385,
+          "tradeCount": 42
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Get Current (Incomplete) Footprint Candle
+```http
+GET /api/footprint/current?symbol=BTCUSDT&interval=1m
+```
+
+Returns the footprint candle currently being built in real-time.
+
+#### Set Tick Size
+```http
+POST /api/footprint/tick-size?symbol=BTCUSDT&tickSize=0.01
+```
+
+Configure the price grouping (tick size) for a symbol. Default is 0.01 for BTC/ETH.
+
+### Usage Examples
+
+#### JavaScript/TypeScript
+```javascript
+// Get historical footprint candles
+async function getFootprintData() {
+  const response = await fetch(
+    'http://localhost:8080/api/footprint/historical?symbol=BTCUSDT&interval=5m&limit=50'
+  );
+  const data = await response.json();
+  
+  data.candles.forEach(candle => {
+    console.log(`${candle.symbol} ${candle.openTime}`);
+    console.log(`OHLC: ${candle.open}/${candle.high}/${candle.low}/${candle.close}`);
+    console.log(`Delta: ${candle.delta}, POC: ${candle.pointOfControl}`);
+    
+    // Volume profile
+    candle.volumeProfile.forEach(level => {
+      const imbalance = level.buyRatio > 0.6 ? 'BUY' : level.buyRatio < 0.4 ? 'SELL' : 'NEUTRAL';
+      console.log(`  ${level.price}: ${level.totalVolume} (${imbalance})`);
+    });
+  });
+}
+
+// Get current candle (real-time)
+async function getCurrentFootprint() {
+  const response = await fetch(
+    'http://localhost:8080/api/footprint/current?symbol=BTCUSDT&interval=1m'
+  );
+  const data = await response.json();
+  
+  if (data.candle) {
+    console.log('Current candle delta:', data.candle.delta);
+    console.log('POC:', data.candle.pointOfControl);
+  }
+}
+
+// Poll every second for real-time updates
+setInterval(getCurrentFootprint, 1000);
+```
+
+#### Python
+```python
+import requests
+import pandas as pd
+
+def get_footprint_candles(symbol, interval, limit=100):
+    url = f"http://localhost:8080/api/footprint/historical"
+    params = {
+        "symbol": symbol,
+        "interval": interval,
+        "limit": limit
+    }
+    
+    response = requests.get(url, params=params)
+    data = response.json()
+    
+    if data['success']:
+        candles = data['candles']
+        
+        # Convert to DataFrame
+        df = pd.DataFrame([{
+            'time': c['openTime'],
+            'open': c['open'],
+            'high': c['high'],
+            'low': c['low'],
+            'close': c['close'],
+            'volume': c['totalVolume'],
+            'delta': c['delta'],
+            'poc': c['pointOfControl']
+        } for c in candles])
+        
+        return df
+    else:
+        print(f"Error: {data.get('error')}")
+        return None
+
+# Get footprint data
+df = get_footprint_candles('BTCUSDT', '5m', 100)
+print(df.head())
+
+# Analyze delta
+positive_delta = df[df['delta'] > 0]
+print(f"Candles with positive delta: {len(positive_delta)}")
+```
+
+### Building Your Own Footprint Chart
+
+```javascript
+// Example: Building a footprint chart visualization
+function renderFootprintChart(candles) {
+  candles.forEach(candle => {
+    // Draw candlestick
+    drawCandlestick(candle.open, candle.high, candle.low, candle.close);
+    
+    // Draw volume profile inside the candle
+    candle.volumeProfile.forEach(level => {
+      const y = priceToY(level.price);
+      const buyWidth = (level.buyVolume / level.totalVolume) * candleWidth;
+      const sellWidth = (level.sellVolume / level.totalVolume) * candleWidth;
+      
+      // Draw buy volume (green)
+      drawBar(x, y, buyWidth, 'green');
+      
+      // Draw sell volume (red)  
+      drawBar(x + buyWidth, y, sellWidth, 'red');
+      
+      // Highlight POC
+      if (level.price === candle.pointOfControl) {
+        drawPOCLine(y);
+      }
+    });
+    
+    // Draw value area
+    drawValueArea(candle.valueAreaHigh, candle.valueAreaLow);
+  });
+}
+```
+
+### Key Metrics Explained
+
+| Metric | Description | Usage |
+|--------|-------------|-------|
+| **Delta** | Buy volume - Sell volume | Positive = buying pressure, Negative = selling pressure |
+| **Cumulative Delta** | Running sum of delta | Trend of buying/selling pressure |
+| **Point of Control (POC)** | Price with highest volume | Key support/resistance level |
+| **Value Area High/Low** | Range containing 70% of volume | Fair value zone |
+| **Buy Ratio** | Buy volume / Total volume | >0.6 = strong buying, <0.4 = strong selling |
+
+### Trading Strategies with Footprint Candles
+
+#### 1. Delta Divergence
+```javascript
+// Look for price going up but delta going down (bearish divergence)
+if (candle.close > previousCandle.close && candle.delta < previousCandle.delta) {
+  console.log('Bearish divergence detected');
+}
+```
+
+#### 2. POC as Support/Resistance
+```javascript
+// Trade bounces off POC
+if (candle.low <= candle.pointOfControl && candle.close > candle.pointOfControl) {
+  console.log('POC acted as support');
+}
+```
+
+#### 3. Value Area Trading
+```javascript
+// Price outside value area = potential reversion
+if (currentPrice > candle.valueAreaHigh) {
+  console.log('Price above value area - potential short');
+} else if (currentPrice < candle.valueAreaLow) {
+  console.log('Price below value area - potential long');
+}
+```
+
+#### 4. Imbalance Detection
+```javascript
+// Find strong buy/sell imbalances
+candle.volumeProfile.forEach(level => {
+  if (level.buyRatio > 0.8) {
+    console.log(`Strong buying at ${level.price}`);
+  } else if (level.buyRatio < 0.2) {
+    console.log(`Strong selling at ${level.price}`);
+  }
+});
+```
+
+### How It Works
+
+1. **Automatic Building** - Footprint candles are automatically built from incoming trade data
+2. **Multiple Intervals** - Built for 1m, 5m, and 15m intervals simultaneously
+3. **Real-time Updates** - Current candle updates with each new trade
+4. **Historical Cache** - Last 500 candles cached per symbol/interval
+
+### Configuration
+
+Footprint candles are automatically enabled when order flow is enabled. The system:
+- Listens to aggregate trade data
+- Groups trades by price level (tick size)
+- Calculates buy/sell volume per level
+- Computes POC, value area, and delta
+- Provides both historical and real-time data
+
+No additional configuration needed - just enable order flow and footprint data will be available!
+
+---
 

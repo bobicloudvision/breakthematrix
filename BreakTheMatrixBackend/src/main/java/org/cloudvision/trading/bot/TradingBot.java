@@ -29,8 +29,8 @@ public class TradingBot {
     private boolean botEnabled = false;
     private boolean tradingEnabled = false; // Separate flag for trading execution
     
-    // Additional handler to forward data to (e.g., WebSocket handler)
-    private Consumer<TradingData> additionalDataHandler;
+    // Multiple additional handlers to forward data to (e.g., WebSocket handlers, footprint builder, etc.)
+    private final List<Consumer<TradingData>> additionalDataHandlers = new CopyOnWriteArrayList<>();
 
     public TradingBot(UniversalTradingDataService tradingDataService,
                      OrderManager orderManager,
@@ -46,11 +46,22 @@ public class TradingBot {
     }
 
     /**
-     * Set additional data handler (e.g., for WebSocket broadcasting)
+     * Add an additional data handler (e.g., for WebSocket broadcasting, footprint building)
+     * Supports multiple handlers without overwriting
      */
+    public void addDataHandler(Consumer<TradingData> handler) {
+        this.additionalDataHandlers.add(handler);
+        System.out.println("🔗 Additional data handler added to TradingBot (total: " + additionalDataHandlers.size() + ")");
+    }
+    
+    /**
+     * Legacy method for backward compatibility - now adds to list instead of replacing
+     * @deprecated Use addDataHandler instead
+     */
+    @Deprecated
     public void setAdditionalDataHandler(Consumer<TradingData> handler) {
-        this.additionalDataHandler = handler;
-        System.out.println("🔗 Additional data handler set in TradingBot");
+        addDataHandler(handler);
+        System.out.println("⚠️  setAdditionalDataHandler is deprecated. Use addDataHandler() instead.");
     }
     
     /**
@@ -63,14 +74,15 @@ public class TradingBot {
         // Update current prices for all accounts to calculate unrealized P&L
         updateAccountPrices(data);
         
-        // Forward to additional handler FIRST (e.g., WebSocket)
-        if (additionalDataHandler != null) {
-            try {
-                System.out.println("🔄 Forwarding data to additional handler (WebSocket)...");
-                additionalDataHandler.accept(data);
-            } catch (Exception e) {
-                System.err.println("❌ Error in additional data handler: " + e.getMessage());
-                e.printStackTrace();
+        // Forward to all additional handlers FIRST (e.g., WebSocket, footprint builder, etc.)
+        if (!additionalDataHandlers.isEmpty()) {
+            for (Consumer<TradingData> handler : additionalDataHandlers) {
+                try {
+                    handler.accept(data);
+                } catch (Exception e) {
+                    System.err.println("❌ Error in additional data handler: " + e.getMessage());
+                    e.printStackTrace();
+                }
             }
         }
         

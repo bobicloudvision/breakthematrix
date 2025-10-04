@@ -36,7 +36,7 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
         
         // Register with TradingBot to receive forwarded data
         System.out.println("🔧 Registering WebSocket handler with TradingBot");
-        this.tradingBot.setAdditionalDataHandler(this::broadcastTradingData);
+        this.tradingBot.addDataHandler(this::broadcastTradingData);
         System.out.println("✅ WebSocket handler registered with TradingBot successfully");
     }
 

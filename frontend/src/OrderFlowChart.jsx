@@ -3,14 +3,18 @@ import {
     ColorType, 
     LineStyle,
     HistogramSeries,
+    CandlestickSeries,
 } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
+import { FootprintPrimitive } from './FootprintPrimitive';
 
 export const OrderFlowChart = ({ provider, symbol, interval }) => {
     const chartContainerRef = useRef();
     const chartRef = useRef();
     const bidSeriesRef = useRef();
     const askSeriesRef = useRef();
+    const candleSeriesRef = useRef();
+    const footprintRef = useRef();
     const [orderBookData, setOrderBookData] = useState({ 
         bids: [], 
         asks: [],
@@ -19,6 +23,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         spread: null
     });
     const [trades, setTrades] = useState([]);
+    const [orderFlowCandles, setOrderFlowCandles] = useState([]);
     const [wsConnected, setWsConnected] = useState(false);
     const wsRef = useRef(null);
 
@@ -46,13 +51,16 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                 vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
                 horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
             },
+            leftPriceScale: {
+                visible: false,
+            },
             rightPriceScale: {
                 borderColor: 'rgba(197, 203, 206, 0.8)',
+                visible: true,
                 scaleMargins: {
-                    top: 0.05,
-                    bottom: 0.05,
+                    top: 0.1,
+                    bottom: 0.2, // More space at bottom for volume bars
                 },
-                title: 'Volume',
             },
             timeScale: {
                 visible: true,
@@ -65,31 +73,34 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
             },
         });
 
-        // Create bid series (green)
-        const bidSeries = chart.addSeries(HistogramSeries, {
-            color: 'rgba(34, 197, 94, 0.5)',
-            priceFormat: {
-                type: 'price',
-                precision: 2,
-                minMove: 0.01,
-            },
+        // Create candlestick series for footprint (invisible - footprint primitive will draw everything)
+        const candleSeries = chart.addSeries(CandlestickSeries, {
+            upColor: 'rgba(0, 0, 0, 0)', // Transparent
+            downColor: 'rgba(0, 0, 0, 0)', // Transparent
+            borderUpColor: 'rgba(0, 0, 0, 0)', // Transparent
+            borderDownColor: 'rgba(0, 0, 0, 0)', // Transparent
+            wickUpColor: 'rgba(0, 0, 0, 0)', // Transparent
+            wickDownColor: 'rgba(0, 0, 0, 0)', // Transparent
             priceScaleId: 'right',
         });
 
-        // Create ask series (red)
-        const askSeries = chart.addSeries(HistogramSeries, {
-            color: 'rgba(239, 68, 68, 0.5)',
-            priceFormat: {
-                type: 'price',
-                precision: 2,
-                minMove: 0.01,
-            },
-            priceScaleId: 'right',
-        });
+        // Create and attach footprint primitive (pass chart and series)
+        const footprint = new FootprintPrimitive(chart, candleSeries);
+        footprint._minVolumeToShow = 0.00001; // Lower threshold for crypto (small volumes)
+        footprint._fontSize = 10; // Slightly larger font for visibility
+        footprint.setShowValueArea(true); // Show VAH/VAL lines
+        footprint.setShowPOC(true); // Show Point of Control
+        footprint.setShowMetrics(true); // Show Delta and Total Volume
+        footprint.setShowDelta(true); // Show delta in footprint cells
+        footprint.setShowVolumeBars(true); // Show volume bars at bottom
+        candleSeries.attachPrimitive(footprint);
+        footprintRef.current = footprint;
+        console.log('[OrderFlow] Footprint primitive attached with chart/series and all features enabled');
 
         chartRef.current = chart;
-        bidSeriesRef.current = bidSeries;
-        askSeriesRef.current = askSeries;
+        candleSeriesRef.current = candleSeries;
+        bidSeriesRef.current = null;
+        askSeriesRef.current = null;
 
         window.addEventListener('resize', handleResize);
 
@@ -120,6 +131,179 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
 
         subscribeToOrderFlow();
     }, [provider, symbol]);
+
+    // Fetch footprint candles with volumeProfile data
+    useEffect(() => {
+        if (!symbol || !interval) return;
+
+        const fetchFootprintCandles = async () => {
+            try {
+                // Fetch historical candles
+                const historicalResponse = await fetch(
+                    `http://localhost:8080/api/footprint/historical?symbol=${symbol}&interval=${interval}&limit=200`
+                );
+                
+                if (!historicalResponse.ok) {
+                    console.warn('Failed to fetch historical footprint:', historicalResponse.status);
+                    return;
+                }
+                
+                const historicalData = await historicalResponse.json();
+                console.log('Historical footprint response:', historicalData);
+                
+                let candlesArray = [];
+                
+                // Parse historical candles
+                if (historicalData.success && historicalData.candles) {
+                    candlesArray = historicalData.candles;
+                } else if (historicalData.candles) {
+                    candlesArray = historicalData.candles;
+                } else if (Array.isArray(historicalData)) {
+                    candlesArray = historicalData;
+                }
+                
+                // Fetch current (incomplete) candle
+                try {
+                    const currentResponse = await fetch(
+                        `http://localhost:8080/api/footprint/current?symbol=${symbol}&interval=${interval}`
+                    );
+                    
+                    if (currentResponse.ok) {
+                        const currentData = await currentResponse.json();
+                        console.log('Current footprint response:', currentData);
+                        
+                        if (currentData.candle) {
+                            // Add or update the current candle
+                            const currentTime = Math.floor(Date.now() / 1000);
+                            const intervalSeconds = interval === '1m' ? 60 : interval === '5m' ? 300 : interval === '15m' ? 900 : 60;
+                            const currentCandleTime = Math.floor(currentTime / intervalSeconds) * intervalSeconds;
+                            
+                            // Check if last candle is the current candle (same time period)
+                            const lastCandle = candlesArray[candlesArray.length - 1];
+                            const lastTime = lastCandle?.openTime ? Math.floor(new Date(lastCandle.openTime).getTime() / 1000) : 0;
+                            
+                            if (lastTime >= currentCandleTime - intervalSeconds) {
+                                // Update the last candle with current data
+                                candlesArray[candlesArray.length - 1] = currentData.candle;
+                            } else {
+                                // Append as new candle
+                                candlesArray.push(currentData.candle);
+                            }
+                            
+                            console.log('Updated with current candle');
+                        }
+                    }
+                } catch (currentError) {
+                    console.log('Could not fetch current candle (optional):', currentError.message);
+                }
+                
+                if (candlesArray.length > 0) {
+                    console.log('Processing', candlesArray.length, 'footprint candles');
+                    console.log('Sample candle:', candlesArray[0]);
+                    
+                    // Transform API response to FootprintPrimitive format
+                    const transformedCandles = candlesArray.map((candle, index) => {
+                        // Try to get timestamp from multiple possible fields
+                        let time;
+                        if (candle.openTime) {
+                            time = Math.floor(new Date(candle.openTime).getTime() / 1000);
+                        } else if (candle.time) {
+                            time = typeof candle.time === 'number' ? candle.time : Math.floor(new Date(candle.time).getTime() / 1000);
+                        } else {
+                            // Fallback: use current time minus interval for each candle
+                            const now = Math.floor(Date.now() / 1000);
+                            const intervalSeconds = interval === '1m' ? 60 : interval === '5m' ? 300 : interval === '15m' ? 900 : 60;
+                            time = now - ((candlesArray.length - index - 1) * intervalSeconds);
+                        }
+                        
+                        // Map volumeProfile to volumeByPrice format expected by FootprintPrimitive
+                        const volumeByPrice = candle.volumeProfile?.map(level => ({
+                            price: level.price,
+                            buyVolume: level.buyVolume || 0,
+                            sellVolume: level.sellVolume || 0,
+                            trades: level.tradeCount || 0,
+                        })) || [];
+                        
+                        return {
+                            time,
+                            open: candle.open || candle.low || candle.close || 0,
+                            high: candle.high || 0,
+                            low: candle.low || 0,
+                            close: candle.close || candle.high || candle.open || 0,
+                            volume: candle.totalVolume || 0,
+                            volumeByPrice,
+                            // Additional footprint metrics
+                            delta: candle.delta || 0,
+                            cumulativeDelta: candle.cumulativeDelta || 0,
+                            pointOfControl: candle.pointOfControl,
+                            valueAreaHigh: candle.valueAreaHigh,
+                            valueAreaLow: candle.valueAreaLow,
+                        };
+                    });
+                    
+                    console.log('Transformed candles:', transformedCandles.length);
+                    console.log('Sample transformed candle:', transformedCandles[0]);
+                    console.log('Sample volumeByPrice:', transformedCandles[0]?.volumeByPrice);
+                    console.log('volumeByPrice entries:', transformedCandles[0]?.volumeByPrice?.length);
+                    
+                    // Verify data structure
+                    if (transformedCandles[0]?.volumeByPrice?.length > 0) {
+                        const firstLevel = transformedCandles[0].volumeByPrice[0];
+                        console.log('First price level:', {
+                            price: firstLevel.price,
+                            buyVolume: firstLevel.buyVolume,
+                            sellVolume: firstLevel.sellVolume,
+                            delta: firstLevel.buyVolume - firstLevel.sellVolume
+                        });
+                    }
+                    
+                    setOrderFlowCandles(transformedCandles);
+                    
+                    // Update candlestick series with OHLC data
+                    if (candleSeriesRef.current && transformedCandles.length > 0) {
+                        const chartData = transformedCandles.map(candle => ({
+                            time: candle.time,
+                            open: candle.open,
+                            high: candle.high,
+                            low: candle.low,
+                            close: candle.close,
+                        }));
+                        console.log('Setting chart data:', chartData.length, 'candles');
+                        candleSeriesRef.current.setData(chartData);
+                    }
+                } else {
+                    console.warn('No candles found in response');
+                }
+            } catch (error) {
+                console.error('Error fetching footprint candles:', error);
+            }
+        };
+
+        fetchFootprintCandles();
+        const intervalId = setInterval(fetchFootprintCandles, 2000); // Refresh every 2 seconds for real-time
+        
+        return () => clearInterval(intervalId);
+    }, [symbol, interval]);
+
+    // Update footprint primitive when order flow candles change
+    useEffect(() => {
+        if (!footprintRef.current || !orderFlowCandles.length) return;
+        
+        console.log('[OrderFlow] Updating footprint with', orderFlowCandles.length, 'candles');
+        console.log('[OrderFlow] First candle volumeByPrice count:', orderFlowCandles[0]?.volumeByPrice?.length);
+        
+        footprintRef.current.updateData(orderFlowCandles);
+        
+        // Force chart redraw using requestAnimationFrame (like BoxPrimitive/LinePrimitive)
+        if (chartRef.current) {
+            requestAnimationFrame(() => {
+                footprintRef.current.updateAllViews();
+                // Force chart redraw
+                chartRef.current.timeScale().applyOptions({});
+                console.log('[OrderFlow] Chart redraw triggered via requestAnimationFrame');
+            });
+        }
+    }, [orderFlowCandles]);
 
     // WebSocket for real-time order flow data
     useEffect(() => {
@@ -202,35 +386,8 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
         };
     }, [provider, symbol]);
 
-    // Update chart with order book data - using cumulative depth over time
-    useEffect(() => {
-        if (!bidSeriesRef.current || !askSeriesRef.current) return;
-        if (!orderBookData.bids?.length || !orderBookData.asks?.length) return;
-
-        const now = Math.floor(Date.now() / 1000);
-
-        // Calculate total bid and ask volumes for this timestamp
-        const totalBidVolume = orderBookData.bids
-            .slice(0, 10)
-            .reduce((sum, bid) => sum + parseFloat(bid.quantity || 0), 0);
-        
-        const totalAskVolume = orderBookData.asks
-            .slice(0, 10)
-            .reduce((sum, ask) => sum + parseFloat(ask.quantity || 0), 0);
-
-        // Update with single data point per update (time-series of volume changes)
-        bidSeriesRef.current.update({
-            time: now,
-            value: totalBidVolume,
-            color: 'rgba(34, 197, 94, 0.7)',
-        });
-
-        askSeriesRef.current.update({
-            time: now,
-            value: totalAskVolume,
-            color: 'rgba(239, 68, 68, 0.7)',
-        });
-    }, [orderBookData]);
+    // Order book data updates (not displayed on chart anymore - only in header)
+    // Data is still collected for the header metrics
 
     return (
         <div className="w-full h-full flex flex-col bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40">
@@ -239,7 +396,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold text-cyan-300">Order Flow Analysis</h2>
+                            <h2 className="text-xl font-bold text-cyan-300">Order Flow & Footprint Analysis</h2>
                             <div className="flex items-center gap-2">
                                 <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
                                 <span className={`text-xs ${wsConnected ? 'text-green-400' : 'text-red-400'}`}>
@@ -248,7 +405,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                             </div>
                         </div>
                         <p className="text-sm text-slate-400">
-                            {symbol} - Real-time order book depth
+                            {symbol} - Footprint chart with buy/sell volume by price
                         </p>
                     </div>
                     <div className="flex gap-6">
@@ -284,135 +441,83 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                         </div>
                     </div>
                 </div>
+                {/* Footprint Metrics */}
+                {orderFlowCandles.length > 0 && (
+                    <div className="px-6 py-3 border-b border-cyan-500/20 bg-slate-800/20">
+                        <div className="flex items-center gap-6 text-xs">
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400">Last Candle Delta:</span>
+                                <span className={`font-semibold ${
+                                    orderFlowCandles[orderFlowCandles.length - 1].delta > 0 
+                                        ? 'text-green-400' 
+                                        : 'text-red-400'
+                                }`}>
+                                    {orderFlowCandles[orderFlowCandles.length - 1].delta?.toFixed(2) || '0.00'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400">Cumulative Delta:</span>
+                                <span className={`font-semibold ${
+                                    orderFlowCandles[orderFlowCandles.length - 1].cumulativeDelta > 0 
+                                        ? 'text-green-400' 
+                                        : 'text-red-400'
+                                }`}>
+                                    {orderFlowCandles[orderFlowCandles.length - 1].cumulativeDelta?.toFixed(2) || '0.00'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400">POC:</span>
+                                <span className="font-semibold text-yellow-400">
+                                    {orderFlowCandles[orderFlowCandles.length - 1].pointOfControl?.toFixed(2) || '---'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400">Value Area:</span>
+                                <span className="font-semibold text-cyan-400">
+                                    {orderFlowCandles[orderFlowCandles.length - 1].valueAreaLow?.toFixed(2) || '---'}
+                                    {' - '}
+                                    {orderFlowCandles[orderFlowCandles.length - 1].valueAreaHigh?.toFixed(2) || '---'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-400">Total Candles:</span>
+                                <span className="font-semibold text-slate-300">
+                                    {orderFlowCandles.length}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <div className="flex flex-1 min-h-0">
-                {/* Order Book Table */}
-                <div className="w-80 border-r border-cyan-500/20 bg-slate-900/40 overflow-hidden flex flex-col">
-                    <div className="px-4 py-3 border-b border-cyan-500/20 bg-slate-800/50">
-                        <h3 className="text-sm font-semibold text-cyan-300">Order Book</h3>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {/* Asks (reversed order - lowest price at bottom) */}
-                        <div className="border-b border-cyan-500/20">
-                            {orderBookData.asks?.slice(0, 15).reverse().map((ask, idx) => (
-                                <div 
-                                    key={`ask-${idx}`} 
-                                    className="px-4 py-1 flex justify-between text-xs hover:bg-red-500/10 relative"
-                                >
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-red-500/20"
-                                        style={{ 
-                                            width: `${(parseFloat(ask.quantity) / Math.max(...orderBookData.asks.slice(0, 15).map(a => parseFloat(a.quantity)))) * 100}%` 
-                                        }}
-                                    />
-                                    <span className="text-red-400 relative z-10">{parseFloat(ask.price).toFixed(2)}</span>
-                                    <span className="text-slate-300 relative z-10">{parseFloat(ask.quantity).toFixed(4)}</span>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        {/* Spread */}
-                        <div className="px-4 py-2 bg-slate-800/50 text-center border-y border-cyan-500/30">
-                            <div className="text-xs text-slate-400">Spread</div>
-                            <div className="text-sm font-semibold text-yellow-400">
-                                {orderBookData.spread 
-                                    ? parseFloat(orderBookData.spread).toFixed(2)
-                                    : orderBookData.asks?.[0] && orderBookData.bids?.[0] 
-                                        ? (parseFloat(orderBookData.asks[0].price) - parseFloat(orderBookData.bids[0].price)).toFixed(2)
-                                        : '---'
-                                }
-                            </div>
-                            {orderBookData.bestBid && orderBookData.bestAsk && (
-                                <div className="text-xs text-slate-500 mt-1">
-                                    {parseFloat(orderBookData.bestBid).toFixed(2)} / {parseFloat(orderBookData.bestAsk).toFixed(2)}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Bids */}
-                        <div>
-                            {orderBookData.bids?.slice(0, 15).map((bid, idx) => (
-                                <div 
-                                    key={`bid-${idx}`} 
-                                    className="px-4 py-1 flex justify-between text-xs hover:bg-green-500/10 relative"
-                                >
-                                    <div 
-                                        className="absolute left-0 top-0 h-full bg-green-500/20"
-                                        style={{ 
-                                            width: `${(parseFloat(bid.quantity) / Math.max(...orderBookData.bids.slice(0, 15).map(b => parseFloat(b.quantity)))) * 100}%` 
-                                        }}
-                                    />
-                                    <span className="text-green-400 relative z-10">{parseFloat(bid.price).toFixed(2)}</span>
-                                    <span className="text-slate-300 relative z-10">{parseFloat(bid.quantity).toFixed(4)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Chart Area */}
-                <div className="flex-1 flex flex-col min-h-0">
-                    <div className="px-4 py-2 bg-slate-800/30 border-b border-cyan-500/20">
+            {/* Footprint Chart - Full Width */}
+            <div className="flex-1 flex flex-col min-h-0">
+                <div className="px-4 py-2 bg-slate-800/30 border-b border-cyan-500/20">
+                    <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-sm font-semibold text-cyan-300">Order Book Depth Over Time</h3>
+                            <h3 className="text-sm font-semibold text-cyan-300">Footprint Chart - Volume by Price</h3>
                             <div className="flex items-center gap-4 text-xs">
                                 <div className="flex items-center gap-1">
                                     <div className="w-3 h-3 bg-green-500/70 rounded"></div>
-                                    <span className="text-slate-400">Bid Depth (Top 10)</span>
+                                    <span className="text-slate-400">Buy Volume (Green = More Buyers)</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <div className="w-3 h-3 bg-red-500/70 rounded"></div>
-                                    <span className="text-slate-400">Ask Depth (Top 10)</span>
+                                    <span className="text-slate-400">Sell Volume (Red = More Sellers)</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 bg-yellow-500/70 rounded"></div>
+                                    <span className="text-slate-400">VAH/VAL (Value Area)</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 bg-cyan-500/70 rounded"></div>
+                                    <span className="text-slate-400">POC (Point of Control)</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div ref={chartContainerRef} className="flex-1" />
                 </div>
-
-                {/* Recent Trades */}
-                <div className="w-64 border-l border-cyan-500/20 bg-slate-900/40 overflow-hidden flex flex-col">
-                    <div className="px-4 py-3 border-b border-cyan-500/20 bg-slate-800/50">
-                        <h3 className="text-sm font-semibold text-cyan-300">Recent Trades</h3>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {trades.slice().reverse().map((trade, idx) => {
-                            // isBuyerMaker = true means sell (maker is selling, taker is buying)
-                            // isBuyerMaker = false means buy (maker is buying, taker is selling)
-                            const isSell = trade.isBuyerMaker || trade.isAggressiveSell;
-                            const isBuy = !trade.isBuyerMaker || trade.isAggressiveBuy;
-                            
-                            return (
-                                <div 
-                                    key={`trade-${idx}-${trade.timestamp}`} 
-                                    className="px-4 py-2 border-b border-slate-700/30 hover:bg-slate-800/50"
-                                >
-                                    <div className="flex justify-between items-center">
-                                        <span className={`text-sm font-semibold ${
-                                            isSell ? 'text-red-400' : 'text-green-400'
-                                        }`}>
-                                            {parseFloat(trade.price).toFixed(2)}
-                                        </span>
-                                        <span className="text-xs text-slate-400">
-                                            {new Date(trade.timestamp).toLocaleTimeString()}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <span className="text-xs text-slate-300">
-                                            {parseFloat(trade.quantity).toFixed(6)}
-                                        </span>
-                                        <span className={`text-xs font-medium ${
-                                            isSell ? 'text-red-400' : 'text-green-400'
-                                        }`}>
-                                            {isSell ? 'SELL' : 'BUY'}
-                                        </span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                <div ref={chartContainerRef} className="flex-1" />
             </div>
         </div>
     );

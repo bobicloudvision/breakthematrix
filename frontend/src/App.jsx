@@ -15,7 +15,7 @@ export default function App() {
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
-  const [mainView, setMainView] = useState('chart'); // 'chart' or 'orderflow'
+  const [mainView, setMainView] = useState('orderflow'); // 'chart' or 'orderflow'
   const [activeStrategies, setActiveStrategies] = useState([]);
   const [enabledIndicators, setEnabledIndicators] = useState([]);
   const [bottomBarHeight, setBottomBarHeight] = useState(400);
@@ -188,7 +188,7 @@ export default function App() {
         <div className="flex-1 flex flex-col">
           {/* Top Bar */}
           <header className="sticky top-0 z-20 w-full border-b border-cyan-500/20 bg-gradient-to-r from-slate-900/90 via-gray-900/90 to-slate-900/90 backdrop-blur-xl shadow-2xl shadow-cyan-500/10">
-            <div className="mx-auto max-w-7xl px-4 py-3">
+            <div className="px-4 py-3">
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
                   BreakTheMatrix 

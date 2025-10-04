@@ -54,7 +54,7 @@ public class OrderFlowWebSocketHandler extends TextWebSocketHandler {
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         
         // Register with TradingBot to receive order flow data
-        this.tradingBot.setAdditionalDataHandler(this::broadcastOrderFlowData);
+        this.tradingBot.addDataHandler(this::broadcastOrderFlowData);
         
         System.out.println("✅ OrderFlowWebSocketHandler initialized");
     }

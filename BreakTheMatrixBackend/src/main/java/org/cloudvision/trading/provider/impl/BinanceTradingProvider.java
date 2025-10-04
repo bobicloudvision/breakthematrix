@@ -465,7 +465,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
             }
             // Unknown message type
             else if (!json.has("result")) {
-                System.out.println("📈 Received other data: " + message.substring(0, Math.min(200, message.length())));
+//                System.out.println("📈 Received other data: " + message.substring(0, Math.min(200, message.length())));
             }
             
         } catch (Exception e) {

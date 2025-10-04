@@ -2,6 +2,7 @@ package org.cloudvision;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Main entry point for the Break The Matrix Trading Bot Backend.
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * The desktop app automatically launches the embedded browser with ui/index.html
  */
 @SpringBootApplication
+@EnableScheduling
 public class Main {
     public static void main(String[] args) {
         SpringApplication.run(Main.class, args);
