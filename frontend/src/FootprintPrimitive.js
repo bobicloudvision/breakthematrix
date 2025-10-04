@@ -36,27 +36,17 @@ class FootprintRenderer {
 
     _drawImpl(scope, target) {
         const ctx = scope.context;
-        
+
         const data = this._source._data;
-        console.log('[Footprint] Draw called, data count:', data?.length);
 
         if (!data || data.length === 0) {
-            console.log('[Footprint] No data to draw');
             return;
         }
 
         const chart = this._source._chart;
         const series = this._source._series;
         
-        console.log('[Footprint] Chart/Series check:', { 
-            hasChart: !!chart, 
-            hasSeries: !!series,
-            chartType: typeof chart,
-            seriesType: typeof series
-        });
-        
         if (!chart || !series) {
-            console.warn('[Footprint] Draw called but chart/series not available');
             return;
         }
 
@@ -75,31 +65,17 @@ class FootprintRenderer {
         // Get visible time range
         const timeScale = chart.timeScale();
         
-        console.log('[Footprint] Scale check:', { 
-            hasTimeScale: !!timeScale, 
-            hasSeries: !!series
-        });
-        
         if (!timeScale || !series) {
-            console.log('[Footprint] No time scale or series available');
             ctx.restore();
             return;
         }
 
         const visibleRange = timeScale.getVisibleLogicalRange();
         
-        console.log('[Footprint] Visible range check:', { 
-            hasVisibleRange: !!visibleRange,
-            visibleRange 
-        });
-        
         if (!visibleRange) {
-            console.log('[Footprint] No visible range');
             ctx.restore();
             return;
         }
-
-        console.log('[Footprint] ✅ Starting to draw', data.length, 'candles');
 
         // Calculate max volume for scaling volume bars
         let maxVolume = 0;
@@ -123,20 +99,11 @@ class FootprintRenderer {
 
             // Get bar spacing to determine available width
             const barSpacing = timeScale.options().barSpacing || 6;
-            const candleWidth = barSpacing * 0.8 * pixelRatio;
-            
-            if (candleIndex === 0) {
-                console.log('[Footprint] First candle:', {
-                    time: candleData.time,
-                    x: scaledX,
-                    barSpacing,
-                    candleWidth,
-                    hasOHLC: !!(candleData.open && candleData.high && candleData.low && candleData.close),
-                    volumeLevels: candleData.volumeByPrice?.length || 0
-                });
-            }
+            const candleWidth = barSpacing * 0.95 * pixelRatio; // Increased from 0.8 to 0.95 for wider candles
 
-            // Draw candle body and wick first
+            // Get candle OHLC coordinates for positioning side boxes
+            let scaledOpenY, scaledHighY, scaledLowY, scaledCloseY;
+            
             if (candleData.open && candleData.high && candleData.low && candleData.close) {
                 const openY = series.priceToCoordinate(candleData.open);
                 const highY = series.priceToCoordinate(candleData.high);
@@ -144,275 +111,250 @@ class FootprintRenderer {
                 const closeY = series.priceToCoordinate(candleData.close);
                 
                 if (openY !== null && highY !== null && lowY !== null && closeY !== null) {
-                    const scaledOpenY = openY * pixelRatio;
-                    const scaledHighY = highY * pixelRatio;
-                    const scaledLowY = lowY * pixelRatio;
-                    const scaledCloseY = closeY * pixelRatio;
+                    scaledOpenY = openY * pixelRatio;
+                    scaledHighY = highY * pixelRatio;
+                    scaledLowY = lowY * pixelRatio;
+                    scaledCloseY = closeY * pixelRatio;
+                } else {
+                    return; // Skip if can't get coordinates
+                }
+            } else {
+                return; // Skip if no OHLC data
+            }
+
+            // Calculate total buy and sell volumes AND collect price levels
+            let totalBuyVolume = 0;
+            let totalSellVolume = 0;
+            let pocPrice = null;
+            let maxVolume = 0;
+            const priceLevels = [];
+            
+            // Collect all price levels
+            if (candleData.volumeByPrice && candleData.volumeByPrice.length > 0) {
+                candleData.volumeByPrice.forEach(level => {
+                    const { price, buyVolume, sellVolume } = level;
                     
-                    const isUp = candleData.close >= candleData.open;
-                    const bodyColor = isUp ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)';
-                    const borderColor = isUp ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
-                    const wickColor = isUp ? 'rgba(34, 197, 94, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+                    totalBuyVolume += buyVolume || 0;
+                    totalSellVolume += sellVolume || 0;
                     
-                    // Draw wick
-                    ctx.strokeStyle = wickColor;
+                    const levelTotal = (buyVolume || 0) + (sellVolume || 0);
+                    if (levelTotal > maxVolume) {
+                        maxVolume = levelTotal;
+                        pocPrice = level.price;
+                    }
+                    
+                    // Skip if volume too small
+                    if (levelTotal < this._source._minVolumeToShow) {
+                        return;
+                    }
+                    
+                    // Skip if both volumes are effectively zero (ignore 0.00 values)
+                    if (buyVolume < 0.001 && sellVolume < 0.001) {
+                        return;
+                    }
+                    
+                    priceLevels.push({ price, buyVolume, sellVolume });
+                });
+            }
+            
+            const delta = totalBuyVolume - totalSellVolume;
+            
+            // Draw footprint data INSIDE candle - GRID LAYOUT
+            if (priceLevels.length > 0) {
+                // Filter to show only the most important price levels
+                const levelsWithScore = priceLevels.map(level => {
+                    const totalVolume = level.buyVolume + level.sellVolume;
+                    const delta = Math.abs(level.buyVolume - level.sellVolume);
+                    const imbalance = totalVolume > 0 ? delta / totalVolume : 0;
+                    const score = totalVolume * (1 + imbalance * 2);
+                    return { ...level, score, totalVolume };
+                });
+                
+                levelsWithScore.sort((a, b) => b.score - a.score);
+                const maxLevels = barSpacing > 40 ? 10 : (barSpacing > 25 ? 7 : 5);
+                const importantLevels = levelsWithScore.slice(0, Math.min(maxLevels, levelsWithScore.length));
+                importantLevels.sort((a, b) => b.price - a.price);
+                const levelsToDisplay = importantLevels;
+                
+                // Calculate max individual volume for big order highlighting
+                const maxIndividualVolume = Math.max(
+                    ...levelsToDisplay.map(l => Math.max(l.buyVolume, l.sellVolume))
+                );
+                const bigOrderThreshold = maxIndividualVolume * 0.5;
+                
+                // Calculate grid dimensions
+                const candleBodyTop = Math.min(scaledOpenY, scaledCloseY);
+                const candleBodyBottom = Math.max(scaledOpenY, scaledCloseY);
+                const candleBodyHeight = Math.abs(candleBodyBottom - candleBodyTop);
+                const minCandleHeight = 80 * pixelRatio;
+                const effectiveCandleHeight = Math.max(candleBodyHeight, minCandleHeight);
+                
+                const rowHeight = effectiveCandleHeight / levelsToDisplay.length;
+                const candleLeft = scaledX - candleWidth / 2;
+                const candleRight = scaledX + candleWidth / 2;
+                const cellWidth = candleWidth / 2; // Half for sell, half for buy
+                
+                const startY = candleBodyTop - (effectiveCandleHeight > candleBodyHeight ? (effectiveCandleHeight - candleBodyHeight) / 2 : 0);
+                
+                // Draw grid structure
+                levelsToDisplay.forEach((level, index) => {
+                    const cellTop = startY + (index * rowHeight);
+                    const cellBottom = cellTop + rowHeight;
+                    const cellCenterY = cellTop + (rowHeight / 2);
+                    
+                    // Format volumes
+                    const sellText = level.sellVolume < 0.001 ? '' : (level.sellVolume >= 1 ? level.sellVolume.toFixed(1) : level.sellVolume.toFixed(2));
+                    const buyText = level.buyVolume < 0.001 ? '' : (level.buyVolume >= 1 ? level.buyVolume.toFixed(1) : level.buyVolume.toFixed(2));
+                    
+                    // Identify big orders
+                    const isBigSellOrder = level.sellVolume >= bigOrderThreshold && level.sellVolume >= 0.001;
+                    const isBigBuyOrder = level.buyVolume >= bigOrderThreshold && level.buyVolume >= 0.001;
+                    
+                    // LEFT CELL - SELL VOLUME
+                    // Draw cell background
+                    if (sellText) {
+                        if (isBigSellOrder) {
+                            ctx.fillStyle = 'rgba(255, 237, 74, 0.9)'; // Yellow for big sell
+                        } else {
+                            ctx.fillStyle = 'rgba(239, 68, 68, 0.15)'; // Light red
+                        }
+                        ctx.fillRect(candleLeft, cellTop, cellWidth, rowHeight);
+                    }
+                    
+                    // RIGHT CELL - BUY VOLUME
+                    // Draw cell background
+                    if (buyText) {
+                        if (isBigBuyOrder) {
+                            ctx.fillStyle = 'rgba(74, 222, 255, 0.9)'; // Cyan for big buy
+                        } else {
+                            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; // Light green
+                        }
+                        ctx.fillRect(scaledX, cellTop, cellWidth, rowHeight);
+                    }
+                    
+                    // Draw horizontal grid line (between rows)
+                    if (index > 0) {
+                        ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+                        ctx.lineWidth = 1 * pixelRatio;
+                        ctx.beginPath();
+                        ctx.moveTo(candleLeft, cellTop);
+                        ctx.lineTo(candleRight, cellTop);
+                        ctx.stroke();
+                    }
+                    
+                    // Draw vertical separator line (middle of candle)
+                    ctx.strokeStyle = 'rgba(100, 100, 100, 0.4)';
                     ctx.lineWidth = 1 * pixelRatio;
                     ctx.beginPath();
-                    ctx.moveTo(scaledX, scaledHighY);
-                    ctx.lineTo(scaledX, scaledLowY);
+                    ctx.moveTo(scaledX, cellTop);
+                    ctx.lineTo(scaledX, cellBottom);
                     ctx.stroke();
                     
-                    // Draw body
-                    const bodyTop = Math.min(scaledOpenY, scaledCloseY);
-                    const bodyBottom = Math.max(scaledOpenY, scaledCloseY);
-                    const bodyHeight = Math.max(bodyBottom - bodyTop, 1 * pixelRatio); // Min 1px height
+                    // Draw text
+                    ctx.font = `${isBigSellOrder || isBigBuyOrder ? 'bold' : ''} ${fontSize}px -apple-system, BlinkMacSystemFont, monospace`;
+                    ctx.textBaseline = 'middle';
                     
-                    // Fill body
-                    ctx.fillStyle = bodyColor;
-                    ctx.fillRect(
-                        scaledX - candleWidth / 2,
-                        bodyTop,
-                        candleWidth,
-                        bodyHeight
-                    );
-                    
-                    // Draw body border
-                    ctx.strokeStyle = borderColor;
-                    ctx.lineWidth = 1 * pixelRatio;
-                    ctx.strokeRect(
-                        scaledX - candleWidth / 2,
-                        bodyTop,
-                        candleWidth,
-                        bodyHeight
-                    );
-                    
-                    // Draw volume bar below the candle
-                    if (this._source._showVolumeBars && candleData.volume && maxVolume > 0) {
-                        const viewportHeight = scope.bitmapSize.height;
-                        const volumeBarMaxHeight = viewportHeight * 0.15; // 15% of chart height for volume
-                        const volumeBarHeight = (candleData.volume / maxVolume) * volumeBarMaxHeight;
-                        
-                        // Position at bottom of chart
-                        const volumeBarTop = viewportHeight - volumeBarHeight - (10 * pixelRatio); // 10px padding from bottom
-                        
-                        // Draw volume bar with transparency
-                        const volumeColor = isUp 
-                            ? 'rgba(34, 197, 94, 0.5)' 
-                            : 'rgba(239, 68, 68, 0.5)';
-                        ctx.fillStyle = volumeColor;
-                        ctx.fillRect(
-                            scaledX - candleWidth / 2,
-                            volumeBarTop,
-                            candleWidth,
-                            volumeBarHeight
-                        );
-                        
-                        // Draw volume bar border
-                        const volumeBorderColor = isUp 
-                            ? 'rgba(34, 197, 94, 0.8)' 
-                            : 'rgba(239, 68, 68, 0.8)';
-                        ctx.strokeStyle = volumeBorderColor;
-                        ctx.lineWidth = 1 * pixelRatio;
-                        ctx.strokeRect(
-                            scaledX - candleWidth / 2,
-                            volumeBarTop,
-                            candleWidth,
-                            volumeBarHeight
-                        );
+                    // Draw sell volume text (left cell)
+                    if (sellText) {
+                        ctx.fillStyle = isBigSellOrder ? 'rgb(255, 255, 255)' : 'rgba(239, 68, 68, 1)';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(sellText, candleLeft + cellWidth / 2, cellCenterY);
                     }
+                    
+                    // Draw buy volume text (right cell)
+                    if (buyText) {
+                        ctx.fillStyle = isBigBuyOrder ? 'rgb(255, 255, 255)' : 'rgba(16, 185, 129, 1)';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(buyText, scaledX + cellWidth / 2, cellCenterY);
+                    }
+                    
+                    drawnCount++;
+                });
+                
+                // Draw outer border around entire grid
+                ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+                ctx.lineWidth = 1.5 * pixelRatio;
+                ctx.strokeRect(candleLeft, startY, candleWidth, effectiveCandleHeight);
+            }
+            
+            // Draw clean DELTA below candle if significant
+            if (Math.abs(delta) > 0.01) {
+                const deltaColor = delta > 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+                const deltaText = delta > 0 ? `Δ+${delta.toFixed(1)}` : `Δ${delta.toFixed(1)}`;
+                const deltaY = scaledLowY + 15 * pixelRatio;
+                
+                // Just text, no background
+                ctx.fillStyle = deltaColor;
+                ctx.font = `${7 * pixelRatio}px -apple-system, BlinkMacSystemFont, monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText(deltaText, scaledX, deltaY);
+            }
+            
+            // Draw clean POC marker if available
+            if (pocPrice && candleData.pointOfControl) {
+                const pocY = series.priceToCoordinate(candleData.pointOfControl);
+                if (pocY !== null && pocY !== undefined) {
+                    const scaledPocY = pocY * pixelRatio;
+                    
+                    // Minimal POC line
+                    ctx.strokeStyle = 'rgba(34, 211, 238, 0.6)';
+                    ctx.lineWidth = 1.5 * pixelRatio;
+                    ctx.setLineDash([4 * pixelRatio, 2 * pixelRatio]);
+                    ctx.beginPath();
+                    ctx.moveTo(scaledX - candleWidth / 2 - 2 * pixelRatio, scaledPocY);
+                    ctx.lineTo(scaledX + candleWidth / 2 + 2 * pixelRatio, scaledPocY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                 }
             }
-
-            // Skip volume profile if none available
-            if (!candleData.volumeByPrice || candleData.volumeByPrice.length === 0) {
-                return;
-            }
-
-            // Draw volume profile for this candle
-            candleData.volumeByPrice.forEach((volumeData, levelIndex) => {
-                const { price, buyVolume, sellVolume } = volumeData;
-                
-                // Skip if volume is too small
-                if (buyVolume < this._source._minVolumeToShow && sellVolume < this._source._minVolumeToShow) {
-                    return;
-                }
-
-                const y = series.priceToCoordinate(price);
-                if (y === null || y === undefined) return;
-                
-                // Scale Y coordinate for bitmap
-                const scaledY = y * pixelRatio;
-
-                const delta = buyVolume - sellVolume;
-                
-                // Determine color based on delta
-                let color;
-                let bgColor;
-                if (Math.abs(delta) < 0.001) {
-                    color = this._source._neutralColor;
-                    bgColor = 'rgba(156, 163, 175, 0.3)';
-                } else if (delta > 0) {
-                    color = this._source._buyColor;
-                    bgColor = 'rgba(34, 197, 94, 0.3)';
-                } else {
-                    color = this._source._sellColor;
-                    bgColor = 'rgba(239, 68, 68, 0.3)';
-                }
-
-                // Draw background highlight with stronger opacity
-                const highlightWidth = Math.max(candleWidth * 0.9, 30 * pixelRatio);
-                const highlightHeight = 14 * pixelRatio;
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(
-                    scaledX - highlightWidth / 2,
-                    scaledY - highlightHeight / 2,
-                    highlightWidth,
-                    highlightHeight
-                );
-
-                // Draw text with white color for better visibility
-                ctx.fillStyle = 'rgb(255, 255, 255)';
-                ctx.font = `bold ${fontSize}px monospace`;
-                
-                let textToShow = '';
-                if (this._source._showDelta) {
-                    // Show delta
-                    textToShow = delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3);
-                } else {
-                    // Show buy vs sell volumes
-                    const totalVolume = buyVolume + sellVolume;
-                    textToShow = `${totalVolume.toFixed(3)}`;
-                }
-                
-                ctx.fillText(textToShow, scaledX, scaledY);
-                
-                if (candleIndex === 0 && levelIndex === 0) {
-                    console.log('[Footprint] Drawing first text:', {
-                        text: textToShow,
-                        x: scaledX,
-                        y: scaledY,
-                        price,
-                        delta: delta.toFixed(5),
-                        color
-                    });
-                }
-                
-                drawnCount++;
-            });
+            
+            drawnCount++;
             
             // Draw VAH, VAL, POC, and metrics for this candle
             if (this._source._showValueArea || this._source._showPOC || this._source._showMetrics) {
                 const candleLeftX = scaledX - candleWidth / 2;
                 const candleRightX = scaledX + candleWidth / 2;
                 
-                // Draw Value Area High (VAH)
+                // Draw Value Area High (VAH) - clean style
                 if (this._source._showValueArea && candleData.valueAreaHigh) {
                     const vahY = series.priceToCoordinate(candleData.valueAreaHigh);
                     if (vahY !== null && vahY !== undefined) {
                         const scaledVahY = vahY * pixelRatio;
-                        ctx.strokeStyle = this._source._vahColor;
+                        ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
                         ctx.lineWidth = 1 * pixelRatio;
-                        ctx.setLineDash([4 * pixelRatio, 2 * pixelRatio]);
+                        ctx.setLineDash([3 * pixelRatio, 2 * pixelRatio]);
                         ctx.beginPath();
                         ctx.moveTo(candleLeftX, scaledVahY);
                         ctx.lineTo(candleRightX, scaledVahY);
                         ctx.stroke();
                         ctx.setLineDash([]);
-                        
-                        // Label
-                        ctx.fillStyle = this._source._vahColor;
-                        ctx.font = `${7 * pixelRatio}px monospace`;
-                        ctx.fillText('VAH', candleRightX + 15 * pixelRatio, scaledVahY);
                     }
                 }
                 
-                // Draw Value Area Low (VAL)
+                // Draw Value Area Low (VAL) - clean style
                 if (this._source._showValueArea && candleData.valueAreaLow) {
                     const valY = series.priceToCoordinate(candleData.valueAreaLow);
                     if (valY !== null && valY !== undefined) {
                         const scaledValY = valY * pixelRatio;
-                        ctx.strokeStyle = this._source._valColor;
+                        ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
                         ctx.lineWidth = 1 * pixelRatio;
-                        ctx.setLineDash([4 * pixelRatio, 2 * pixelRatio]);
+                        ctx.setLineDash([3 * pixelRatio, 2 * pixelRatio]);
                         ctx.beginPath();
                         ctx.moveTo(candleLeftX, scaledValY);
                         ctx.lineTo(candleRightX, scaledValY);
                         ctx.stroke();
                         ctx.setLineDash([]);
-                        
-                        // Label
-                        ctx.fillStyle = this._source._valColor;
-                        ctx.font = `${7 * pixelRatio}px monospace`;
-                        ctx.fillText('VAL', candleRightX + 15 * pixelRatio, scaledValY);
                     }
                 }
                 
-                // Draw Point of Control (POC)
-                if (this._source._showPOC && candleData.pointOfControl) {
-                    const pocY = series.priceToCoordinate(candleData.pointOfControl);
-                    if (pocY !== null && pocY !== undefined) {
-                        const scaledPocY = pocY * pixelRatio;
-                        ctx.strokeStyle = this._source._pocColor;
-                        ctx.lineWidth = 2 * pixelRatio;
-                        ctx.beginPath();
-                        ctx.moveTo(candleLeftX, scaledPocY);
-                        ctx.lineTo(candleRightX, scaledPocY);
-                        ctx.stroke();
-                        
-                        // Label
-                        ctx.fillStyle = this._source._pocColor;
-                        ctx.font = `bold ${8 * pixelRatio}px monospace`;
-                        ctx.fillText('POC', candleRightX + 15 * pixelRatio, scaledPocY);
-                    }
-                }
+                // POC handled above - skip duplicate
+                // This section is for other metrics only
                 
-                // Draw metrics (Delta and Total Volume) at top/bottom of candle
-                if (this._source._showMetrics && barSpacing > 15) { // Only show if candles are wide enough
-                    const topY = series.priceToCoordinate(candleData.high || 0);
-                    const bottomY = series.priceToCoordinate(candleData.low || 0);
-                    
-                    if (topY !== null && bottomY !== null) {
-                        const scaledTopY = topY * pixelRatio;
-                        const scaledBottomY = bottomY * pixelRatio;
-                        
-                        // Delta at top
-                        const delta = candleData.delta || 0;
-                        const deltaColor = delta >= 0 ? this._source._buyColor : this._source._sellColor;
-                        const deltaText = delta >= 0 ? `Δ+${delta.toFixed(2)}` : `Δ${delta.toFixed(2)}`;
-                        
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                        ctx.fillRect(
-                            scaledX - 30 * pixelRatio,
-                            scaledTopY - 20 * pixelRatio,
-                            60 * pixelRatio,
-                            12 * pixelRatio
-                        );
-                        ctx.fillStyle = deltaColor;
-                        ctx.font = `bold ${8 * pixelRatio}px monospace`;
-                        ctx.fillText(deltaText, scaledX, scaledTopY - 14 * pixelRatio);
-                        
-                        // Total Volume at bottom
-                        const totalVol = candleData.volume || 0;
-                        const volText = `${totalVol.toFixed(2)}`;
-                        
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                        ctx.fillRect(
-                            scaledX - 30 * pixelRatio,
-                            scaledBottomY + 8 * pixelRatio,
-                            60 * pixelRatio,
-                            12 * pixelRatio
-                        );
-                        ctx.fillStyle = 'rgb(156, 163, 175)';
-                        ctx.font = `${7 * pixelRatio}px monospace`;
-                        ctx.fillText(volText, scaledX, scaledBottomY + 14 * pixelRatio);
-                    }
-                }
+                // Metrics handled by delta below candle - keep it clean
             }
         });
 
         ctx.restore();
-        
-        console.log('[Footprint] ✅ COMPLETE: Drew', drawnCount, 'price levels,', skippedCount, 'skipped, across', data.length, 'candles');
     }
 }
 
@@ -421,14 +363,13 @@ export class FootprintPrimitive {
         this._chart = chart;
         this._series = series;
         this._data = [];
-        this._fontSize = 8;
-        this._buyColor = 'rgb(34, 197, 94)'; // green
-        this._sellColor = 'rgb(239, 68, 68)'; // red
+        this._fontSize = 8; // Optimized for performance
+        this._buyColor = 'rgb(16, 185, 129)'; // Brighter green
+        this._sellColor = 'rgb(239, 68, 68)'; // Red
         this._neutralColor = 'rgb(156, 163, 175)'; // gray
-        this._vahColor = 'rgba(251, 191, 36, 0.6)'; // yellow for VAH
-        this._valColor = 'rgba(251, 191, 36, 0.6)'; // yellow for VAL
-        this._pocColor = 'rgba(34, 211, 238, 0.8)'; // cyan for POC
-        this._showDelta = true;
+        this._vahColor = 'rgba(251, 191, 36, 0.8)'; // Brighter yellow for VAH
+        this._valColor = 'rgba(251, 191, 36, 0.8)'; // Brighter yellow for VAL
+        this._pocColor = 'rgba(34, 211, 238, 1)'; // Brighter cyan for POC
         this._showValueArea = true; // Show VAH/VAL lines
         this._showPOC = true; // Show Point of Control
         this._showMetrics = true; // Show delta/volume text
@@ -460,10 +401,6 @@ export class FootprintPrimitive {
         return this._paneViews;
     }
 
-    setShowDelta(showDelta) {
-        this._showDelta = showDelta;
-    }
-    
     setShowValueArea(show) {
         this._showValueArea = show;
     }

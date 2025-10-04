@@ -73,29 +73,24 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
             },
         });
 
-        // Create candlestick series for footprint (invisible - footprint primitive will draw everything)
+        // Create candlestick series with footprint side boxes
         const candleSeries = chart.addSeries(CandlestickSeries, {
-            upColor: 'rgba(0, 0, 0, 0)', // Transparent
-            downColor: 'rgba(0, 0, 0, 0)', // Transparent
-            borderUpColor: 'rgba(0, 0, 0, 0)', // Transparent
-            borderDownColor: 'rgba(0, 0, 0, 0)', // Transparent
-            wickUpColor: 'rgba(0, 0, 0, 0)', // Transparent
-            wickDownColor: 'rgba(0, 0, 0, 0)', // Transparent
+            upColor: 'rgba(16, 185, 129, 0.3)', // Light green fill
+            downColor: 'rgba(239, 68, 68, 0.3)', // Light red fill
+            borderUpColor: 'rgba(16, 185, 129, 1)', // Solid green border
+            borderDownColor: 'rgba(239, 68, 68, 1)', // Solid red border
+            wickUpColor: 'rgba(16, 185, 129, 0.8)', // Green wick
+            wickDownColor: 'rgba(239, 68, 68, 0.8)', // Red wick
             priceScaleId: 'right',
         });
 
         // Create and attach footprint primitive (pass chart and series)
         const footprint = new FootprintPrimitive(chart, candleSeries);
-        footprint._minVolumeToShow = 0.00001; // Lower threshold for crypto (small volumes)
-        footprint._fontSize = 10; // Slightly larger font for visibility
-        footprint.setShowValueArea(true); // Show VAH/VAL lines
-        footprint.setShowPOC(true); // Show Point of Control
-        footprint.setShowMetrics(true); // Show Delta and Total Volume
-        footprint.setShowDelta(true); // Show delta in footprint cells
-        footprint.setShowVolumeBars(true); // Show volume bars at bottom
+        footprint._minVolumeToShow = 0.01; // Lower threshold for crypto (small volumes)
+        footprint._fontSize = 11; // Increased from 9 to 11 for larger, more readable text
         candleSeries.attachPrimitive(footprint);
         footprintRef.current = footprint;
-        console.log('[OrderFlow] Footprint primitive attached with chart/series and all features enabled');
+        console.log('[OrderFlow] Footprint GRID LAYOUT - structured table view with cell backgrounds, borders, and centered text');
 
         chartRef.current = chart;
         candleSeriesRef.current = candleSeries;
