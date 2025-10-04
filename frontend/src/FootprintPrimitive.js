@@ -235,7 +235,7 @@ class FootprintRenderer {
                         if (imbalance > 0) {
                             const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
                             bgColor = `rgba(16, 185, 129, ${alpha})`; // Green for buy imbalance
-                            textColor = alpha > 0.5 ? 'rgb(255, 255, 255)' : 'rgba(16, 185, 129, 1)'; // White on dark green
+                            textColor = 'rgb(255, 255, 255)'; // White text on green backgrounds
                         } else {
                             const alpha = 0.15 + (imbalanceRatio * 0.6); // 0.15 to 0.75
                             bgColor = `rgba(239, 68, 68, ${alpha})`; // Red for sell imbalance
