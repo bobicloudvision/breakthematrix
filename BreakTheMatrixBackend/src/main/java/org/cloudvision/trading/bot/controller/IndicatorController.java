@@ -804,29 +804,17 @@ examples = {
                 ));
             }
             
-            // Get historical candles (shared across all indicators)
-            List<org.cloudvision.trading.model.CandlestickData> allCandles = 
-                historyService.getLastNCandlesticks(
-                    request.getProvider(),
-                    request.getSymbol(),
-                    request.getInterval(),
-                    requestedCount
-                );
-            
             // Process data for each active indicator
+            // NOTE: We get stored results that were calculated in real-time, NOT recalculated!
             List<Map<String, Object>> indicatorsData = new ArrayList<>();
             
             for (IndicatorInstanceManager.IndicatorInstance instance : activeInstances) {
                 String indicatorId = instance.getIndicatorId();
                 String instanceKey = instance.getInstanceKey();
                 
-                // Process all candles for this indicator
-                List<IndicatorInstanceManager.IndicatorResult> dataPoints = new ArrayList<>();
-                for (org.cloudvision.trading.model.CandlestickData candle : allCandles) {
-                    IndicatorInstanceManager.IndicatorResult result = 
-                        indicatorManager.updateWithCandle(instanceKey, candle);
-                    dataPoints.add(result);
-                }
+                // Get historical data from stored results (ensures consistency with real-time state)
+                List<IndicatorInstanceManager.IndicatorResult> dataPoints = 
+                    indicatorManager.getHistoricalData(instanceKey, requestedCount);
                 
                 // Collect shapes
                 Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
@@ -923,7 +911,7 @@ examples = {
             response.put("provider", request.getProvider());
             response.put("symbol", request.getSymbol());
             response.put("interval", request.getInterval());
-            response.put("count", allCandles.size());
+            response.put("requestedCount", requestedCount);
             response.put("indicatorCount", indicatorsData.size());
             response.put("indicators", indicatorsData);
             response.put("fromActiveInstances", true);

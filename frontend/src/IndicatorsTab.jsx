@@ -10,11 +10,8 @@ export function IndicatorsTab() {
   const [editingInstance, setEditingInstance] = useState(null); // Track which instance is being edited
   const [showBrowseModal, setShowBrowseModal] = useState(false); // Control browse modal
   const [searchQuery, setSearchQuery] = useState(''); // Search filter
-  const [enabledIndicators, setEnabledIndicators] = useState(() => {
-    // Load enabled indicators from localStorage
-    const stored = localStorage.getItem('enabledIndicators');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [enabledIndicators, setEnabledIndicators] = useState([]);
+  const [instancesLoading, setInstancesLoading] = useState(false);
 
   const fetchIndicators = async () => {
     try {
@@ -36,14 +33,52 @@ export function IndicatorsTab() {
     }
   };
 
+  const fetchActiveInstances = async () => {
+    try {
+      setInstancesLoading(true);
+      const provider = localStorage.getItem('tradingProvider') || 'Binance';
+      const symbol = localStorage.getItem('tradingSymbol') || 'BTCUSDT';
+      const interval = localStorage.getItem('tradingInterval') || '5m';
+      
+      const res = await fetch(
+        `http://localhost:8080/api/indicators/instances?provider=${provider}&symbol=${symbol}&interval=${interval}`,
+        {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+        }
+      );
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      if (data.success && Array.isArray(data.instances)) {
+        setEnabledIndicators(data.instances);
+      }
+    } catch (e) {
+      console.error('Failed to fetch active instances:', e);
+      setEnabledIndicators([]);
+    } finally {
+      setInstancesLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchIndicators();
+    fetchActiveInstances();
   }, []);
 
   const getInitialParams = (indicatorId) => {
     // If editing an existing instance, return its params
     if (editingInstance) {
-      return editingInstance.params;
+      return {
+        provider: editingInstance.provider,
+        symbol: editingInstance.symbol,
+        interval: editingInstance.interval,
+        count: 5000,
+        params: editingInstance.params || {}
+      };
     }
     
     // Otherwise return fresh default params
@@ -72,58 +107,87 @@ export function IndicatorsTab() {
     setSearchQuery('');
   };
 
-  const handleApplyIndicator = (indicatorId, params) => {
-    let newEnabled;
-    
-    if (editingInstance) {
-      // Update existing instance
-      newEnabled = enabledIndicators.map(ind => 
-        ind.instanceId === editingInstance.instanceId
-          ? { ...ind, params: params }
-          : ind
-      );
-      console.log(`Updated indicator instance: ${editingInstance.instanceId}`);
-    } else {
-      // Create new instance
-      const instanceId = `${indicatorId}_${Date.now()}`;
-      const newIndicator = {
-        id: indicatorId, // Base indicator type (e.g., 'sma')
-        instanceId: instanceId, // Unique instance ID (e.g., 'sma_1234567890')
-        params: params,
-        visible: true // Default to visible
+  const handleApplyIndicator = async (indicatorId, params) => {
+    try {
+      // If editing, deactivate the old instance first
+      if (editingInstance) {
+        await fetch(
+          `http://localhost:8080/api/indicators/instances/${encodeURIComponent(editingInstance.instanceKey)}`,
+          {
+            method: 'DELETE',
+            headers: { accept: '*/*' },
+          }
+        );
+        console.log(`Deactivated old indicator instance: ${editingInstance.instanceKey}`);
+      }
+      
+      // Activate the new/updated instance
+      const activatePayload = {
+        indicatorId: indicatorId,
+        provider: params.provider,
+        symbol: params.symbol,
+        interval: params.interval,
+        params: params.params || {},
+        historyCount: params.count || 5000
       };
-      newEnabled = [...enabledIndicators, newIndicator];
-      console.log(`Added new indicator instance: ${instanceId}`);
+      
+      const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(activatePayload),
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      console.log(`Activated indicator instance:`, data);
+      
+      // Refresh the active instances list
+      await fetchActiveInstances();
+      
+      // Trigger custom event to notify chart
+      window.dispatchEvent(new Event('indicatorsChanged'));
+      
+      // Close modal
+      setSelectedIndicator(null);
+      setEditingInstance(null);
+    } catch (e) {
+      console.error('Error applying indicator:', e);
+      setError(e.message);
     }
-    
-    setEnabledIndicators(newEnabled);
-    localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
-    // Trigger custom event to notify chart
-    window.dispatchEvent(new Event('indicatorsChanged'));
-    
-    // Close modal
-    setSelectedIndicator(null);
-    setEditingInstance(null);
   };
 
-  const toggleIndicatorVisibility = (instanceId) => {
-    const newEnabled = enabledIndicators.map(ind => 
-      ind.instanceId === instanceId
-        ? { ...ind, visible: !ind.visible }
-        : ind
-    );
-    setEnabledIndicators(newEnabled);
-    localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
-    // Trigger custom event to notify chart
-    window.dispatchEvent(new Event('indicatorsChanged'));
-  };
-
-  const removeIndicator = (instanceId) => {
-    const newEnabled = enabledIndicators.filter(ind => ind.instanceId !== instanceId);
-    setEnabledIndicators(newEnabled);
-    localStorage.setItem('enabledIndicators', JSON.stringify(newEnabled));
-    // Trigger custom event to notify chart
-    window.dispatchEvent(new Event('indicatorsChanged'));
+  const removeIndicator = async (instanceKey) => {
+    try {
+      const res = await fetch(
+        `http://localhost:8080/api/indicators/instances/${encodeURIComponent(instanceKey)}`,
+        {
+          method: 'DELETE',
+          headers: { accept: '*/*' },
+        }
+      );
+      
+      if (!res.ok) {
+        throw new Error(`Failed to remove indicator: HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      console.log(`Removed indicator instance:`, data);
+      
+      // Refresh the active instances list
+      await fetchActiveInstances();
+      
+      // Trigger custom event to notify chart
+      window.dispatchEvent(new Event('indicatorsChanged'));
+    } catch (e) {
+      console.error('Error removing indicator:', e);
+      setError(e.message);
+    }
   };
 
   // Filter indicators based on search query
@@ -155,7 +219,9 @@ export function IndicatorsTab() {
     <div className="h-full w-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-black/30 flex-shrink-0">
-        <div className="text-white/80 text-sm font-medium">Active Indicators</div>
+        <div className="text-white/80 text-sm font-medium">
+          Active Indicators {instancesLoading && <span className="text-xs opacity-50">(loading...)</span>}
+        </div>
         <button
           onClick={() => setShowBrowseModal(true)}
           className="px-3 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 transition-all"
@@ -180,28 +246,22 @@ export function IndicatorsTab() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
               {enabledIndicators.map((instance) => {
-                const indicator = getIndicatorById(instance.id);
+                const indicator = getIndicatorById(instance.indicatorId);
                 if (!indicator) return null;
                 
-                const params = instance.params?.params || {};
+                const params = instance.params || {};
                 const paramStr = Object.entries(params)
                   .map(([k, v]) => `${k}=${v}`)
                   .join(', ');
                 
                 return (
                   <div 
-                    key={instance.instanceId}
-                    className={`bg-black/30 rounded border transition-all p-2 ${
-                      instance.visible !== false
-                        ? 'border-white/10 hover:border-cyan-500/30 opacity-100'
-                        : 'border-white/5 opacity-50 hover:opacity-70'
-                    }`}
+                    key={instance.instanceKey}
+                    className="bg-black/30 rounded border border-white/10 hover:border-cyan-500/30 transition-all p-2"
                   >
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-start justify-between gap-1">
-                        <h3 className={`text-xs font-medium truncate flex-1 transition-colors ${
-                          instance.visible !== false ? 'text-white' : 'text-white/50'
-                        }`} title={indicator.name}>
+                        <h3 className="text-xs font-medium truncate flex-1 text-white" title={indicator.name}>
                           {indicator.name}
                         </h3>
                       </div>
@@ -210,30 +270,11 @@ export function IndicatorsTab() {
                         {paramStr || 'default'}
                       </div>
                       
+                      <div className="text-xs text-white/30 truncate" title={instance.instanceKey}>
+                        {instance.symbol} • {instance.interval}
+                      </div>
+                      
                       <div className="flex items-center gap-1 mt-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleIndicatorVisibility(instance.instanceId);
-                          }}
-                          className={`px-2 py-1 text-xs rounded border transition-all ${
-                            instance.visible !== false
-                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30 hover:bg-cyan-500/30'
-                              : 'bg-white/10 text-white/30 border-white/20 hover:bg-white/20'
-                          }`}
-                          title={instance.visible !== false ? 'Hide indicator' : 'Show indicator'}
-                        >
-                          {instance.visible !== false ? (
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          )}
-                        </button>
                         <button
                           onClick={() => handleOpenConfig(indicator, instance)}
                           className="flex-1 px-2 py-1 text-xs rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 hover:bg-cyan-500/30 transition-all"
@@ -241,7 +282,7 @@ export function IndicatorsTab() {
                           Edit
                         </button>
                         <button
-                          onClick={() => removeIndicator(instance.instanceId)}
+                          onClick={() => removeIndicator(instance.instanceKey)}
                           className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-300 border border-red-400/30 hover:bg-red-500/30 transition-all"
                         >
                           ×

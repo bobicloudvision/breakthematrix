@@ -32,6 +32,9 @@ export const ChartComponent = props => {
         error = null,
         realCount = 0,
         enabledIndicators = [],
+        provider,
+        symbol,
+        interval,
         colors: {
             backgroundColor = 'transparent',
             textColor = '#fff',
@@ -227,202 +230,256 @@ export const ChartComponent = props => {
         seriesManagerRef.current.removeSeriesByPrefix('indicator_');
         seriesManagerRef.current.clearAllShapes();
 
-        // Fetch and add new indicator series (only visible ones)
+        // Fetch and add new indicator series
         const fetchAndAddIndicators = async () => {
             const allBoxes = []; // Collect all boxes from all indicators
             const allArrows = []; // Collect all arrows from all indicators
             const allMarkerShapes = []; // Collect all marker shapes from all indicators
             
-            // Filter to only visible indicators (visible !== false means default true or explicitly true)
-            const visibleIndicators = enabledIndicators.filter(ind => ind.visible !== false);
-            console.log(`Processing ${visibleIndicators.length} visible indicators out of ${enabledIndicators.length} total`);
+            console.log(`Processing ${enabledIndicators.length} active indicators`);
             
-            for (const indicator of visibleIndicators) {
-                try {
-                    const instanceId = indicator.instanceId || `${indicator.id}_${Date.now()}`;
-                    console.log(`Fetching data for indicator instance: ${instanceId} (type: ${indicator.id})`, indicator.params);
-                    
-                    // Fetch historical data for this indicator
-                    const res = await fetch(`http://localhost:8080/api/indicators/${indicator.id}/historical`, {
-                        method: 'POST',
-                        headers: {
-                            'accept': 'application/json',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(indicator.params),
-                    });
-                    
-                    if (!res.ok) {
-                        const errorText = await res.text();
-                        console.error(`Failed to fetch indicator ${instanceId}: HTTP ${res.status}`, errorText);
-                        continue;
-                    }
-                    
-                    const apiResponse = await res.json();
-                    console.log(`Indicator ${instanceId} response received:`, {
-                        hasMetadata: !!apiResponse.metadata,
-                        hasShapes: !!apiResponse.shapes,
-                        boxCount: apiResponse.shapes?.boxes?.length || 0,
-                        lineCount: apiResponse.shapes?.lines?.length || 0,
-                        markerCount: apiResponse.shapes?.markers?.length || 0,
-                        arrowCount: apiResponse.shapes?.arrows?.length || 0,
-                        markerShapeCount: apiResponse.shapes?.markerShapes?.length || 0
-                    });
-                    
-                    // Add series data and shapes (lines, markers) if present
-                    // Note: addFromApiResponse automatically handles lines and markers via LinePrimitive
-                    if (apiResponse.metadata || apiResponse.series) {
-                        const indicatorKey = `indicator_${instanceId}`;
-                        const params = indicator.params?.params || {};
+            if (enabledIndicators.length === 0) {
+                console.log('No active indicators to fetch');
+                return;
+            }
+            
+            if (!provider || !symbol || !interval) {
+                console.error('Missing required parameters for fetching indicators:', { provider, symbol, interval });
+                return;
+            }
+            
+            try {
+                // Fetch all indicators at once with the new endpoint
+                const providerName = typeof provider === 'string' ? provider : (provider.name || provider);
+                const requestBody = {
+                    provider: providerName,
+                    symbol: symbol,
+                    interval: interval,
+                    count: 1000 // Fetch same amount as chart data
+                };
+                
+                console.log('Fetching indicators with request:', requestBody);
+                
+                const res = await fetch('http://localhost:8080/api/indicators/historical', {
+                    method: 'POST',
+                    headers: {
+                        'accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody),
+                });
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error(`Failed to fetch indicators: HTTP ${res.status}`, errorText);
+                    return;
+                }
+                
+                const response = await res.json();
+                console.log('Indicators response received:', {
+                    indicatorCount: response.indicatorCount,
+                    fromActiveInstances: response.fromActiveInstances,
+                    indicators: response.indicators?.length || 0
+                });
+                
+                if (!response.indicators || !Array.isArray(response.indicators)) {
+                    console.warn('No indicators returned from API');
+                    return;
+                }
+                
+                // Process each indicator from the response
+                for (const indicatorData of response.indicators) {
+                    try {
+                        const indicatorId = indicatorData.indicatorId;
+                        const instanceKey = indicatorData.instanceKey;
                         
-                        seriesManagerRef.current.addFromApiResponse(
-                            indicatorKey,
-                            apiResponse,
-                            params,
-                            LinePrimitive
-                        );
+                        console.log(`Processing indicator: ${indicatorId} (${instanceKey})`);
                         
-                        // Add fills (support both single fill and multiple fills array)
-                        if (apiResponse.shapes && apiResponse.series) {
-                            const seriesKeys = Object.keys(apiResponse.series);
+                        // Extract metadata - it's nested under the indicator ID
+                        const metadata = indicatorData.metadata ? indicatorData.metadata[indicatorId] : null;
+                        
+                        if (!metadata) {
+                            console.warn(`No metadata found for indicator ${indicatorId}`);
+                            continue;
+                        }
+                        
+                        // Create API response structure that matches the old format
+                        const apiResponse = {
+                            metadata: {
+                                [indicatorId]: metadata
+                            },
+                            series: indicatorData.series || {},
+                            shapes: metadata.shapes || {}
+                        };
+                        
+                        console.log(`Indicator ${indicatorId} data:`, {
+                            hasMetadata: !!metadata,
+                            hasShapes: !!apiResponse.shapes,
+                            boxCount: apiResponse.shapes?.boxes?.length || 0,
+                            lineCount: apiResponse.shapes?.lines?.length || 0,
+                            markerCount: apiResponse.shapes?.markers?.length || 0,
+                            arrowCount: apiResponse.shapes?.arrows?.length || 0,
+                            markerShapeCount: apiResponse.shapes?.markerShapes?.length || 0,
+                            seriesKeys: Object.keys(apiResponse.series)
+                        });
+                    
+                        // Add series data and shapes (lines, markers) if present
+                        // Note: addFromApiResponse automatically handles lines and markers via LinePrimitive
+                        if (apiResponse.metadata || apiResponse.series) {
+                            const indicatorKey = `indicator_${instanceKey}`;
+                            const params = indicatorData.params || {};
                             
-                            // Support both shapes.fill (single) and shapes.fills (array)
-                            let fillConfigs = [];
-                            if (apiResponse.shapes.fill?.enabled) {
-                                fillConfigs.push(apiResponse.shapes.fill);
-                            }
-                            if (apiResponse.shapes.fills && Array.isArray(apiResponse.shapes.fills)) {
-                                fillConfigs.push(...apiResponse.shapes.fills.filter(f => f.enabled !== false));
-                            }
-                            
-                            if (fillConfigs.length > 0 && seriesKeys.length > 0) {
-                                console.log(`Processing ${fillConfigs.length} fill(s) for indicator ${instanceId}`);
+                            seriesManagerRef.current.addFromApiResponse(
+                                indicatorKey,
+                                apiResponse,
+                                params,
+                                LinePrimitive
+                            );
+                        
+                            // Add fills (support both single fill and multiple fills array)
+                            if (apiResponse.shapes && apiResponse.series) {
+                                const seriesKeys = Object.keys(apiResponse.series);
                                 
-                                fillConfigs.forEach((fillConfig, fillIndex) => {
-                                    // Resolve source1 to actual data if it's a series name
-                                    let source1Data = fillConfig.source1 || 'close';
-                                    if (typeof source1Data === 'string' && apiResponse.series[source1Data]) {
-                                        source1Data = apiResponse.series[source1Data];
-                                    }
+                                // Support both shapes.fill (single) and shapes.fills (array)
+                                let fillConfigs = [];
+                                if (apiResponse.shapes.fill?.enabled) {
+                                    fillConfigs.push(apiResponse.shapes.fill);
+                                }
+                                if (apiResponse.shapes.fills && Array.isArray(apiResponse.shapes.fills)) {
+                                    fillConfigs.push(...apiResponse.shapes.fills.filter(f => f.enabled !== false));
+                                }
+                                
+                                if (fillConfigs.length > 0 && seriesKeys.length > 0) {
+                                    console.log(`Processing ${fillConfigs.length} fill(s) for indicator ${instanceKey}`);
                                     
-                                    // Resolve source2 to actual data if it's a series name
-                                    let source2Data = fillConfig.source2;
-                                    if (typeof source2Data === 'string' && apiResponse.series[source2Data]) {
-                                        // source2 is a series name (e.g., "trailingStop"), resolve to actual data
-                                        source2Data = apiResponse.series[source2Data];
-                                        console.log(`Resolved source2 "${fillConfig.source2}" to data array with ${source2Data.length} points`);
-                                    } else if (!source2Data) {
-                                        // No source2 specified, use first series by default
-                                        source2Data = apiResponse.series[seriesKeys[0]];
-                                        console.log(`Using default series for fill: ${seriesKeys[0]}`);
-                                    }
-                                    
-                                    // Build fill options based on backend configuration
-                                    const fillOptions = {
-                                        mode: fillConfig.mode || 'series',
-                                        source1: source1Data,
-                                        source2: source2Data,
-                                        
-                                        // For hline mode
-                                        hline1: fillConfig.hline1,
-                                        hline2: fillConfig.hline2,
-                                        
-                                        // Colors
-                                        color: fillConfig.color || 'rgba(41, 98, 255, 0.1)',
-                                        topColor: fillConfig.topColor,
-                                        bottomColor: fillConfig.bottomColor,
-                                        
-                                        // Dynamic coloring
-                                        colorMode: fillConfig.colorMode || 'static',
-                                        upFillColor: fillConfig.upFillColor || 'rgba(76, 175, 80, 0.15)',
-                                        downFillColor: fillConfig.downFillColor || 'rgba(239, 83, 80, 0.15)',
-                                        neutralFillColor: fillConfig.neutralFillColor || 'rgba(158, 158, 158, 0.1)',
-                                        
-                                        // Additional options
-                                        fillGaps: fillConfig.fillGaps !== false,
-                                        display: fillConfig.display !== false
-                                    };
-                                    
-                                    console.log(`Adding fill #${fillIndex} between "${fillConfig.source1 || 'close'}" and "${fillConfig.source2 || seriesKeys[0]}"`, fillOptions);
-                                    
-                                    setTimeout(() => {
-                                        if (seriesManagerRef.current && data && data.length > 0) {
-                                            seriesManagerRef.current.addFillBetween(
-                                                `fill_${instanceId}_${fillIndex}`,
-                                                fillOptions,
-                                                FillBetweenPrimitive
-                                            );
+                                    fillConfigs.forEach((fillConfig, fillIndex) => {
+                                        // Resolve source1 to actual data if it's a series name
+                                        let source1Data = fillConfig.source1 || 'close';
+                                        if (typeof source1Data === 'string' && apiResponse.series[source1Data]) {
+                                            source1Data = apiResponse.series[source1Data];
                                         }
-                                    }, 300 + (fillIndex * 50)); // Stagger fills slightly
-                                });
+                                        
+                                        // Resolve source2 to actual data if it's a series name
+                                        let source2Data = fillConfig.source2;
+                                        if (typeof source2Data === 'string' && apiResponse.series[source2Data]) {
+                                            // source2 is a series name (e.g., "trailingStop"), resolve to actual data
+                                            source2Data = apiResponse.series[source2Data];
+                                            console.log(`Resolved source2 "${fillConfig.source2}" to data array with ${source2Data.length} points`);
+                                        } else if (!source2Data) {
+                                            // No source2 specified, use first series by default
+                                            source2Data = apiResponse.series[seriesKeys[0]];
+                                            console.log(`Using default series for fill: ${seriesKeys[0]}`);
+                                        }
+                                        
+                                        // Build fill options based on backend configuration
+                                        const fillOptions = {
+                                            mode: fillConfig.mode || 'series',
+                                            source1: source1Data,
+                                            source2: source2Data,
+                                            
+                                            // For hline mode
+                                            hline1: fillConfig.hline1,
+                                            hline2: fillConfig.hline2,
+                                            
+                                            // Colors
+                                            color: fillConfig.color || 'rgba(41, 98, 255, 0.1)',
+                                            topColor: fillConfig.topColor,
+                                            bottomColor: fillConfig.bottomColor,
+                                            
+                                            // Dynamic coloring
+                                            colorMode: fillConfig.colorMode || 'static',
+                                            upFillColor: fillConfig.upFillColor || 'rgba(76, 175, 80, 0.15)',
+                                            downFillColor: fillConfig.downFillColor || 'rgba(239, 83, 80, 0.15)',
+                                            neutralFillColor: fillConfig.neutralFillColor || 'rgba(158, 158, 158, 0.1)',
+                                            
+                                            // Additional options
+                                            fillGaps: fillConfig.fillGaps !== false,
+                                            display: fillConfig.display !== false
+                                        };
+                                        
+                                        console.log(`Adding fill #${fillIndex} between "${fillConfig.source1 || 'close'}" and "${fillConfig.source2 || seriesKeys[0]}"`, fillOptions);
+                                        
+                                        setTimeout(() => {
+                                            if (seriesManagerRef.current && data && data.length > 0) {
+                                                seriesManagerRef.current.addFillBetween(
+                                                    `fill_${instanceKey}_${fillIndex}`,
+                                                    fillOptions,
+                                                    FillBetweenPrimitive
+                                                );
+                                            }
+                                        }, 300 + (fillIndex * 50)); // Stagger fills slightly
+                                    });
+                                }
                             }
                         }
-                    }
-                    
-                    // Collect boxes from shapes if present (boxes are batched for better performance)
-                    if (apiResponse.shapes?.boxes && Array.isArray(apiResponse.shapes.boxes)) {
-                        console.log(`Adding ${apiResponse.shapes.boxes.length} boxes from indicator ${instanceId}`);
                         
-                        // Transform API box format to BoxPrimitive format
-                        const transformedBoxes = apiResponse.shapes.boxes.map(box => ({
-                            time1: box.time1,
-                            time2: box.time2,
-                            price1: box.price1,
-                            price2: box.price2,
-                            backgroundColor: box.color || box.backgroundColor || 'rgba(33, 150, 243, 0.1)',
-                            text: box.label || box.text,
-                            textColor: box.textColor || box.borderColor || '#ffffff',
-                            borderColor: box.borderColor,
-                            borderWidth: box.borderWidth,
-                            borderStyle: box.borderStyle
-                        }));
+                        // Collect boxes from shapes if present (boxes are batched for better performance)
+                        if (apiResponse.shapes?.boxes && Array.isArray(apiResponse.shapes.boxes)) {
+                            console.log(`Adding ${apiResponse.shapes.boxes.length} boxes from indicator ${instanceKey}`);
+                            
+                            // Transform API box format to BoxPrimitive format
+                            const transformedBoxes = apiResponse.shapes.boxes.map(box => ({
+                                time1: box.time1,
+                                time2: box.time2,
+                                price1: box.price1,
+                                price2: box.price2,
+                                backgroundColor: box.color || box.backgroundColor || 'rgba(33, 150, 243, 0.1)',
+                                text: box.label || box.text,
+                                textColor: box.textColor || box.borderColor || '#ffffff',
+                                borderColor: box.borderColor,
+                                borderWidth: box.borderWidth,
+                                borderStyle: box.borderStyle
+                            }));
+                            
+                            allBoxes.push(...transformedBoxes);
+                        }
                         
-                        allBoxes.push(...transformedBoxes);
-                    }
-                    
-                    // Collect arrows from shapes if present
-                    if (apiResponse.shapes?.arrows && Array.isArray(apiResponse.shapes.arrows)) {
-                        console.log(`Adding ${apiResponse.shapes.arrows.length} arrows from indicator ${instanceId}`);
+                        // Collect arrows from shapes if present
+                        if (apiResponse.shapes?.arrows && Array.isArray(apiResponse.shapes.arrows)) {
+                            console.log(`Adding ${apiResponse.shapes.arrows.length} arrows from indicator ${instanceKey}`);
+                            
+                            // Transform API arrow format to ArrowPrimitive format
+                            const transformedArrows = apiResponse.shapes.arrows.map(arrow => ({
+                                time: arrow.time,
+                                price: arrow.price,
+                                direction: arrow.direction || 'up',
+                                color: arrow.color || '#2196F3',
+                                size: arrow.size || 8,
+                                borderColor: arrow.borderColor,
+                                borderWidth: arrow.borderWidth,
+                                text: arrow.text || arrow.label,
+                                textColor: arrow.textColor
+                            }));
+                            
+                            allArrows.push(...transformedArrows);
+                        }
                         
-                        // Transform API arrow format to ArrowPrimitive format
-                        const transformedArrows = apiResponse.shapes.arrows.map(arrow => ({
-                            time: arrow.time,
-                            price: arrow.price,
-                            direction: arrow.direction || 'up',
-                            color: arrow.color || '#2196F3',
-                            size: arrow.size || 8,
-                            borderColor: arrow.borderColor,
-                            borderWidth: arrow.borderWidth,
-                            text: arrow.text || arrow.label,
-                            textColor: arrow.textColor
-                        }));
-                        
-                        allArrows.push(...transformedArrows);
-                    }
-                    
-                    // Collect marker shapes from shapes if present
-                    if (apiResponse.shapes?.markerShapes && Array.isArray(apiResponse.shapes.markerShapes)) {
-                        console.log(`Adding ${apiResponse.shapes.markerShapes.length} marker shapes from indicator ${instanceId}`);
-                        
-                        // Transform API marker shape format to MarkerPrimitive format
-                        const transformedMarkerShapes = apiResponse.shapes.markerShapes.map(marker => ({
-                            time: marker.time,
-                            price: marker.price,
-                            shape: marker.shape || 'circle',
-                            color: marker.color || '#2196F3',
-                            size: marker.size || 6,
-                            borderColor: marker.borderColor,
-                            borderWidth: marker.borderWidth,
-                            text: marker.text || marker.label,
-                            textColor: marker.textColor
-                        }));
-                        
-                        allMarkerShapes.push(...transformedMarkerShapes);
-                    }
+                        // Collect marker shapes from shapes if present
+                        if (apiResponse.shapes?.markerShapes && Array.isArray(apiResponse.shapes.markerShapes)) {
+                            console.log(`Adding ${apiResponse.shapes.markerShapes.length} marker shapes from indicator ${instanceKey}`);
+                            
+                            // Transform API marker shape format to MarkerPrimitive format
+                            const transformedMarkerShapes = apiResponse.shapes.markerShapes.map(marker => ({
+                                time: marker.time,
+                                price: marker.price,
+                                shape: marker.shape || 'circle',
+                                color: marker.color || '#2196F3',
+                                size: marker.size || 6,
+                                borderColor: marker.borderColor,
+                                borderWidth: marker.borderWidth,
+                                text: marker.text || marker.label,
+                                textColor: marker.textColor
+                            }));
+                            
+                            allMarkerShapes.push(...transformedMarkerShapes);
+                        }
 
-                } catch (error) {
-                    console.error(`❌ Error adding indicator ${indicator.instanceId || indicator.id}:`, error);
+                    } catch (error) {
+                        console.error(`❌ Error processing indicator ${indicatorId}:`, error);
+                    }
                 }
+            } catch (error) {
+                console.error(`❌ Error fetching indicators:`, error);
             }
             
             // Add all collected boxes at once
@@ -457,7 +514,7 @@ export const ChartComponent = props => {
         };
 
         fetchAndAddIndicators();
-    }, [enabledIndicators, data]);
+    }, [enabledIndicators, data, provider, symbol, interval]);
 
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
@@ -931,6 +988,9 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
             activeStrategies={activeStrategies}
             strategyData={strategyData}
             enabledIndicators={enabledIndicators}
+            provider={provider}
+            symbol={symbol}
+            interval={interval}
         />
     );
 }

@@ -282,7 +282,12 @@ public class IndicatorInstanceController {
      */
     @Operation(
         summary = "List all active indicator instances",
-        description = "Returns a list of all currently active indicator instances across all symbols and timeframes."
+        description = "Returns a list of all currently active indicator instances. " +
+                     "Supports optional filtering by context (provider/symbol/interval) or by symbol only. " +
+                     "Query Parameters: " +
+                     "- provider, symbol, interval: Filter by specific trading context (all three required together) " +
+                     "- symbol: Filter by symbol only " +
+                     "- No params: Returns all active instances across all contexts"
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -329,8 +334,7 @@ public class IndicatorInstanceController {
     public ResponseEntity<?> getAllInstances(
             @RequestParam(required = false) String provider,
             @RequestParam(required = false) String symbol,
-            @RequestParam(required = false) String interval,
-            @RequestParam(required = false) String indicatorId) {
+            @RequestParam(required = false) String interval) {
         
         List<IndicatorInstance> instances;
         
@@ -339,8 +343,6 @@ public class IndicatorInstanceController {
             instances = instanceManager.getInstancesForContext(provider, symbol, interval);
         } else if (symbol != null) {
             instances = instanceManager.getInstancesBySymbol(symbol);
-        } else if (indicatorId != null) {
-            instances = instanceManager.getInstancesByIndicator(indicatorId);
         } else {
             instances = instanceManager.getAllInstances();
         }

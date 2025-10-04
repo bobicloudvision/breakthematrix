@@ -70,37 +70,52 @@ export default function App() {
     fetchActiveStrategies();
   }, []);
 
-  // Load enabled indicators from localStorage
+  // Fetch enabled indicators from backend
+  const fetchEnabledIndicators = async () => {
+    if (!selectedProvider || !symbol || !interval) {
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `http://localhost:8080/api/indicators/instances?provider=${selectedProvider}&symbol=${symbol}&interval=${interval}`,
+        {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+        }
+      );
+
+      if (!res.ok) {
+        console.error('Failed to fetch enabled indicators:', res.status);
+        return;
+      }
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.instances)) {
+        setEnabledIndicators(data.instances);
+      }
+    } catch (error) {
+      console.error('Error fetching enabled indicators:', error);
+    }
+  };
+
+  // Load enabled indicators when provider/symbol/interval changes
   useEffect(() => {
-    const loadEnabledIndicators = () => {
-      const stored = localStorage.getItem('enabledIndicators');
-      if (stored) {
-        setEnabledIndicators(JSON.parse(stored));
-      }
-    };
+    fetchEnabledIndicators();
+  }, [selectedProvider, symbol, interval]);
 
-    loadEnabledIndicators();
-
-    // Listen for storage changes (when indicators are toggled)
-    const handleStorageChange = (e) => {
-      if (e.key === 'enabledIndicators') {
-        loadEnabledIndicators();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Also listen for custom event from same window
+  // Listen for indicator changes
+  useEffect(() => {
     const handleIndicatorChange = () => {
-      loadEnabledIndicators();
+      fetchEnabledIndicators();
     };
+    
     window.addEventListener('indicatorsChanged', handleIndicatorChange);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('indicatorsChanged', handleIndicatorChange);
     };
-  }, []);
+  }, [selectedProvider, symbol, interval]);
 
   // Handle resize mouse events
   useEffect(() => {

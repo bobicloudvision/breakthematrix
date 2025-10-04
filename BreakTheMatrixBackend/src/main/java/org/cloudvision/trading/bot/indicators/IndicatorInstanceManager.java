@@ -163,12 +163,16 @@ public class IndicatorInstanceManager {
             provider, symbol, interval, candlesToLoad
         );
         
-        // Initialize indicator with historical candles
-        Object state = indicator.onInit(candles, params);
+        // Initialize indicator with minimum required candles for warm-up
+        int minRequired = indicator.getMinRequiredCandles(params);
+        Object state = indicator.onInit(
+            candles.subList(0, Math.min(minRequired, candles.size())), 
+            params
+        );
         
         // Create state wrapper
         IndicatorState indicatorState = new IndicatorState(
-            indicatorId, provider, symbol, interval, params, state, candles.size()
+            indicatorId, provider, symbol, interval, params, state, minRequired
         );
         
         // Create and register the instance
@@ -178,6 +182,38 @@ public class IndicatorInstanceManager {
         
         activeInstances.put(instanceKey, instance);
         
+        // Now process all historical candles to populate the historical results buffer
+        // This ensures /api/indicators/historical returns the same data
+        System.out.println("📊 Populating historical buffer with " + candles.size() + " candles...");
+        for (int i = minRequired; i < candles.size(); i++) {
+            CandlestickData candle = candles.get(i);
+            
+            // Process the candle with current state
+            Map<String, Object> result = indicator.onNewCandle(candle, params, indicatorState.getState());
+            
+            // Extract values and new state
+            @SuppressWarnings("unchecked")
+            Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+            Object newState = result.get("state");
+            
+            // Extract additional data
+            Map<String, Object> additionalData = extractAdditionalData(result);
+            
+            // Update state
+            indicatorState.setState(newState);
+            indicatorState.incrementCandleCount();
+            
+            // Create and store result
+            IndicatorResult indicatorResult = new IndicatorResult(
+                candle.getOpenTime(),
+                values != null ? values : Map.of(),
+                candle,
+                additionalData
+            );
+            
+            instance.addHistoricalResult(indicatorResult);
+        }
+        
         // Add to context index for fast lookups
         String contextKey = generateContextKey(provider, symbol, interval);
         instancesByContext.computeIfAbsent(contextKey, k -> ConcurrentHashMap.newKeySet())
@@ -186,6 +222,7 @@ public class IndicatorInstanceManager {
         System.out.println("✅ Activated indicator: " + indicatorId + 
                          " for " + symbol + " " + interval + 
                          " with " + candles.size() + " historical candles" +
+                         " (" + instance.getHistoricalResultCount() + " results stored)" +
                          " (total active: " + activeInstances.size() + ")");
         
         return instanceKey;
@@ -222,12 +259,16 @@ public class IndicatorInstanceManager {
         // Get the indicator implementation
         Indicator indicator = getIndicator(indicatorId);
         
-        // Initialize indicator with provided candles
-        Object state = indicator.onInit(candles, params);
+        // Initialize indicator with minimum required candles for warm-up
+        int minRequired = indicator.getMinRequiredCandles(params);
+        Object state = indicator.onInit(
+            candles.subList(0, Math.min(minRequired, candles.size())), 
+            params
+        );
         
         // Create state wrapper
         IndicatorState indicatorState = new IndicatorState(
-            indicatorId, provider, symbol, interval, params, state, candles.size()
+            indicatorId, provider, symbol, interval, params, state, minRequired
         );
         
         // Create and register the instance
@@ -237,6 +278,37 @@ public class IndicatorInstanceManager {
         
         activeInstances.put(instanceKey, instance);
         
+        // Process all historical candles to populate the historical results buffer
+        System.out.println("📊 Populating historical buffer with " + candles.size() + " candles...");
+        for (int i = minRequired; i < candles.size(); i++) {
+            CandlestickData candle = candles.get(i);
+            
+            // Process the candle with current state
+            Map<String, Object> result = indicator.onNewCandle(candle, params, indicatorState.getState());
+            
+            // Extract values and new state
+            @SuppressWarnings("unchecked")
+            Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+            Object newState = result.get("state");
+            
+            // Extract additional data
+            Map<String, Object> additionalData = extractAdditionalData(result);
+            
+            // Update state
+            indicatorState.setState(newState);
+            indicatorState.incrementCandleCount();
+            
+            // Create and store result
+            IndicatorResult indicatorResult = new IndicatorResult(
+                candle.getOpenTime(),
+                values != null ? values : Map.of(),
+                candle,
+                additionalData
+            );
+            
+            instance.addHistoricalResult(indicatorResult);
+        }
+        
         // Add to context index
         String contextKey = generateContextKey(provider, symbol, interval);
         instancesByContext.computeIfAbsent(contextKey, k -> ConcurrentHashMap.newKeySet())
@@ -244,7 +316,8 @@ public class IndicatorInstanceManager {
         
         System.out.println("✅ Activated indicator: " + indicatorId + 
                          " for " + symbol + " " + interval + 
-                         " with " + candles.size() + " historical candles");
+                         " with " + candles.size() + " historical candles" +
+                         " (" + instance.getHistoricalResultCount() + " results stored)");
         
         return instanceKey;
     }
@@ -339,12 +412,38 @@ public class IndicatorInstanceManager {
         instance.setLastUpdate(Instant.now());
         instance.incrementUpdateCount();
         
-        return new IndicatorResult(
+        // Create result
+        IndicatorResult indicatorResult = new IndicatorResult(
             candle.getOpenTime(),
             values != null ? values : Map.of(),
             candle,
             additionalData
         );
+        
+        // Store in historical results for consistency
+        instance.addHistoricalResult(indicatorResult);
+        
+        return indicatorResult;
+    }
+    
+    /**
+     * Get historical indicator data from stored results
+     * Returns the ACTUAL results that the active instance calculated in real-time
+     * This ensures consistency - historical data matches what the instance really computed
+     * 
+     * @param instanceKey Instance key
+     * @param count Number of historical results to retrieve (or all if greater than stored)
+     * @return List of IndicatorResults that were actually calculated by the instance
+     */
+    public List<IndicatorResult> getHistoricalData(String instanceKey, int count) {
+        IndicatorInstance instance = activeInstances.get(instanceKey);
+        
+        if (instance == null) {
+            return List.of();
+        }
+        
+        // Return stored historical results (not recalculated!)
+        return instance.getHistoricalResults(count);
     }
     
     /**
@@ -722,6 +821,10 @@ public class IndicatorInstanceManager {
         private Instant lastUpdate;
         private long updateCount;
         
+        // Historical results storage (circular buffer with max size)
+        private final java.util.Deque<IndicatorResult> historicalResults;
+        private static final int MAX_HISTORY_SIZE = 5000;
+        
         public IndicatorInstance(String instanceKey, String indicatorId, 
                                String provider, String symbol, String interval,
                                Map<String, Object> params,
@@ -736,6 +839,7 @@ public class IndicatorInstanceManager {
             this.createdAt = Instant.now();
             this.lastUpdate = Instant.now();
             this.updateCount = 0;
+            this.historicalResults = new java.util.LinkedList<>();
         }
         
         // Getters
@@ -753,6 +857,29 @@ public class IndicatorInstanceManager {
         // Setters for metadata
         public void setLastUpdate(Instant lastUpdate) { this.lastUpdate = lastUpdate; }
         public void incrementUpdateCount() { this.updateCount++; }
+        
+        // Historical results management
+        public void addHistoricalResult(IndicatorResult result) {
+            historicalResults.addLast(result);
+            // Keep only last MAX_HISTORY_SIZE results
+            while (historicalResults.size() > MAX_HISTORY_SIZE) {
+                historicalResults.removeFirst();
+            }
+        }
+        
+        public List<IndicatorResult> getHistoricalResults(int count) {
+            int size = historicalResults.size();
+            int startIndex = Math.max(0, size - count);
+            return new ArrayList<>(historicalResults).subList(startIndex, size);
+        }
+        
+        public List<IndicatorResult> getAllHistoricalResults() {
+            return new ArrayList<>(historicalResults);
+        }
+        
+        public int getHistoricalResultCount() {
+            return historicalResults.size();
+        }
         
         @Override
         public String toString() {
