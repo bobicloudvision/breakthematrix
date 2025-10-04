@@ -30,6 +30,14 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  * seriesManager.addShapeMarkers('myMarkers', markers);
  * seriesManager.removeShapeMarkers('myMarkers');
  * 
+ * // For Fill Between (price and indicator line):
+ * seriesManager.addFillBetween('fill_trailing_stop', trailingStopData, {
+ *   colorMode: 'dynamic',
+ *   upFillColor: 'rgba(76, 175, 80, 0.15)',
+ *   downFillColor: 'rgba(239, 83, 80, 0.15)'
+ * }, FillBetweenPrimitive);
+ * seriesManager.removeFillBetween('fill_trailing_stop');
+ * 
  * // For Shapes (markers and lines together):
  * seriesManager.addShapesFromApiResponse('indicator_srbreaks', shapes, LinePrimitive);
  * seriesManager.clearAllShapes();
@@ -46,6 +54,7 @@ export class ChartSeriesManager {
         this.seriesMap = new Map(); // Track all series by key
         this.boxPrimitives = []; // Track box primitives
         this.linePrimitives = []; // Track line primitives
+        this.fillBetweenPrimitives = []; // Track fill-between primitives
         this.markerSets = new Map(); // Track marker sets by ID
         this.markerPlugin = null; // Track marker plugin for v5 API
     }
@@ -228,7 +237,7 @@ export class ChartSeriesManager {
                     color: color,
                     lineWidth: lineWidth,
                     title: title,
-                    priceLineVisible: false,
+                    priceLineVisible: true,
                     lastValueVisible: true,
                     ...config
                 };
@@ -935,12 +944,13 @@ export class ChartSeriesManager {
     }
 
     /**
-     * Clear all shapes (markers, lines, and boxes)
+     * Clear all shapes (markers, lines, boxes, and fill-between)
      */
     clearAllShapes() {
         this.removeAllShapeMarkers();
         this.removeAllLines();
         this.removeAllBoxes();
+        this.removeAllFillBetween();
         console.log('Cleared all shapes');
     }
 
@@ -952,6 +962,120 @@ export class ChartSeriesManager {
     setCreateSeriesMarkers(createSeriesMarkersFunc) {
         if (typeof window !== 'undefined') {
             window.createSeriesMarkers = createSeriesMarkersFunc;
+        }
+    }
+
+    /**
+     * Add fill between main series (price) and an indicator line
+     * Requires FillBetweenPrimitive class to be imported
+     * @param {string} id - Unique identifier for this fill
+     * @param {Array} indicatorData - Array of {time, value} points for the indicator line
+     * @param {Object} options - Fill options (fillColor, upFillColor, downFillColor, colorMode, etc.)
+     * @param {Object} FillBetweenPrimitiveClass - The FillBetweenPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    addFillBetween(id, indicatorData, options, FillBetweenPrimitiveClass) {
+        if (!this.mainSeries) {
+            console.error('Cannot add fill between: mainSeries not set');
+            return false;
+        }
+        
+        if (!indicatorData || !Array.isArray(indicatorData) || indicatorData.length === 0) {
+            console.warn('No indicator data provided for fill between');
+            return false;
+        }
+
+        try {
+            // Create new fill-between primitive
+            const fillPrimitive = new FillBetweenPrimitiveClass(
+                this.chart, 
+                this.mainSeries, 
+                indicatorData, 
+                options
+            );
+            this.mainSeries.attachPrimitive(fillPrimitive);
+            this.fillBetweenPrimitives.push({ id, primitive: fillPrimitive });
+            
+            console.log(`✅ Fill-between primitive attached for ${id} with ${indicatorData.length} points`);
+            
+            // Request animation frame to ensure chart is fully rendered
+            requestAnimationFrame(() => {
+                fillPrimitive.updateAllViews();
+                // Force chart redraw
+                this.chart.timeScale().applyOptions({});
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error creating fill-between primitive:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Remove a specific fill-between primitive by ID
+     */
+    removeFillBetween(id) {
+        if (!this.mainSeries) {
+            return false;
+        }
+
+        const index = this.fillBetweenPrimitives.findIndex(item => item.id === id);
+        if (index === -1) {
+            return false;
+        }
+
+        try {
+            const { primitive } = this.fillBetweenPrimitives[index];
+            this.mainSeries.detachPrimitive(primitive);
+            this.fillBetweenPrimitives.splice(index, 1);
+            console.log(`Removed fill-between primitive: ${id}`);
+            return true;
+        } catch (e) {
+            console.warn('Error detaching fill-between primitive:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Remove all fill-between primitives
+     */
+    removeAllFillBetween() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        this.fillBetweenPrimitives.forEach(({ id, primitive }) => {
+            try {
+                this.mainSeries.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn(`Error detaching fill-between primitive ${id}:`, e);
+            }
+        });
+        
+        this.fillBetweenPrimitives = [];
+        console.log('All fill-between primitives removed');
+    }
+
+    /**
+     * Update a fill-between primitive with new indicator data
+     */
+    updateFillBetween(id, indicatorData, options = null) {
+        const item = this.fillBetweenPrimitives.find(item => item.id === id);
+        if (!item) {
+            console.warn(`Fill-between primitive not found: ${id}`);
+            return false;
+        }
+
+        try {
+            item.primitive.updateIndicatorData(indicatorData);
+            if (options) {
+                item.primitive.updateOptions(options);
+            }
+            return true;
+        } catch (error) {
+            console.error(`Error updating fill-between primitive ${id}:`, error);
+            return false;
         }
     }
 }

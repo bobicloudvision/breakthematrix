@@ -13,6 +13,7 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import { BoxPrimitive } from './BoxPrimitive';
 import { LinePrimitive } from './LinePrimitive';
+import { FillBetweenPrimitive } from './FillBetweenPrimitive';
 import { ChartSeriesManager } from './ChartSeriesManager';
 
 // Global variable for default zoom level (last N candles)
@@ -274,6 +275,32 @@ export const ChartComponent = props => {
                             params,
                             LinePrimitive
                         );
+                        
+                        // Add fill between price and indicator line if requested
+                        if (apiResponse.shapes?.fill?.enabled && apiResponse.series) {
+                            const seriesKeys = Object.keys(apiResponse.series);
+                            if (seriesKeys.length > 0) {
+                                const indicatorData = apiResponse.series[seriesKeys[0]];
+                                const fillOptions = {
+                                    colorMode: apiResponse.shapes.fill.colorMode || 'dynamic',
+                                    upFillColor: apiResponse.shapes.fill.upFillColor || 'rgba(76, 175, 80, 0.15)',
+                                    downFillColor: apiResponse.shapes.fill.downFillColor || 'rgba(239, 83, 80, 0.15)',
+                                    neutralFillColor: apiResponse.shapes.fill.neutralFillColor || 'rgba(158, 158, 158, 0.1)',
+                                    fillColor: apiResponse.shapes.fill.fillColor
+                                };
+                                
+                                setTimeout(() => {
+                                    if (seriesManagerRef.current && data && data.length > 0) {
+                                        seriesManagerRef.current.addFillBetween(
+                                            `fill_${instanceId}`,
+                                            indicatorData,
+                                            fillOptions,
+                                            FillBetweenPrimitive
+                                        );
+                                    }
+                                }, 300); // Add fill after series is rendered
+                            }
+                        }
                     }
                     
                     // Collect boxes from shapes if present (boxes are batched for better performance)
