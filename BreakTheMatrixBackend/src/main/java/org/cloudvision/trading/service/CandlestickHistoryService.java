@@ -56,7 +56,7 @@ public class CandlestickHistoryService {
                 for (int i = 0; i < candles.size(); i++) {
                     if (candles.get(i).getOpenTime().equals(candlestick.getOpenTime())) {
                         candles.set(i, candlestick);
-                        System.out.println("🔄 Updated existing candle for " + key + " (live update)");
+//                        System.out.println("🔄 Updated existing candle for " + key + " (live update)");
                         break;
                     }
                 }
