@@ -484,12 +484,46 @@ public class IndicatorInstanceManager {
             state.setState(newState);
         }
         
+        // NOTE: We don't store tick results in historical buffer - only closed candles
+        
         return new IndicatorResult(
             Instant.now(),
             values != null ? values : Map.of(),
             null,  // No candle for tick updates
             additionalData
         );
+    }
+    
+    /**
+     * Update all indicators for a specific symbol/provider/interval when a price tick arrives
+     * This provides real-time updates between candle closes
+     * 
+     * @param provider Provider name
+     * @param symbol Trading symbol
+     * @param interval Time interval
+     * @param price Current tick price
+     * @return Map of instanceKey -> IndicatorResult for all updated indicators
+     */
+    public Map<String, IndicatorResult> updateAllForTick(String provider, String symbol, 
+                                                         String interval, BigDecimal price) {
+        String contextKey = generateContextKey(provider, symbol, interval);
+        
+        Set<String> contextInstances = instancesByContext.get(contextKey);
+        
+        if (contextInstances == null || contextInstances.isEmpty()) {
+            return Map.of();
+        }
+        
+        Map<String, IndicatorResult> results = new HashMap<>();
+        
+        for (String instanceKey : contextInstances) {
+            IndicatorResult result = updateWithTick(instanceKey, price);
+            if (result != null) {
+                results.put(instanceKey, result);
+            }
+        }
+        
+        return results;
     }
     
     /**

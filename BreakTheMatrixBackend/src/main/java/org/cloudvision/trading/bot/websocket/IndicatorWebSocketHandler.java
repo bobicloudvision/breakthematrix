@@ -250,19 +250,36 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
      * Process incoming trading data and update indicators
      */
     private void processData(TradingData data) {
-        // Only process completed candlestick data
-        if (!data.hasCandlestickData()) {
+        // Process candlestick data (closed candles and real-time ticks)
+        if (data.hasCandlestickData()) {
+            CandlestickData candle = data.getCandlestickData();
+            
+            if (candle.isClosed()) {
+                // Closed candle - full indicator update
+                processCandleClose(candle);
+            } else {
+                // Real-time tick - update indicators with current price
+                processTick(candle.getProvider(), candle.getSymbol(), 
+                           candle.getInterval(), candle.getClose());
+            }
             return;
         }
         
-        CandlestickData candle = data.getCandlestickData();
-        
-        // Only process closed candles
-        if (!candle.isClosed()) {
+        // Process trade data for real-time price updates
+        if (data.hasTradeData()) {
+            org.cloudvision.trading.model.TradeData trade = data.getTradeData();
+            processTick(data.getProvider(), data.getSymbol(), 
+                       guessIntervalFromSubscriptions(data.getSymbol()), 
+                       trade.getPrice());
             return;
         }
-        
-        // Update all indicators for this context
+    }
+    
+    /**
+     * Process closed candle - full indicator calculation and store in history
+     */
+    private void processCandleClose(CandlestickData candle) {
+        // Update all indicators for this context with closed candle
         Map<String, IndicatorInstanceManager.IndicatorResult> results = 
             instanceManager.updateAllForContext(candle);
         
@@ -277,6 +294,42 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             
             broadcastIndicatorUpdate(instanceKey, result, candle);
         }
+    }
+    
+    /**
+     * Process real-time tick - quick indicator update (not stored in history)
+     */
+    private void processTick(String provider, String symbol, String interval, java.math.BigDecimal price) {
+        // Update all indicators for this context with current price
+        Map<String, IndicatorInstanceManager.IndicatorResult> results = 
+            instanceManager.updateAllForTick(provider, symbol, interval, price);
+        
+        if (results.isEmpty()) {
+            return; // No active indicators for this context
+        }
+        
+        // Broadcast tick updates to subscribed sessions
+        for (Map.Entry<String, IndicatorInstanceManager.IndicatorResult> entry : results.entrySet()) {
+            String instanceKey = entry.getKey();
+            IndicatorInstanceManager.IndicatorResult result = entry.getValue();
+            
+            broadcastTickUpdate(instanceKey, result, provider, symbol, interval, price);
+        }
+    }
+    
+    /**
+     * Guess interval from active subscriptions for trade data
+     * (Trade data doesn't include interval, so we need to infer it)
+     */
+    private String guessIntervalFromSubscriptions(String symbol) {
+        // Look through active instances to find matching symbol
+        for (IndicatorInstanceManager.IndicatorInstance instance : 
+             instanceManager.getAllInstances()) {
+            if (instance.getSymbol().equals(symbol)) {
+                return instance.getInterval();
+            }
+        }
+        return "1m"; // Default fallback
     }
     
     /**
@@ -349,6 +402,66 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             System.err.println("❌ Failed to broadcast indicator update: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Broadcast real-time tick update to subscribed sessions
+     */
+    private void broadcastTickUpdate(String instanceKey, 
+                                     IndicatorInstanceManager.IndicatorResult result,
+                                     String provider, String symbol, String interval,
+                                     java.math.BigDecimal price) {
+        try {
+            IndicatorInstanceManager.IndicatorInstance instance = 
+                instanceManager.getInstance(instanceKey);
+            
+            if (instance == null) {
+                return;
+            }
+            
+            String contextKey = String.format("%s:%s:%s", provider, symbol, interval);
+            
+            // Build tick update message (lighter than full update)
+            Map<String, Object> updateMessage = new HashMap<>();
+            updateMessage.put("type", "indicatorTick");
+            updateMessage.put("instanceKey", instanceKey);
+            updateMessage.put("indicatorId", instance.getIndicatorId());
+            updateMessage.put("provider", provider);
+            updateMessage.put("symbol", symbol);
+            updateMessage.put("interval", interval);
+            updateMessage.put("timestamp", result.getTimestamp());
+            updateMessage.put("price", price);
+            updateMessage.put("values", result.getValues());
+            
+            if (!result.getAdditionalData().isEmpty()) {
+                updateMessage.put("additionalData", result.getAdditionalData());
+            }
+            
+            TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
+            
+            // Send to subscribed sessions
+            int sentCount = 0;
+            for (Map.Entry<String, WebSocketSession> sessionEntry : sessions.entrySet()) {
+                String sessionId = sessionEntry.getKey();
+                WebSocketSession session = sessionEntry.getValue();
+                
+                try {
+                    if (session.isOpen() && shouldSendToSession(sessionId, instanceKey, contextKey)) {
+                        session.sendMessage(message);
+                        sentCount++;
+                    }
+                } catch (IOException e) {
+                    System.err.println("❌ Failed to send tick update to session " + 
+                                     sessionId + ": " + e.getMessage());
+                }
+            }
+            
+            // Don't log every tick to avoid spam
+            // System.out.println("📡 Sent tick update for " + instanceKey + " to " + sentCount + " sessions");
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to broadcast tick update: " + e.getMessage());
         }
     }
     
