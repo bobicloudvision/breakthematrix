@@ -165,12 +165,16 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             isRetracement = product.compareTo(BigDecimal.ZERO) < 0;
         }
         
+        // Detect trend change signals
+        BigDecimal trendSignal = BigDecimal.valueOf(result.marketStructureChange);
+        
         return Map.of(
             "trailingStop", result.trailingStop,
             "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
             "isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO,
             "pivotHigh", pivotHighValue,
-            "pivotLow", pivotLowValue
+            "pivotLow", pivotLowValue,
+            "signal", trendSignal  // 1 = bullish signal, -1 = bearish signal, 0 = no signal
         );
     }
     
@@ -365,7 +369,8 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             "direction", BigDecimal.valueOf(state.os),
             "isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,  // Will be set via markers below
-            "pivotLow", BigDecimal.ZERO     // Will be set via markers below
+            "pivotLow", BigDecimal.ZERO,   // Will be set via markers below
+            "signal", BigDecimal.valueOf(ms)  // 1 = bullish signal, -1 = bearish signal, 0 = no signal
         );
         
         Map<String, Object> result = new HashMap<>();
@@ -454,6 +459,36 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             .addConfig("retracementField", "isRetracement")
             .build());
         
+        // Bullish signal marker (when signal = 1)
+        metadata.put("bullishSignal", IndicatorMetadata.builder("bullishSignal")
+            .displayName("Bullish Trend Change")
+            .seriesType("marker")
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("shape", "circle")
+            .addConfig("color", bullColor)
+            .addConfig("position", "below")
+            .addConfig("size", 4)
+            .addConfig("conditionField", "signal")
+            .addConfig("conditionValue", 1)
+            .addConfig("priceField", "trailingStop") // Place marker at trailing stop level
+            .build());
+        
+        // Bearish signal marker (when signal = -1)
+        metadata.put("bearishSignal", IndicatorMetadata.builder("bearishSignal")
+            .displayName("Bearish Trend Change")
+            .seriesType("marker")
+            .separatePane(false)
+            .paneOrder(0)
+            .addConfig("shape", "circle")
+            .addConfig("color", bearColor)
+            .addConfig("position", "above")
+            .addConfig("size", 4)
+            .addConfig("conditionField", "signal")
+            .addConfig("conditionValue", -1)
+            .addConfig("priceField", "trailingStop") // Place marker at trailing stop level
+            .build());
+        
         return metadata;
     }
     
@@ -496,6 +531,8 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         BigDecimal prevMax = null; // For calculating max[1]
         BigDecimal prevMin = null; // For calculating min[1]
+        
+        int lastMs = 0; // Track the last market structure change for signal output
         
         // Iterate through candles to detect pivots and calculate trailing stop
         // Start at 2*pivotLookback to ensure we have enough candles for pivot detection
@@ -619,6 +656,11 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             // Store previous max/min for next iteration
             prevMax = max;
             prevMin = min;
+            
+            // Track the last market structure change (for signal output on the last candle)
+            if (i == n - 1) {
+                lastMs = ms;
+            }
         }
         
         MarketStructureResult result = new MarketStructureResult();
@@ -626,6 +668,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         result.direction = BigDecimal.valueOf(os);
         result.lastPivotHigh = phY;
         result.lastPivotLow = plY;
+        result.marketStructureChange = lastMs;
         
         return result;
     }
@@ -729,7 +772,8 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
             "direction", BigDecimal.ZERO,
             "isRetracement", BigDecimal.ZERO,
             "pivotHigh", BigDecimal.ZERO,
-            "pivotLow", BigDecimal.ZERO
+            "pivotLow", BigDecimal.ZERO,
+            "signal", BigDecimal.ZERO
         );
     }
     
@@ -773,6 +817,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         BigDecimal direction;
         BigDecimal lastPivotHigh;
         BigDecimal lastPivotLow;
+        int marketStructureChange; // 1 = bullish signal, -1 = bearish signal, 0 = no signal
     }
     
     /**

@@ -18,6 +18,21 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  *   config: { color: '#ff9800', lineWidth: 1 }
  * });
  * 
+ * // For Markers (from indicator data with conditions):
+ * seriesManager.addSeries('bullish_signal', data, {
+ *   seriesType: 'marker',
+ *   displayName: 'Bullish Signal',
+ *   config: {
+ *     shape: 'circle',
+ *     color: '#26a69a',
+ *     size: 4,
+ *     position: 'below',
+ *     priceField: 'trailingStop',
+ *     conditionField: 'signal',
+ *     conditionValue: 1
+ *   }
+ * });
+ * 
  * // For Boxes:
  * seriesManager.addBoxes(boxes, BoxPrimitive);
  * seriesManager.removeAllBoxes();
@@ -97,6 +112,11 @@ export class ChartSeriesManager {
             const seriesType = metadata.seriesType || 'line';
             const separatePane = metadata.separatePane || false;
             const config = metadata.config || {};
+            
+            // Handle marker series type differently
+            if (seriesType.toLowerCase() === 'marker') {
+                return this._addMarkerSeries(id, data, metadata, params);
+            }
             
             // Get color and other configs
             const color = config.color || params.color || '#2962FF';
@@ -371,16 +391,223 @@ export class ChartSeriesManager {
     }
 
     /**
+     * Merge two series data arrays by time, combining their values
+     * Used for markers that need data from multiple series (e.g., signal + trailingStop)
+     * @private
+     */
+    _mergeSeriesDataByTime(array1, array2, field1Name, field2Name) {
+        // Create a map of time -> merged data point
+        const timeMap = new Map();
+        
+        // Add data from first array
+        array1.forEach(point => {
+            const time = point.time || point.timestamp || point.t;
+            if (time !== undefined) {
+                const value = point.value !== undefined ? point.value : point.val;
+                timeMap.set(time, {
+                    time: time,
+                    [field1Name]: value
+                });
+            }
+        });
+        
+        // Merge data from second array
+        array2.forEach(point => {
+            const time = point.time || point.timestamp || point.t;
+            if (time !== undefined) {
+                const value = point.value !== undefined ? point.value : point.val;
+                const existing = timeMap.get(time);
+                if (existing) {
+                    existing[field2Name] = value;
+                } else {
+                    timeMap.set(time, {
+                        time: time,
+                        [field2Name]: value
+                    });
+                }
+            }
+        });
+        
+        // Convert to array and filter out incomplete points
+        const merged = Array.from(timeMap.values())
+            .filter(point => point[field1Name] !== undefined && point[field2Name] !== undefined)
+            .sort((a, b) => a.time - b.time);
+        
+        return merged;
+    }
+
+    /**
+     * Add a marker series (converts data to markers based on conditions)
+     * @private
+     */
+    _addMarkerSeries(id, data, metadata, params) {
+        const config = metadata.config || {};
+        
+        console.log(`🎯 _addMarkerSeries called for ${id}:`, {
+            dataLength: data.length,
+            config: config,
+            samplePoint: data[0]
+        });
+        
+        // Show detailed data structure
+        if (data[0]) {
+            const keys = Object.keys(data[0]);
+            console.log('✨ Sample merged data point:', data[0]);
+            console.log('Keys:', keys);
+            console.log('Looking for conditionField:', config.conditionField, '→', data[0][config.conditionField]);
+            console.log('Looking for priceField:', config.priceField, '→', data[0][config.priceField]);
+        }
+        
+        // Extract marker configuration
+        const shape = config.shape || 'circle';
+        const color = config.color || params.color || '#2196F3';
+        const size = config.size || 1;
+        const position = config.position || 'inBar';
+        const priceField = config.priceField || 'value'; // Field to use for marker price
+        const conditionField = config.conditionField; // Field to check for condition
+        const conditionValue = config.conditionValue; // Value to match
+        const text = config.text || '';
+        
+        console.log(`Marker config: shape=${shape}, color=${color}, size=${size}, position=${position}`);
+        console.log(`Data filtering: priceField=${priceField}, conditionField=${conditionField}, conditionValue=${conditionValue}`);
+        
+        // Filter and transform data to markers
+        let debugCount = 0;
+        const markers = data
+            .map((point, index) => {
+                if (typeof point !== 'object') return null;
+                
+                // Extract time
+                const time = point.time || point.timestamp || point.t;
+                if (time === undefined) return null;
+                
+                // Check condition if specified
+                if (conditionField !== undefined && conditionValue !== undefined) {
+                    let conditionFieldValue;
+                    
+                    // Check multiple possible locations for the condition field
+                    if (point[conditionField] !== undefined) {
+                        // Direct property (from merged data)
+                        conditionFieldValue = point[conditionField];
+                    } else if (point.values && typeof point.values === 'object') {
+                        conditionFieldValue = point.values[conditionField];
+                    } else if (point.fills && typeof point.fills === 'object' && !Array.isArray(point.fills)) {
+                        conditionFieldValue = point.fills[conditionField];
+                    }
+                    
+                    // Debug first few points
+                    if (index < 3) {
+                        console.log(`Point ${index} condition check:`, {
+                            conditionField,
+                            conditionFieldValue,
+                            conditionValue,
+                            matches: conditionFieldValue === conditionValue,
+                            hasValues: !!point.values,
+                            hasFills: !!point.fills,
+                            fillsKeys: point.fills ? Object.keys(point.fills) : 'none',
+                            valuesKeys: point.values ? Object.keys(point.values) : 'none'
+                        });
+                    }
+                    
+                    // Skip if condition not met
+                    if (conditionFieldValue !== conditionValue) {
+                        return null;
+                    }
+                    
+                    debugCount++;
+                }
+                
+                // Extract price for marker placement
+                let price;
+                if (point[priceField] !== undefined) {
+                    // Direct property (from merged data)
+                    price = point[priceField];
+                } else if (point.values && typeof point.values === 'object') {
+                    price = point.values[priceField];
+                } else if (point.fills && typeof point.fills === 'object' && !Array.isArray(point.fills)) {
+                    price = point.fills[priceField];
+                } else {
+                    price = point.value || point.close;
+                }
+                
+                if (price === undefined || price === null) {
+                    if (index < 3) {
+                        console.log(`Point ${index} price extraction failed:`, {
+                            priceField,
+                            price,
+                            hasFills: !!point.fills,
+                            fillsKeys: point.fills ? Object.keys(point.fills) : 'none'
+                        });
+                    }
+                    return null;
+                }
+                
+                return {
+                    time: time,
+                    price: parseFloat(price),
+                    shape: shape,
+                    color: color,
+                    size: size,
+                    position: position,
+                    text: text
+                };
+            })
+            .filter(marker => marker !== null);
+        
+        console.log(`Debug: ${debugCount} points matched the condition out of ${data.length} total points`);
+        
+        console.log(`Filtered markers result: ${markers.length} markers generated from ${data.length} data points`);
+        if (markers.length > 0) {
+            console.log('Sample marker:', markers[0]);
+        }
+        
+        if (markers.length === 0) {
+            console.warn(`❌ No markers generated for series: ${id} (no data matched conditions)`);
+            return false;
+        }
+        
+        // Use addShapeMarkers to add the markers
+        const success = this.addShapeMarkers(id, markers);
+        
+        if (success) {
+            // Store in seriesMap for tracking (even though it's not a real series)
+            this.seriesMap.set(id, {
+                series: null, // Markers don't have a series object
+                type: 'marker',
+                metadata: metadata
+            });
+            
+            console.log(`✅ Added ${markers.length} markers for series: ${id}`);
+        }
+        
+        return success;
+    }
+
+    /**
      * Update existing series data
      */
     updateSeries(id, data) {
         const seriesInfo = this.seriesMap.get(id);
+        
+        // Check if this is a marker set (not a regular series)
+        if (!seriesInfo && this.markerSets.has(id)) {
+            // This is a marker series, re-add it
+            const metadata = { seriesType: 'marker' };
+            // Try to preserve original metadata if available
+            return this._addMarkerSeries(id, data, metadata, {});
+        }
+        
         if (!seriesInfo) {
             console.warn(`Series not found for update: ${id}`);
             return false;
         }
 
         try {
+            // Handle marker series type
+            if (seriesInfo.type === 'marker') {
+                return this._addMarkerSeries(id, data, seriesInfo.metadata, {});
+            }
+            
             const transformedData = this._transformData(
                 data, 
                 id, 
@@ -410,6 +637,15 @@ export class ChartSeriesManager {
         }
 
         try {
+            // Handle marker series
+            if (seriesInfo.type === 'marker') {
+                this.removeShapeMarkers(id);
+                this.seriesMap.delete(id);
+                console.log(`Removed marker series: ${id}`);
+                return true;
+            }
+            
+            // Regular series
             this.chart.removeSeries(seriesInfo.series);
             this.seriesMap.delete(id);
             console.log(`Removed series: ${id}`);
@@ -451,7 +687,11 @@ export class ChartSeriesManager {
     clearAll() {
         this.seriesMap.forEach((seriesInfo, id) => {
             try {
-                this.chart.removeSeries(seriesInfo.series);
+                if (seriesInfo.type === 'marker') {
+                    this.removeShapeMarkers(id);
+                } else {
+                    this.chart.removeSeries(seriesInfo.series);
+                }
             } catch (error) {
                 console.error(`Error removing series ${id}:`, error);
             }
@@ -475,6 +715,12 @@ export class ChartSeriesManager {
         let seriesAdded = false;
         let shapesAdded = { markers: false, lines: false };
         
+        console.log(`📊 addFromApiResponse for ${id}:`, {
+            metadataKeys: apiResponse.metadata ? Object.keys(apiResponse.metadata) : [],
+            seriesKeys: apiResponse.series ? Object.keys(apiResponse.series) : [],
+            hasShapes: !!apiResponse.shapes
+        });
+        
         // Check if this is a multi-series indicator (has multiple entries in metadata)
         if (apiResponse.metadata && typeof apiResponse.metadata === 'object') {
             const metadataKeys = Object.keys(apiResponse.metadata);
@@ -483,11 +729,51 @@ export class ChartSeriesManager {
                 // Multi-series indicator - add each series separately
                 let successCount = 0;
                 
+                // Get all available series data keys
+                const seriesDataKeys = apiResponse.series ? Object.keys(apiResponse.series) : [];
+                console.log(`Available series data keys: [${seriesDataKeys.join(', ')}]`);
+                
                 metadataKeys.forEach(seriesKey => {
                     const seriesMetadata = apiResponse.metadata[seriesKey];
-                    // Get series data from the series object using the series key
-                    const seriesData = (apiResponse.series && apiResponse.series[seriesKey]) || [];
+                    
+                    // For marker series, try to use the source data specified in metadata
+                    // or fall back to the first available series data
+                    let seriesData = [];
+                    
+                    if (seriesMetadata?.seriesType === 'marker') {
+                        // For markers, we need data with ALL fields (e.g., both signal and trailingStop)
+                        // Backend often sends separate arrays, so we need to merge them
+                        const priceField = seriesMetadata.config?.priceField;
+                        const conditionField = seriesMetadata.config?.conditionField;
+                        
+                        // Try to get arrays for both fields
+                        const priceData = priceField ? apiResponse.series?.[priceField] : null;
+                        const conditionData = conditionField ? apiResponse.series?.[conditionField] : null;
+                        
+                        if (priceData && conditionData) {
+                            // Merge the two arrays by time
+                            console.log(`🔗 Merging ${priceField} and ${conditionField} arrays for marker ${seriesKey}`);
+                            seriesData = this._mergeSeriesDataByTime(priceData, conditionData, priceField, conditionField);
+                            console.log(`✅ Merged ${seriesData.length} data points for marker ${seriesKey}`);
+                        } else {
+                            console.warn(`⚠️ Could not find both ${priceField} and ${conditionField} arrays for marker ${seriesKey}`);
+                            console.log(`Available keys:`, seriesDataKeys);
+                        }
+                    } else {
+                        // For regular series, try to match by series key or use first available
+                        seriesData = apiResponse.series?.[seriesKey] || [];
+                        if (seriesData.length === 0 && seriesDataKeys.length > 0) {
+                            seriesData = apiResponse.series[seriesDataKeys[0]];
+                        }
+                    }
+                    
                     const seriesId = `${id}_${seriesKey}`;
+                    
+                    console.log(`Adding series ${seriesId}:`, {
+                        type: seriesMetadata?.seriesType,
+                        dataLength: seriesData.length,
+                        hasCondition: !!(seriesMetadata?.config?.conditionField)
+                    });
                     
                     const success = this.addSeries(seriesId, seriesData, seriesMetadata, additionalParams);
                     if (success) successCount++;
@@ -881,30 +1167,44 @@ export class ChartSeriesManager {
      */
     _applyAllMarkers() {
         if (!this.mainSeries) {
+            console.warn('⚠️ Cannot apply markers: mainSeries not set');
             return;
         }
 
         // Merge all marker sets
         const allMarkers = [];
         this.markerSets.forEach((markers, id) => {
+            console.log(`Merging marker set ${id}: ${markers.length} markers`);
             allMarkers.push(...markers);
         });
 
         // Sort by time
         allMarkers.sort((a, b) => a.time - b.time);
+        
+        console.log(`📍 Applying ${allMarkers.length} total markers to chart`);
+        if (allMarkers.length > 0) {
+            console.log('First marker:', allMarkers[0]);
+            console.log('Last marker:', allMarkers[allMarkers.length - 1]);
+        }
 
         // Apply to series using v5 plugin API
         // Note: createSeriesMarkers needs to be imported in Chart.jsx and passed to the manager
         if (typeof window !== 'undefined' && window.createSeriesMarkers) {
+            console.log('✅ createSeriesMarkers is available');
             if (!this.markerPlugin && allMarkers.length > 0) {
                 // Create marker plugin if it doesn't exist
+                console.log('Creating new marker plugin...');
                 this.markerPlugin = window.createSeriesMarkers(this.mainSeries, allMarkers);
+                console.log('Marker plugin created:', !!this.markerPlugin);
             } else if (this.markerPlugin) {
                 // Update existing plugin
+                console.log('Updating existing marker plugin...');
                 this.markerPlugin.setMarkers(allMarkers);
+                console.log('Marker plugin updated');
             }
         } else {
-            console.warn('createSeriesMarkers not available. Markers will not be displayed. Please ensure lightweight-charts v5+ is installed.');
+            console.error('❌ createSeriesMarkers not available. Markers will not be displayed. Please ensure lightweight-charts v5+ is installed.');
+            console.log('window.createSeriesMarkers:', typeof window !== 'undefined' ? window.createSeriesMarkers : 'window undefined');
         }
     }
 
