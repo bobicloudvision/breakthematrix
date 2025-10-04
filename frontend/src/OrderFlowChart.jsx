@@ -243,14 +243,29 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                         };
                     });
                     
-                    console.log('Transformed candles:', transformedCandles.length);
-                    console.log('Sample transformed candle:', transformedCandles[0]);
-                    console.log('Sample volumeByPrice:', transformedCandles[0]?.volumeByPrice);
-                    console.log('volumeByPrice entries:', transformedCandles[0]?.volumeByPrice?.length);
+                    // Remove duplicates and sort by time (ascending order required by lightweight-charts)
+                    const uniqueCandles = [];
+                    const seenTimes = new Set();
+                    
+                    // Sort first by time
+                    transformedCandles.sort((a, b) => a.time - b.time);
+                    
+                    // Then remove duplicates (keep first occurrence)
+                    transformedCandles.forEach(candle => {
+                        if (!seenTimes.has(candle.time)) {
+                            seenTimes.add(candle.time);
+                            uniqueCandles.push(candle);
+                        }
+                    });
+                    
+                    console.log('Transformed candles:', transformedCandles.length, '→ Unique:', uniqueCandles.length);
+                    console.log('Sample transformed candle:', uniqueCandles[0]);
+                    console.log('Sample volumeByPrice:', uniqueCandles[0]?.volumeByPrice);
+                    console.log('volumeByPrice entries:', uniqueCandles[0]?.volumeByPrice?.length);
                     
                     // Verify data structure
-                    if (transformedCandles[0]?.volumeByPrice?.length > 0) {
-                        const firstLevel = transformedCandles[0].volumeByPrice[0];
+                    if (uniqueCandles[0]?.volumeByPrice?.length > 0) {
+                        const firstLevel = uniqueCandles[0].volumeByPrice[0];
                         console.log('First price level:', {
                             price: firstLevel.price,
                             buyVolume: firstLevel.buyVolume,
@@ -259,11 +274,11 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                         });
                     }
                     
-                    setOrderFlowCandles(transformedCandles);
+                    setOrderFlowCandles(uniqueCandles);
                     
                     // Update candlestick series with OHLC data
-                    if (candleSeriesRef.current && transformedCandles.length > 0) {
-                        const chartData = transformedCandles.map(candle => ({
+                    if (candleSeriesRef.current && uniqueCandles.length > 0) {
+                        const chartData = uniqueCandles.map(candle => ({
                             time: candle.time,
                             open: candle.open,
                             high: candle.high,
@@ -517,7 +532,7 @@ export const OrderFlowChart = ({ provider, symbol, interval }) => {
                                     <div className="px-2 py-0.5 bg-cyan-500 text-white font-mono font-bold rounded">Big Buy</div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <div className="px-2 py-0.5 bg-yellow-500 text-black font-mono font-bold rounded">Big Sel</div>
+                                    <div className="px-2 py-0.5 bg-yellow-500 text-black font-mono font-bold rounded">Big Sell</div>
                                 </div>
                             </div>
                         </div>
