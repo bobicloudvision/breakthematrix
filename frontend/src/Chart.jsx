@@ -13,6 +13,8 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import { BoxPrimitive } from './BoxPrimitive';
 import { LinePrimitive } from './LinePrimitive';
+import { ArrowPrimitive } from './ArrowPrimitive';
+import { MarkerPrimitive } from './MarkerPrimitive';
 import { FillBetweenPrimitive } from './FillBetweenPrimitive';
 import { ChartSeriesManager } from './ChartSeriesManager';
 
@@ -228,6 +230,8 @@ export const ChartComponent = props => {
         // Fetch and add new indicator series (only visible ones)
         const fetchAndAddIndicators = async () => {
             const allBoxes = []; // Collect all boxes from all indicators
+            const allArrows = []; // Collect all arrows from all indicators
+            const allMarkerShapes = []; // Collect all marker shapes from all indicators
             
             // Filter to only visible indicators (visible !== false means default true or explicitly true)
             const visibleIndicators = enabledIndicators.filter(ind => ind.visible !== false);
@@ -260,7 +264,9 @@ export const ChartComponent = props => {
                         hasShapes: !!apiResponse.shapes,
                         boxCount: apiResponse.shapes?.boxes?.length || 0,
                         lineCount: apiResponse.shapes?.lines?.length || 0,
-                        markerCount: apiResponse.shapes?.markers?.length || 0
+                        markerCount: apiResponse.shapes?.markers?.length || 0,
+                        arrowCount: apiResponse.shapes?.arrows?.length || 0,
+                        markerShapeCount: apiResponse.shapes?.markerShapes?.length || 0
                     });
                     
                     // Add series data and shapes (lines, markers) if present
@@ -373,6 +379,46 @@ export const ChartComponent = props => {
                         
                         allBoxes.push(...transformedBoxes);
                     }
+                    
+                    // Collect arrows from shapes if present
+                    if (apiResponse.shapes?.arrows && Array.isArray(apiResponse.shapes.arrows)) {
+                        console.log(`Adding ${apiResponse.shapes.arrows.length} arrows from indicator ${instanceId}`);
+                        
+                        // Transform API arrow format to ArrowPrimitive format
+                        const transformedArrows = apiResponse.shapes.arrows.map(arrow => ({
+                            time: arrow.time,
+                            price: arrow.price,
+                            direction: arrow.direction || 'up',
+                            color: arrow.color || '#2196F3',
+                            size: arrow.size || 8,
+                            borderColor: arrow.borderColor,
+                            borderWidth: arrow.borderWidth,
+                            text: arrow.text || arrow.label,
+                            textColor: arrow.textColor
+                        }));
+                        
+                        allArrows.push(...transformedArrows);
+                    }
+                    
+                    // Collect marker shapes from shapes if present
+                    if (apiResponse.shapes?.markerShapes && Array.isArray(apiResponse.shapes.markerShapes)) {
+                        console.log(`Adding ${apiResponse.shapes.markerShapes.length} marker shapes from indicator ${instanceId}`);
+                        
+                        // Transform API marker shape format to MarkerPrimitive format
+                        const transformedMarkerShapes = apiResponse.shapes.markerShapes.map(marker => ({
+                            time: marker.time,
+                            price: marker.price,
+                            shape: marker.shape || 'circle',
+                            color: marker.color || '#2196F3',
+                            size: marker.size || 6,
+                            borderColor: marker.borderColor,
+                            borderWidth: marker.borderWidth,
+                            text: marker.text || marker.label,
+                            textColor: marker.textColor
+                        }));
+                        
+                        allMarkerShapes.push(...transformedMarkerShapes);
+                    }
 
                 } catch (error) {
                     console.error(`❌ Error adding indicator ${indicator.instanceId || indicator.id}:`, error);
@@ -387,6 +433,26 @@ export const ChartComponent = props => {
                         seriesManagerRef.current.addBoxes(allBoxes, BoxPrimitive);
                     }
                 }, 200); // Small delay to ensure series are rendered first
+            }
+            
+            // Add all collected arrows at once
+            if (allArrows.length > 0) {
+                console.log(`Adding ${allArrows.length} total arrows from all indicators`);
+                setTimeout(() => {
+                    if (seriesManagerRef.current && data && data.length > 0) {
+                        seriesManagerRef.current.addArrows(allArrows, ArrowPrimitive);
+                    }
+                }, 250); // Slightly staggered after boxes
+            }
+            
+            // Add all collected marker shapes at once
+            if (allMarkerShapes.length > 0) {
+                console.log(`Adding ${allMarkerShapes.length} total marker shapes from all indicators`);
+                setTimeout(() => {
+                    if (seriesManagerRef.current && data && data.length > 0) {
+                        seriesManagerRef.current.addMarkerShapes(allMarkerShapes, MarkerPrimitive);
+                    }
+                }, 300); // Slightly staggered after arrows
             }
         };
 

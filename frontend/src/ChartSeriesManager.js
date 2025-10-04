@@ -1,7 +1,7 @@
 import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, CandlestickSeries, LineStyle } from 'lightweight-charts';
 
 /**
- * Centralized manager for adding and managing chart series, boxes, lines, and markers
+ * Centralized manager for adding and managing chart series, boxes, lines, arrows, markers, and fills
  * Handles indicators, strategy data, and shape primitives
  * 
  * Example Usage:
@@ -41,7 +41,15 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  * seriesManager.addLines(lines, LinePrimitive);
  * seriesManager.removeAllLines();
  * 
- * // For Markers:
+ * // For Arrows:
+ * seriesManager.addArrows(arrows, ArrowPrimitive);
+ * seriesManager.removeAllArrows();
+ * 
+ * // For Marker Shapes:
+ * seriesManager.addMarkerShapes(markerShapes, MarkerPrimitive);
+ * seriesManager.removeAllMarkerShapes();
+ * 
+ * // For Series Markers (v5 API):
  * seriesManager.addShapeMarkers('myMarkers', markers);
  * seriesManager.removeShapeMarkers('myMarkers');
  * 
@@ -53,8 +61,8 @@ import { LineSeries, HistogramSeries, AreaSeries, BarSeries, BaselineSeries, Can
  * }, FillBetweenPrimitive);
  * seriesManager.removeFillBetween('fill_trailing_stop');
  * 
- * // For Shapes (markers and lines together):
- * seriesManager.addShapesFromApiResponse('indicator_srbreaks', shapes, LinePrimitive);
+ * // For Shapes (markers, lines, arrows, marker shapes together):
+ * seriesManager.addShapesFromApiResponse('indicator_srbreaks', shapes, LinePrimitive, ArrowPrimitive, MarkerPrimitive);
  * seriesManager.clearAllShapes();
  * 
  * // Remove by prefix:
@@ -69,6 +77,8 @@ export class ChartSeriesManager {
         this.seriesMap = new Map(); // Track all series by key
         this.boxPrimitives = []; // Track box primitives
         this.linePrimitives = []; // Track line primitives
+        this.arrowPrimitives = []; // Track arrow primitives
+        this.markerPrimitives = []; // Track marker primitives (different from markerSets)
         this.fillBetweenPrimitives = []; // Track fill-between primitives
         this.markerSets = new Map(); // Track marker sets by ID
         this.markerPlugin = null; // Track marker plugin for v5 API
@@ -1071,6 +1081,149 @@ export class ChartSeriesManager {
     }
 
     /**
+     * Add arrows to the chart using primitives
+     * Requires ArrowPrimitive class to be imported
+     * @param {Array} arrows - Array of arrow objects with {time, price, direction, color, size, text}
+     * @param {Object} ArrowPrimitiveClass - The ArrowPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    addArrows(arrows, ArrowPrimitiveClass) {
+        if (!this.mainSeries) {
+            console.error('Cannot add arrows: mainSeries not set');
+            return false;
+        }
+        
+        if (!arrows || !Array.isArray(arrows) || arrows.length === 0) {
+            return false;
+        }
+
+        try {
+            // Create new arrow primitive with all arrows
+            const arrowPrimitive = new ArrowPrimitiveClass(
+                this.chart, 
+                this.mainSeries, 
+                arrows, 
+                this.chartData
+            );
+            
+            // Attach to main series
+            this.mainSeries.attachPrimitive(arrowPrimitive);
+            
+            // Track primitive for cleanup
+            this.arrowPrimitives.push(arrowPrimitive);
+            
+            console.log(`Added ${arrows.length} arrows to chart`);
+            return true;
+        } catch (e) {
+            console.error('Error adding arrows:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Remove all arrow primitives
+     */
+    removeAllArrows() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        this.arrowPrimitives.forEach(primitive => {
+            try {
+                this.mainSeries.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn('Error detaching arrow primitive:', e);
+            }
+        });
+        
+        this.arrowPrimitives = [];
+        console.log('All arrow primitives removed');
+    }
+
+    /**
+     * Update arrows with new data
+     * @param {Array} arrows - New array of arrows
+     * @param {Object} ArrowPrimitiveClass - The ArrowPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    updateArrows(arrows, ArrowPrimitiveClass) {
+        this.removeAllArrows();
+        return this.addArrows(arrows, ArrowPrimitiveClass);
+    }
+
+    /**
+     * Add custom marker shapes to the chart using primitives
+     * These are rendered marker shapes (different from series markers)
+     * Requires MarkerPrimitive class to be imported
+     * @param {Array} markers - Array of marker objects with {time, price, shape, color, size, text}
+     * @param {Object} MarkerPrimitiveClass - The MarkerPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    addMarkerShapes(markers, MarkerPrimitiveClass) {
+        if (!this.mainSeries) {
+            console.error('Cannot add marker shapes: mainSeries not set');
+            return false;
+        }
+        
+        if (!markers || !Array.isArray(markers) || markers.length === 0) {
+            return false;
+        }
+
+        try {
+            // Create new marker primitive with all markers
+            const markerPrimitive = new MarkerPrimitiveClass(
+                this.chart, 
+                this.mainSeries, 
+                markers, 
+                this.chartData
+            );
+            
+            // Attach to main series
+            this.mainSeries.attachPrimitive(markerPrimitive);
+            
+            // Track primitive for cleanup
+            this.markerPrimitives.push(markerPrimitive);
+            
+            console.log(`Added ${markers.length} marker shapes to chart`);
+            return true;
+        } catch (e) {
+            console.error('Error adding marker shapes:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Remove all marker shape primitives
+     */
+    removeAllMarkerShapes() {
+        if (!this.mainSeries) {
+            return;
+        }
+
+        this.markerPrimitives.forEach(primitive => {
+            try {
+                this.mainSeries.detachPrimitive(primitive);
+            } catch (e) {
+                console.warn('Error detaching marker primitive:', e);
+            }
+        });
+        
+        this.markerPrimitives = [];
+        console.log('All marker shape primitives removed');
+    }
+
+    /**
+     * Update marker shapes with new data
+     * @param {Array} markers - New array of markers
+     * @param {Object} MarkerPrimitiveClass - The MarkerPrimitive class constructor
+     * @returns {boolean} - Success status
+     */
+    updateMarkerShapes(markers, MarkerPrimitiveClass) {
+        this.removeAllMarkerShapes();
+        return this.addMarkerShapes(markers, MarkerPrimitiveClass);
+    }
+
+    /**
      * Add markers from shapes array
      * These are different from series markers - they're placed at specific price/time coordinates
      * @param {string} id - Unique identifier for this marker set
@@ -1215,10 +1368,12 @@ export class ChartSeriesManager {
      * @param {Object} LinePrimitiveClass - The LinePrimitive class constructor
      * @returns {Object} - Success status for markers and lines
      */
-    addShapesFromApiResponse(id, shapes, LinePrimitiveClass) {
+    addShapesFromApiResponse(id, shapes, LinePrimitiveClass, ArrowPrimitiveClass = null, MarkerPrimitiveClass = null) {
         const result = {
             markers: false,
-            lines: false
+            lines: false,
+            arrows: false,
+            markerShapes: false
         };
 
         // Add markers if present
@@ -1229,6 +1384,24 @@ export class ChartSeriesManager {
         // Add lines if present
         if (shapes.lines && Array.isArray(shapes.lines) && shapes.lines.length > 0) {
             result.lines = this.addLines(shapes.lines, LinePrimitiveClass);
+        }
+
+        // Add arrows if present (requires ArrowPrimitiveClass)
+        if (shapes.arrows && Array.isArray(shapes.arrows) && shapes.arrows.length > 0) {
+            if (ArrowPrimitiveClass) {
+                result.arrows = this.addArrows(shapes.arrows, ArrowPrimitiveClass);
+            } else {
+                console.warn('Arrows found in API response but ArrowPrimitiveClass not provided');
+            }
+        }
+
+        // Add marker shapes if present (requires MarkerPrimitiveClass)
+        if (shapes.markerShapes && Array.isArray(shapes.markerShapes) && shapes.markerShapes.length > 0) {
+            if (MarkerPrimitiveClass) {
+                result.markerShapes = this.addMarkerShapes(shapes.markerShapes, MarkerPrimitiveClass);
+            } else {
+                console.warn('Marker shapes found in API response but MarkerPrimitiveClass not provided');
+            }
         }
 
         return result;
@@ -1244,11 +1417,13 @@ export class ChartSeriesManager {
     }
 
     /**
-     * Clear all shapes (markers, lines, boxes, and fill-between)
+     * Clear all shapes (markers, lines, arrows, marker shapes, boxes, and fill-between)
      */
     clearAllShapes() {
         this.removeAllShapeMarkers();
         this.removeAllLines();
+        this.removeAllArrows();
+        this.removeAllMarkerShapes();
         this.removeAllBoxes();
         this.removeAllFillBetween();
         console.log('Cleared all shapes');
