@@ -105,13 +105,13 @@ public class TradingController {
                 );
             }
             
-            if (data.isEmpty()) {
-                System.out.println("⚠️ No cached data for " + provider + "_" + symbol + "_" + interval + 
-                                 " (not subscribed or no data yet)");
-            } else {
-                System.out.println("✅ Retrieved " + data.size() + " candles from memory for " + 
-                                 provider + "_" + symbol + "_" + interval);
-            }
+//            if (data.isEmpty()) {
+//                System.out.println("⚠️ No cached data for " + provider + "_" + symbol + "_" + interval +
+//                                 " (not subscribed or no data yet)");
+//            } else {
+//                System.out.println("✅ Retrieved " + data.size() + " candles from memory for " +
+//                                 provider + "_" + symbol + "_" + interval);
+//            }
             
             return data;
             

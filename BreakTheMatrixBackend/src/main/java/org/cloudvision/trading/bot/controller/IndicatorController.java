@@ -718,7 +718,7 @@ examples = {
             Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
             boolean hasShapes = false;
             
-            System.out.println("🔍 Collecting shapes from " + dataPoints.size() + " data points");
+//            System.out.println("🔍 Collecting shapes from " + dataPoints.size() + " data points");
             
             for (IndicatorService.IndicatorDataPoint dp : dataPoints) {
                 if (dp.getAdditionalData() != null) {
@@ -750,8 +750,8 @@ examples = {
                 uniqueShapesByType.put(shapeType, uniqueShapes);
             }
             
-            System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
-            System.out.println("🔍 Has shapes: " + hasShapes);
+//            System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
+//            System.out.println("🔍 Has shapes: " + hasShapes);
             
             // Create series-ready format for Lightweight Charts
             Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
