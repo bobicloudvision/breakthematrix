@@ -10,7 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cloudvision.trading.bot.indicators.Indicator;
 import org.cloudvision.trading.bot.indicators.IndicatorParameter;
-import org.cloudvision.trading.bot.indicators.IndicatorService;
+import org.cloudvision.trading.bot.indicators.IndicatorInstanceManager;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
 import org.cloudvision.trading.bot.visualization.ShapeRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 public class IndicatorController {
     
     @Autowired
-    private IndicatorService indicatorService;
+    private IndicatorInstanceManager indicatorManager;
     
     @Autowired
     private org.cloudvision.trading.service.CandlestickHistoryService historyService;
@@ -106,13 +106,13 @@ public class IndicatorController {
             // Filter by category if provided
             try {
                 Indicator.IndicatorCategory cat = Indicator.IndicatorCategory.valueOf(category.toUpperCase());
-                indicators = indicatorService.getIndicatorsByCategory(cat);
+                indicators = indicatorManager.getIndicatorsByCategory(cat);
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().build();
             }
         } else {
             // Return all indicators if no category specified
-            indicators = indicatorService.getAllIndicators();
+            indicators = indicatorManager.getAllIndicators();
         }
         
         List<IndicatorListItem> items = indicators.stream()
@@ -209,7 +209,7 @@ public class IndicatorController {
     @GetMapping("/{id}")
     public ResponseEntity<IndicatorDetails> getIndicatorDetails(@PathVariable String id) {
         try {
-            Indicator indicator = indicatorService.getIndicator(id);
+            Indicator indicator = indicatorManager.getIndicator(id);
             
             // Convert parameters to DTO
             Map<String, ParameterInfo> params = new HashMap<>();
@@ -249,9 +249,10 @@ public class IndicatorController {
     
     /**
      * Calculate current indicator value
-     * POST /api/indicators/{id}/calculate
+     * POST /api/indicators/calculate
      * 
      * Body: {
+     *   "indicatorId": "sma",
      *   "provider": "Binance",
      *   "symbol": "BTCUSDT",
      *   "interval": "1m",
@@ -261,62 +262,35 @@ public class IndicatorController {
      * }
      */
     @Operation(
-        summary = "Calculate current indicator value",
-        description = "Calculates the current value of a technical indicator for a specific symbol using the latest market data.",
-        parameters = {
-            @Parameter(
-                name = "id",
-                description = "Indicator identifier (e.g., 'sma', 'volume', 'rsi')",
-                required = true,
-                example = "sma"
-            )
-        }
+        summary = "Get current values for all active indicators",
+        description = "Returns current values for ALL active indicators in the given context (provider/symbol/interval). " +
+                     "Indicators must be activated first via /api/indicators/instances/activate"
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Calculation request parameters",
+        description = "Context parameters to retrieve current values for all active indicators",
         required = true,
         content = @Content(
             mediaType = "application/json",
             examples = {
                 @ExampleObject(
-                    name = "SMA(50) for BTCUSDT",
-                    description = "Calculate 50-period SMA for Bitcoin",
+                    name = "BTCUSDT 5m - All indicators",
+                    description = "Get current values for all active indicators on BTCUSDT 5-minute chart",
                     value = """
                     {
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
-                      "interval": "5m",
-                      "params": {
-                        "period": 50,
-                        "color": "#FF6B6B"
-                      }
+                      "interval": "5m"
                     }
                     """
                 ),
                 @ExampleObject(
-                    name = "SMA(20) for ETHUSDT",
-                    description = "Calculate 20-period SMA for Ethereum",
+                    name = "ETHUSDT 1m - All indicators",
+                    description = "Get current values for all active indicators on ETHUSDT 1-minute chart",
                     value = """
                     {
                       "provider": "Binance",
                       "symbol": "ETHUSDT",
-                      "interval": "1m",
-                      "params": {
-                        "period": 20,
-                        "source": "close"
-                      }
-                    }
-                    """
-                ),
-                @ExampleObject(
-                    name = "Volume for BTCUSDT",
-                    description = "Get current trading volume",
-                    value = """
-                    {
-                      "provider": "Binance",
-                      "symbol": "BTCUSDT",
-                      "interval": "15m",
-                      "params": {}
+                      "interval": "1m"
                     }
                     """
                 )
@@ -326,58 +300,86 @@ public class IndicatorController {
     @ApiResponses(value = {
         @ApiResponse(
             responseCode = "200",
-            description = "Successfully calculated indicator value",
+            description = "Successfully retrieved current values for all active indicators",
             content = @Content(
                 mediaType = "application/json",
                 examples = @ExampleObject(
-                    name = "SMA Result",
+                    name = "Multiple Active Indicators",
                     value = """
                     {
-                      "indicatorId": "sma",
+                      "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "5m",
-                      "values": {
-                        "sma": "95234.56"
-                      }
+                      "timestamp": "2025-10-04T10:35:00Z",
+                      "indicatorCount": 2,
+                      "indicators": [
+                        {
+                          "indicatorId": "sma",
+                          "instanceKey": "Binance:BTCUSDT:5m:sma:7a8b9c",
+                          "params": { "period": 20 },
+                          "timestamp": "2025-10-04T10:35:00Z",
+                          "values": { "sma": "95234.56" },
+                          "additionalData": {},
+                          "updateCount": 150
+                        },
+                        {
+                          "indicatorId": "volume",
+                          "instanceKey": "Binance:BTCUSDT:5m:volume:1f2e3d",
+                          "params": {},
+                          "timestamp": "2025-10-04T10:35:00Z",
+                          "values": { "volume": "1234567.89" },
+                          "additionalData": { "color": "#26a69a" },
+                          "updateCount": 150
+                        }
+                      ],
+                      "fromActiveInstances": true
                     }
                     """
                 )
             )
         ),
         @ApiResponse(
-            responseCode = "400",
-            description = "Invalid request parameters or insufficient data",
+            responseCode = "404",
+            description = "No active indicator instances found",
             content = @Content(
                 mediaType = "application/json",
                 examples = @ExampleObject(
                     value = """
                     {
-                      "error": "No historical data available for BTCUSDT"
+                      "error": "No active indicator instances found",
+                      "message": "Please activate indicators first using POST /api/indicators/instances/activate",
+                      "provider": "Binance",
+                      "symbol": "BTCUSDT",
+                      "interval": "5m"
                     }
                     """
                 )
             )
         ),
-        @ApiResponse(responseCode = "404", description = "Indicator not found")
+        @ApiResponse(responseCode = "400", description = "Invalid request parameters")
     })
-    @PostMapping("/{id}/calculate")
-    public ResponseEntity<?> calculateIndicator(
-            @PathVariable String id,
-            @RequestBody CalculateRequest request) {
+    @PostMapping("/calculate")
+    public ResponseEntity<?> calculateIndicator(@RequestBody CalculateRequest request) {
         try {
-            // Use new event-driven API
-            // Step 1: Initialize indicator with historical data
-            IndicatorService.IndicatorState state = indicatorService.initializeIndicator(
-                id,
-                request.getProvider(),
-                request.getSymbol(),
-                request.getInterval(),
-                request.getParams() != null ? request.getParams() : new HashMap<>()
-            );
+            // Get all active instances for this context
+            List<IndicatorInstanceManager.IndicatorInstance> activeInstances = 
+                indicatorManager.getInstancesForContext(
+                    request.getProvider(),
+                    request.getSymbol(),
+                    request.getInterval()
+                );
             
-            // Step 2: Get the latest candle and calculate current values
-            // Note: initializeIndicator already processes all available historical candles,
-            // so we need to get one NEW candle if available, or return error
+            if (activeInstances.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of(
+                    "error", "No active indicator instances found",
+                    "message", "Please activate indicators first using POST /api/indicators/instances/activate",
+                    "provider", request.getProvider(),
+                    "symbol", request.getSymbol(),
+                    "interval", request.getInterval()
+                ));
+            }
+            
+            // Get the latest candle (shared across all indicators)
             org.cloudvision.trading.model.CandlestickData latestCandle = 
                 historyService.getLatestCandlestick(
                     request.getProvider(),
@@ -385,24 +387,38 @@ public class IndicatorController {
                     request.getInterval()
                 );
             
-            if (latestCandle == null) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "error", "No candle data available for " + request.getSymbol()
-                ));
+            // Calculate current values for all active indicators
+            List<Map<String, Object>> indicatorsData = new ArrayList<>();
+            
+            for (IndicatorInstanceManager.IndicatorInstance instance : activeInstances) {
+                // Get current values from the active instance (no recalculation!)
+                IndicatorInstanceManager.IndicatorResult result = 
+                    indicatorManager.updateWithCandle(instance.getInstanceKey(), latestCandle);
+                
+                Map<String, Object> indicatorData = new HashMap<>();
+                indicatorData.put("indicatorId", instance.getIndicatorId());
+                indicatorData.put("instanceKey", instance.getInstanceKey());
+                indicatorData.put("params", instance.getParams());
+                indicatorData.put("timestamp", result.getTimestamp());
+                indicatorData.put("values", result.getValues());
+                indicatorData.put("additionalData", result.getAdditionalData());
+                indicatorData.put("updateCount", instance.getUpdateCount());
+                
+                indicatorsData.add(indicatorData);
             }
             
-            // Step 3: Process the latest candle to get current values
-            IndicatorService.IndicatorResult result = 
-                indicatorService.updateWithCandle(state, latestCandle);
+            // Build response
+            Map<String, Object> response = new HashMap<>();
+            response.put("provider", request.getProvider());
+            response.put("symbol", request.getSymbol());
+            response.put("interval", request.getInterval());
+            response.put("timestamp", latestCandle.getCloseTime());
+            response.put("indicatorCount", indicatorsData.size());
+            response.put("indicators", indicatorsData);
+            response.put("fromActiveInstances", true);
             
-            return ResponseEntity.ok(Map.of(
-                "indicatorId", id,
-                "symbol", request.getSymbol(),
-                "interval", request.getInterval(),
-                "timestamp", result.getTimestamp(),
-                "values", result.getValues(),
-                "additionalData", result.getAdditionalData()
-            ));
+            return ResponseEntity.ok(response);
+            
         } catch (Exception e) {
             e.printStackTrace(); // Log the full stack trace
             String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
@@ -414,9 +430,10 @@ public class IndicatorController {
     
     /**
      * Get historical indicator data for charting
-     * POST /api/indicators/{id}/historical
+     * POST /api/indicators/historical
      * 
      * Body: {
+     *   "indicatorId": "sma",
      *   "provider": "Binance",
      *   "symbol": "BTCUSDT",
      *   "interval": "1m",
@@ -428,27 +445,35 @@ public class IndicatorController {
      */
     @Operation(
         summary = "Get historical indicator data",
-        description = "Retrieves historical indicator values for charting purposes. Returns time-series data points that can be directly plotted on a chart.",
-        parameters = {
-            @Parameter(
-                name = "id",
-                description = "Indicator identifier",
-                required = true,
-                example = "sma"
-            )
-        }
+        description = "Returns historical indicator values from active indicator instances for charting. " +
+                     "If indicatorId is provided, returns data for that specific indicator. " +
+                     "If indicatorId is omitted, returns data for ALL active indicators in the given context. " +
+                     "Indicators must be activated first via /api/indicators/instances/activate"
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        description = "Historical data request parameters",
+        description = "Historical data request parameters. The indicatorId is optional - omit it to get data for all active indicators in the context.",
         required = true,
         content = @Content(
             mediaType = "application/json",
             examples = {
                 @ExampleObject(
-                    name = "SMA(20) - 200 points",
+                    name = "All active indicators",
+                    description = "Get historical data for ALL active indicators in the context (no indicatorId provided)",
+                    value = """
+                    {
+                      "provider": "Binance",
+                      "symbol": "BTCUSDT",
+                      "interval": "5m",
+                      "count": 100
+                    }
+                    """
+                ),
+                @ExampleObject(
+                    name = "Specific indicator - SMA(20)",
                     description = "Get 200 data points of SMA(20) for BTCUSDT 5-minute chart",
                     value = """
                     {
+                      "indicatorId": "sma",
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "5m",
@@ -466,6 +491,7 @@ public class IndicatorController {
                     description = "Get 100 data points of SMA(50) for ETHUSDT hourly chart",
                     value = """
                     {
+                      "indicatorId": "sma",
                       "provider": "Binance",
                       "symbol": "ETHUSDT",
                       "interval": "1h",
@@ -482,6 +508,7 @@ public class IndicatorController {
                     description = "Get 500 data points of volume for BTCUSDT 1-minute chart with custom colors",
                     value = """
                     {
+                      "indicatorId": "volume",
                       "provider": "Binance",
                       "symbol": "BTCUSDT",
                       "interval": "1m",
@@ -499,7 +526,7 @@ public class IndicatorController {
     @ApiResponses(value = {
         @ApiResponse(
             responseCode = "200",
-            description = "Successfully retrieved historical data",
+            description = "Successfully retrieved historical data from active instance",
             content = @Content(
                 mediaType = "application/json",
 examples = {
@@ -724,17 +751,60 @@ examples = {
                 )
             )
         ),
-        @ApiResponse(responseCode = "404", description = "Indicator not found")
+        @ApiResponse(
+            responseCode = "404",
+            description = "No active indicator instance found",
+            content = @Content(
+                mediaType = "application/json",
+                examples = @ExampleObject(
+                    value = """
+                    {
+                      "error": "No active indicator instance found",
+                      "message": "Please activate this indicator first using POST /api/indicators/instances/activate"
+                    }
+                    """
+                )
+            )
+        )
     })
-    @PostMapping("/{id}/historical")
-    public ResponseEntity<?> getHistoricalData(
-            @PathVariable String id,
-            @RequestBody HistoricalRequest request) {
+    @PostMapping("/historical")
+    public ResponseEntity<?> getHistoricalData(@RequestBody HistoricalRequest request) {
         try {
-            // Use new event-driven API
+            // Return data for ALL active indicators in this context
+            return getHistoricalDataForAllActiveIndicators(request);
+        } catch (Exception e) {
+            e.printStackTrace();
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
+        }
+    }
+    
+    /**
+     * Get historical data for ALL active indicators in a given context
+     */
+    private ResponseEntity<?> getHistoricalDataForAllActiveIndicators(HistoricalRequest request) {
+        try {
             int requestedCount = request.getCount() != null ? request.getCount() : 5000;
             
-            // Get historical candles
+            // Get all active instances for this context
+            List<IndicatorInstanceManager.IndicatorInstance> activeInstances =
+                indicatorManager.getInstancesForContext(
+                    request.getProvider(),
+                    request.getSymbol(),
+                    request.getInterval()
+                );
+            
+            if (activeInstances.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of(
+                    "error", "No active indicator instances found",
+                    "message", "Please activate indicators first using POST /api/indicators/instances/activate",
+                    "provider", request.getProvider(),
+                    "symbol", request.getSymbol(),
+                    "interval", request.getInterval()
+                ));
+            }
+            
+            // Get historical candles (shared across all indicators)
             List<org.cloudvision.trading.model.CandlestickData> allCandles = 
                 historyService.getLastNCandlesticks(
                     request.getProvider(),
@@ -743,135 +813,127 @@ examples = {
                     requestedCount
                 );
             
-            if (allCandles.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "error", "No historical data available for " + request.getSymbol()
-                ));
-            }
+            // Process data for each active indicator
+            List<Map<String, Object>> indicatorsData = new ArrayList<>();
             
-            // Initialize indicator with empty state
-            IndicatorService.IndicatorState state = indicatorService.initializeIndicator(
-                id,
-                allCandles,
-                request.getParams() != null ? request.getParams() : new HashMap<>()
-            );
-            
-            // Process all candles progressively to generate historical data points
-            List<IndicatorService.IndicatorResult> dataPoints = new ArrayList<>();
-            for (org.cloudvision.trading.model.CandlestickData candle : allCandles) {
-                IndicatorService.IndicatorResult result = 
-                    indicatorService.updateWithCandle(state, candle);
-                dataPoints.add(result);
-            }
-            
-            // Collect all shapes using ShapeRegistry (dynamic, no hardcoded types)
-            Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
-            boolean hasShapes = false;
-            
-//            System.out.println("🔍 Collecting shapes from " + dataPoints.size() + " data points");
-            
-            for (IndicatorService.IndicatorResult dp : dataPoints) {
-                if (dp.getAdditionalData() != null) {
-                    // Extract all shapes dynamically using ShapeRegistry
-                    Map<String, List<Map<String, Object>>> shapesFromPoint = 
-                        ShapeRegistry.extractShapes(dp.getAdditionalData());
-                    
-                    if (!shapesFromPoint.isEmpty()) {
-                        hasShapes = true;
+            for (IndicatorInstanceManager.IndicatorInstance instance : activeInstances) {
+                String indicatorId = instance.getIndicatorId();
+                String instanceKey = instance.getInstanceKey();
+                
+                // Process all candles for this indicator
+                List<IndicatorInstanceManager.IndicatorResult> dataPoints = new ArrayList<>();
+                for (org.cloudvision.trading.model.CandlestickData candle : allCandles) {
+                    IndicatorInstanceManager.IndicatorResult result = 
+                        indicatorManager.updateWithCandle(instanceKey, candle);
+                    dataPoints.add(result);
+                }
+                
+                // Collect shapes
+                Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
+                boolean hasShapes = false;
+                
+                for (IndicatorInstanceManager.IndicatorResult dp : dataPoints) {
+                    if (dp.getAdditionalData() != null) {
+                        Map<String, List<Map<String, Object>>> shapesFromPoint = 
+                            ShapeRegistry.extractShapes(dp.getAdditionalData());
                         
-                        // Merge shapes into the main collection
-                        for (Map.Entry<String, List<Map<String, Object>>> entry : shapesFromPoint.entrySet()) {
-                            String shapeType = entry.getKey();
-                            List<Map<String, Object>> shapes = entry.getValue();
-                            shapesByType.computeIfAbsent(shapeType, k -> new ArrayList<>()).addAll(shapes);
+                        if (!shapesFromPoint.isEmpty()) {
+                            hasShapes = true;
+                            for (Map.Entry<String, List<Map<String, Object>>> entry : shapesFromPoint.entrySet()) {
+                                shapesByType.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
+                                          .addAll(entry.getValue());
+                            }
                         }
                     }
                 }
-            }
-            
-            // Deduplicate shapes using ShapeRegistry (dynamic deduplication based on type)
-            Map<String, List<Map<String, Object>>> uniqueShapesByType = new HashMap<>();
-            for (Map.Entry<String, List<Map<String, Object>>> entry : shapesByType.entrySet()) {
-                String shapeType = entry.getKey();
-                List<Map<String, Object>> shapes = entry.getValue();
                 
-                // Use ShapeRegistry to deduplicate based on shape type
-                List<Map<String, Object>> uniqueShapes = ShapeRegistry.deduplicate(shapeType, shapes);
-                uniqueShapesByType.put(shapeType, uniqueShapes);
-            }
-            
-//            System.out.println("🔍 Total shapes collected by type: " + uniqueShapesByType);
-//            System.out.println("🔍 Has shapes: " + hasShapes);
-            
-            // Create series-ready format for Lightweight Charts
-            Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
-            if (!dataPoints.isEmpty()) {
-                // Get all value keys from first data point
-                Map<String, BigDecimal> firstValues = dataPoints.get(0).getValues();
-                
-                for (String key : firstValues.keySet()) {
-                    List<Map<String, Object>> seriesPoints = dataPoints.stream()
-                        .map(dp -> {
-                            Map<String, Object> seriesPoint = new HashMap<>();
-                            seriesPoint.put("time", dp.getTimestamp().getEpochSecond());
-                            BigDecimal value = dp.getValues().get(key);
-                            seriesPoint.put("value", value != null ? value : BigDecimal.ZERO);
-                            
-                            // Include any additional data from the indicator (colors, etc.)
-                            if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
-                                // Don't include shapes in series points (they're extracted separately)
-                                Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
-                                ShapeRegistry.extractShapes(additionalData); // This removes shapes from the map
-                                if (!additionalData.isEmpty()) {
-                                    seriesPoint.putAll(additionalData);
-                                }
-                            }
-                            
-                            return seriesPoint;
-                        })
-                        .collect(Collectors.toList());
-                    seriesData.put(key, seriesPoints);
+                // Deduplicate shapes
+                Map<String, List<Map<String, Object>>> uniqueShapesByType = new HashMap<>();
+                for (Map.Entry<String, List<Map<String, Object>>> entry : shapesByType.entrySet()) {
+                    List<Map<String, Object>> uniqueShapes = ShapeRegistry.deduplicate(
+                        entry.getKey(), 
+                        entry.getValue()
+                    );
+                    uniqueShapesByType.put(entry.getKey(), uniqueShapes);
                 }
+                
+                // Create series data
+                Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
+                if (!dataPoints.isEmpty()) {
+                    Map<String, BigDecimal> firstValues = dataPoints.get(0).getValues();
+                    
+                    for (String key : firstValues.keySet()) {
+                        List<Map<String, Object>> seriesPoints = dataPoints.stream()
+                            .map(dp -> {
+                                Map<String, Object> seriesPoint = new HashMap<>();
+                                seriesPoint.put("time", dp.getTimestamp().getEpochSecond());
+                                BigDecimal value = dp.getValues().get(key);
+                                seriesPoint.put("value", value != null ? value : BigDecimal.ZERO);
+                                
+                                if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
+                                    Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
+                                    ShapeRegistry.extractShapes(additionalData);
+                                    if (!additionalData.isEmpty()) {
+                                        seriesPoint.putAll(additionalData);
+                                    }
+                                }
+                                
+                                return seriesPoint;
+                            })
+                            .collect(Collectors.toList());
+                        seriesData.put(key, seriesPoints);
+                    }
+                }
+                
+                // Get visualization metadata
+                Map<String, IndicatorMetadata> metadata = indicatorManager.getVisualizationMetadata(
+                    indicatorId,
+                    instance.getParams()
+                );
+                
+                // Build response for this indicator
+                Map<String, Object> indicatorResponse = new HashMap<>();
+                indicatorResponse.put("indicatorId", indicatorId);
+                indicatorResponse.put("instanceKey", instanceKey);
+                indicatorResponse.put("params", instance.getParams());
+                indicatorResponse.put("count", dataPoints.size());
+                indicatorResponse.put("metadata", metadata);
+                indicatorResponse.put("updateCount", instance.getUpdateCount());
+                
+                if (metadata != null && !metadata.isEmpty()) {
+                    indicatorResponse.put("series", seriesData);
+                }
+                
+                if (hasShapes && !uniqueShapesByType.isEmpty()) {
+                    indicatorResponse.put("supportsShapes", true);
+                    indicatorResponse.put("shapes", uniqueShapesByType);
+                    
+                    Map<String, Integer> shapeSummary = new HashMap<>();
+                    for (Map.Entry<String, List<Map<String, Object>>> entry : uniqueShapesByType.entrySet()) {
+                        shapeSummary.put(entry.getKey(), entry.getValue().size());
+                    }
+                    indicatorResponse.put("shapesSummary", shapeSummary);
+                }
+                
+                indicatorsData.add(indicatorResponse);
             }
             
-            // Get visualization metadata
-            Map<String, IndicatorMetadata> metadata = indicatorService.getVisualizationMetadata(
-                id,
-                request.getParams() != null ? request.getParams() : new HashMap<>()
-            );
-            
+            // Build final response
             Map<String, Object> response = new HashMap<>();
-            response.put("indicatorId", id);
+            response.put("provider", request.getProvider());
             response.put("symbol", request.getSymbol());
             response.put("interval", request.getInterval());
-            response.put("metadata", metadata);
-            
-            // Only include series if they are registered in metadata
-            response.put("count", dataPoints.size());
-            if (metadata != null && !metadata.isEmpty()) {
-                response.put("series", seriesData); // Lightweight Charts optimized format
-            }
-            
-            // Additionally include shapes if present
-            if (hasShapes && !uniqueShapesByType.isEmpty()) {
-                response.put("supportsShapes", true);
-                response.put("shapes", uniqueShapesByType);
-                
-                // Add shape type summary
-                Map<String, Integer> shapeSummary = new HashMap<>();
-                for (Map.Entry<String, List<Map<String, Object>>> entry : uniqueShapesByType.entrySet()) {
-                    shapeSummary.put(entry.getKey(), entry.getValue().size());
-                }
-                response.put("shapesSummary", shapeSummary);
-            }
+            response.put("count", allCandles.size());
+            response.put("indicatorCount", indicatorsData.size());
+            response.put("indicators", indicatorsData);
+            response.put("fromActiveInstances", true);
             
             return ResponseEntity.ok(response);
+            
         } catch (Exception e) {
-            e.printStackTrace(); // Log the full stack trace
+            e.printStackTrace();
             String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            return ResponseEntity.badRequest().body(Map.of(
-                "error", errorMessage
-            ));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage));
         }
     }
     
@@ -972,7 +1034,6 @@ examples = {
         private String provider;
         private String symbol;
         private String interval;
-        private Map<String, Object> params;
         
         public String getProvider() { return provider; }
         public void setProvider(String provider) { this.provider = provider; }
@@ -980,13 +1041,20 @@ examples = {
         public void setSymbol(String symbol) { this.symbol = symbol; }
         public String getInterval() { return interval; }
         public void setInterval(String interval) { this.interval = interval; }
-        public Map<String, Object> getParams() { return params; }
-        public void setParams(Map<String, Object> params) { this.params = params; }
     }
     
-    public static class HistoricalRequest extends CalculateRequest {
+    public static class HistoricalRequest {
+        private String provider;
+        private String symbol;
+        private String interval;
         private Integer count;
         
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+        public String getSymbol() { return symbol; }
+        public void setSymbol(String symbol) { this.symbol = symbol; }
+        public String getInterval() { return interval; }
+        public void setInterval(String interval) { this.interval = interval; }
         public Integer getCount() { return count; }
         public void setCount(Integer count) { this.count = count; }
     }
