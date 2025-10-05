@@ -24,7 +24,6 @@ import { ArrowPrimitive } from './ArrowPrimitive';
 import { MarkerPrimitive } from './MarkerPrimitive';
 import { FillBetweenPrimitive } from './FillBetweenPrimitive';
 import { ChartSeriesManager } from './ChartSeriesManager';
-import { fetchIndicators } from './ChartDataService';
 
 // Global variable for default zoom level (last N candles)
 if (typeof window !== 'undefined' && !window.BTM_DEFAULT_ZOOM_CANDLES) {
@@ -45,6 +44,7 @@ export const ChartRenderer = props => {
         interval,
         seriesRef: externalSeriesRef,
         seriesManagerRef: externalSeriesManagerRef,
+        onFetchIndicators, // Callback for fetching indicators (provided by parent)
         colors: {
             backgroundColor = 'transparent',
             textColor = '#fff',
@@ -298,11 +298,16 @@ export const ChartRenderer = props => {
             }
             
             try {
-                // Fetch all indicators at once
-                const response = await fetchIndicators(provider, symbol, interval, 1000);
+                // Fetch all indicators using the callback provided by parent
+                if (!onFetchIndicators) {
+                    console.warn('No indicator fetch callback provided');
+                    return;
+                }
                 
-                if (!response.indicators || !Array.isArray(response.indicators)) {
-                    console.warn('No indicators returned from API');
+                const response = await onFetchIndicators(provider, symbol, interval, 1000);
+                
+                if (!response || !response.indicators || !Array.isArray(response.indicators)) {
+                    console.warn('No indicators returned from fetch callback');
                     return;
                 }
                 

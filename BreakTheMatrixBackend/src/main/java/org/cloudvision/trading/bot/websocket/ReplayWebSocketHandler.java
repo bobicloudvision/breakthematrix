@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ReplayWebSocketHandler extends TextWebSocketHandler {
     
     private final ReplayService replayService;
+    private final IndicatorInstanceManager indicatorManager;
     private final ObjectMapper objectMapper;
     
     // Active WebSocket sessions
@@ -35,8 +36,10 @@ public class ReplayWebSocketHandler extends TextWebSocketHandler {
     // Session subscriptions: wsSessionId -> replay sessionId
     private final Map<String, String> sessionSubscriptions = new ConcurrentHashMap<>();
     
-    public ReplayWebSocketHandler(ReplayService replayService) {
+    public ReplayWebSocketHandler(ReplayService replayService,
+                                  IndicatorInstanceManager indicatorManager) {
         this.replayService = replayService;
+        this.indicatorManager = indicatorManager;
         
         // Configure ObjectMapper
         this.objectMapper = new ObjectMapper();
@@ -254,22 +257,14 @@ public class ReplayWebSocketHandler extends TextWebSocketHandler {
     
     /**
      * Get indicator instance from instance key
-     * (This is a workaround - ideally IndicatorInstanceManager would expose this)
      */
     private IndicatorInstanceManager.IndicatorInstance getInstanceFromKey(String instanceKey) {
         try {
-            // Try to get from replay session's indicator instances
-            for (ReplaySession session : replayService.getAllSessions()) {
-                if (session.getIndicatorInstanceKeys().contains(instanceKey)) {
-                    // Instance exists, but we need IndicatorInstanceManager to expose getInstance
-                    // For now, we'll return null and handle gracefully
-                    return null;
-                }
-            }
+            return indicatorManager.getInstance(instanceKey);
         } catch (Exception e) {
-            System.err.println("⚠️ Error getting instance: " + e.getMessage());
+            System.err.println("⚠️ Error getting instance " + instanceKey + ": " + e.getMessage());
+            return null;
         }
-        return null;
     }
     
     /**

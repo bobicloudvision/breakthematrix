@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ChartRenderer } from './ChartRenderer';
-import { fetchHistoricalData, fetchAllStrategyData } from './ChartDataService';
+import { fetchHistoricalData, fetchAllStrategyData, fetchIndicators } from './ChartDataService';
 import { useChartWebSocket, getWebSocketStatusColors } from './useChartWebSocket';
 
 
@@ -126,6 +126,7 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                 interval={interval}
                 seriesRef={seriesRef}
                 seriesManagerRef={seriesManagerRef}
+                onFetchIndicators={fetchIndicators} // Pass indicator fetching function
             />
         </div>
     );
