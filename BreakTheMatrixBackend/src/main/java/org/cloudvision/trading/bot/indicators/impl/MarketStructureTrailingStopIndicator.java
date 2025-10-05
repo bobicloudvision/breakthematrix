@@ -121,7 +121,7 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
     }
     
     @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
         params = mergeWithDefaults(params);
         validateParameters(params);
         
@@ -129,53 +129,371 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         double incrementFactorPct = getDoubleParameter(params, "incrementFactor", 100.0);
         String resetOn = getStringParameter(params, "resetOn", "CHoCH");
         
-        if (candles == null || candles.size() < pivotLookback * 2 + 1) {
-            return createEmptyResult();
+        MarketStructureState state = new MarketStructureState();
+        state.candleBuffer = new ArrayList<>();
+        
+        // Process all historical candles to build initial state
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            int maxBufferSize = pivotLookback * 3;
+            
+            for (int i = 0; i < historicalCandles.size(); i++) {
+                CandlestickData candle = historicalCandles.get(i);
+                
+                // Add to buffer
+                state.candleBuffer.add(candle);
+                
+                // Keep buffer size manageable
+                if (state.candleBuffer.size() > maxBufferSize) {
+                    state.candleBuffer.remove(0);
+                }
+                
+                // Process candle if we have enough in buffer
+                if (state.candleBuffer.size() >= pivotLookback * 2 + 1) {
+                    int bufferIndex = state.candleBuffer.size() - 1;
+                    processCandleIncremental(state.candleBuffer, bufferIndex, state, 
+                                           pivotLookback, incrementFactorPct, resetOn);
+                }
+            }
         }
         
-        int n = candles.size();
-        int currentIndex = n - 1;
+        return state;
+    }
+    
+    @Override
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+        params = mergeWithDefaults(params);
+        validateParameters(params);
         
-        // Calculate full market structure
-        MarketStructureResult result = calculateFullMarketStructure(candles, pivotLookback, 
-                                                                     incrementFactorPct, resetOn);
+        int pivotLookback = getIntParameter(params, "pivotLookback", 14);
+        double incrementFactorPct = getDoubleParameter(params, "incrementFactor", 100.0);
+        String resetOn = getStringParameter(params, "resetOn", "CHoCH");
+        boolean showStructures = getBooleanParameter(params, "showStructures", true);
+        String bullColor = getStringParameter(params, "bullColor", "#26a69a");
+        String bearColor = getStringParameter(params, "bearColor", "#ef5350");
+        String retracementColor = getStringParameter(params, "retracementColor", "#ff5d00");
+        int areaTransparency = getIntParameter(params, "areaTransparency", 80);
         
-        // Check if there's a pivot at the lookback position (currentIndex - pivotLookback)
-        // This is the candle we're calculating for (the last confirmed candle)
-        int pivotCheckIndex = currentIndex - pivotLookback;
-        BigDecimal pivotHighValue = BigDecimal.ZERO;
-        BigDecimal pivotLowValue = BigDecimal.ZERO;
+        // Cast or create state
+        MarketStructureState msState = (state instanceof MarketStructureState) 
+            ? (MarketStructureState) state 
+            : new MarketStructureState();
         
-        if (pivotCheckIndex >= 0 && pivotCheckIndex < n) {
-            if (isPivotHigh(candles, pivotCheckIndex, pivotLookback)) {
-                pivotHighValue = candles.get(pivotCheckIndex).getHigh();
+        // Initialize candle buffer if needed
+        if (msState.candleBuffer == null) {
+            msState.candleBuffer = new ArrayList<>();
+        }
+        
+        // Add current candle to buffer
+        msState.candleBuffer.add(candle);
+        
+        // Keep buffer size manageable (only need recent candles for pivot detection)
+        // Need at least (2 * pivotLookback + 1) candles for pivot detection
+        int maxBufferSize = pivotLookback * 3;
+        if (msState.candleBuffer.size() > maxBufferSize) {
+            msState.candleBuffer.remove(0);
+        }
+        
+        List<Map<String, Object>> newLines = new ArrayList<>();
+        int ms = 0; // Market structure change signal
+        int previousOs = msState.os;
+        
+        // Check for pivot detection at proper lookback distance
+        // Pivots are confirmed at (currentIndex - pivotLookback)
+        int bufferSize = msState.candleBuffer.size();
+        if (bufferSize >= pivotLookback * 2 + 1) {
+            int pivotIndex = bufferSize - pivotLookback - 1;
+            
+            // Check for pivot high
+            if (isPivotHigh(msState.candleBuffer, pivotIndex, pivotLookback)) {
+                msState.phY = msState.candleBuffer.get(pivotIndex).getHigh();
+                msState.phX = pivotIndex;
+                msState.phCross = false;
             }
-            if (isPivotLow(candles, pivotCheckIndex, pivotLookback)) {
-                pivotLowValue = candles.get(pivotCheckIndex).getLow();
+            
+            // Check for pivot low
+            if (isPivotLow(msState.candleBuffer, pivotIndex, pivotLookback)) {
+                msState.plY = msState.candleBuffer.get(pivotIndex).getLow();
+                msState.plX = pivotIndex;
+                msState.plCross = false;
             }
         }
         
-        // Check if price is in retracement (wrong side of trailing stop)
-        // Pine Script: (close - ts) * os < 0
-        BigDecimal closePrice = candles.get(currentIndex).getClose();
+        // Check for bullish structure (close above pivot high)
+        if (msState.phY != null && candle.getClose().compareTo(msState.phY) > 0 && !msState.phCross) {
+            if (resetOn.equals("CHoCH")) {
+                ms = (msState.os == -1) ? 1 : 0;
+            } else {
+                ms = 1;
+            }
+            
+            msState.phCross = true;
+            msState.os = 1;
+            
+            // Create market structure line if showing structures
+            if (showStructures && ms != 0 && msState.phX != null) {
+                Map<String, Object> line = new HashMap<>();
+                line.put("price", msState.phY);
+                line.put("color", bullColor);
+                line.put("lineWidth", 1);
+                line.put("lineStyle", (previousOs == -1) ? "dashed" : "dotted");
+                line.put("label", (previousOs == -1) ? "CHoCH ↑" : "BOS ↑");
+                newLines.add(line);
+            }
+            
+            // Search for local minima from pivot to current
+            if (msState.phX != null && msState.phX < msState.candleBuffer.size()) {
+                msState.btm = msState.candleBuffer.get(msState.phX).getLow();
+                for (int j = msState.phX; j < msState.candleBuffer.size(); j++) {
+                    BigDecimal low = msState.candleBuffer.get(j).getLow();
+                    if (low.compareTo(msState.btm) < 0) {
+                        msState.btm = low;
+                    }
+                }
+            }
+        }
+        
+        // Check for bearish structure (close below pivot low)
+        if (msState.plY != null && candle.getClose().compareTo(msState.plY) < 0 && !msState.plCross) {
+            if (resetOn.equals("CHoCH")) {
+                ms = (msState.os == 1) ? -1 : 0;
+            } else {
+                ms = -1;
+            }
+            
+            msState.plCross = true;
+            msState.os = -1;
+            
+            // Create market structure line if showing structures
+            if (showStructures && ms != 0 && msState.plX != null) {
+                Map<String, Object> line = new HashMap<>();
+                line.put("price", msState.plY);
+                line.put("color", bearColor);
+                line.put("lineWidth", 1);
+                line.put("lineStyle", (previousOs == 1) ? "dashed" : "dotted");
+                line.put("label", (previousOs == 1) ? "CHoCH ↓" : "BOS ↓");
+                newLines.add(line);
+            }
+            
+            // Search for local maxima from pivot to current
+            if (msState.plX != null && msState.plX < msState.candleBuffer.size()) {
+                msState.top = msState.candleBuffer.get(msState.plX).getHigh();
+                for (int j = msState.plX; j < msState.candleBuffer.size(); j++) {
+                    BigDecimal high = msState.candleBuffer.get(j).getHigh();
+                    if (high.compareTo(msState.top) > 0) {
+                        msState.top = high;
+                    }
+                }
+            }
+        }
+        
+        // Trailing max/min logic
+        if (ms == 1) {
+            msState.max = candle.getClose();
+            msState.min = null;
+        } else if (ms == -1) {
+            msState.min = candle.getClose();
+            msState.max = null;
+        } else {
+            if (msState.max != null) {
+                msState.max = msState.max.max(candle.getClose());
+            }
+            if (msState.min != null) {
+                msState.min = msState.min.min(candle.getClose());
+            }
+        }
+        
+        // Calculate trailing stop
+        if (ms == 1) {
+            msState.ts = msState.btm;
+        } else if (ms == -1) {
+            msState.ts = msState.top;
+        } else if (msState.ts != null && msState.os != 0) {
+            if (msState.os == 1 && msState.max != null && msState.prevMax != null) {
+                BigDecimal maxChange = msState.max.subtract(msState.prevMax);
+                BigDecimal increment = maxChange
+                    .multiply(BigDecimal.valueOf(incrementFactorPct))
+                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+                msState.ts = msState.ts.add(increment);
+            } else if (msState.os == -1 && msState.min != null && msState.prevMin != null) {
+                BigDecimal minChange = msState.min.subtract(msState.prevMin);
+                BigDecimal increment = minChange
+                    .multiply(BigDecimal.valueOf(incrementFactorPct))
+                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+                msState.ts = msState.ts.add(increment);
+            }
+        }
+        
+        // Store previous max/min for next iteration
+        msState.prevMax = msState.max;
+        msState.prevMin = msState.min;
+        
+        // Calculate trailing stop value
+        BigDecimal tsValue = msState.ts != null ? msState.ts : BigDecimal.ZERO;
+        
+        // Check if price is in retracement
         boolean isRetracement = false;
-        if (result.direction.intValue() != 0 && result.trailingStop.compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal diff = closePrice.subtract(result.trailingStop);
-            BigDecimal product = diff.multiply(result.direction);
+        if (msState.os != 0 && tsValue.compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal diff = candle.getClose().subtract(tsValue);
+            BigDecimal product = diff.multiply(BigDecimal.valueOf(msState.os));
             isRetracement = product.compareTo(BigDecimal.ZERO) < 0;
         }
         
-        // Detect trend change signals
-        BigDecimal trendSignal = BigDecimal.valueOf(result.marketStructureChange);
+        // Build values map
+        Map<String, BigDecimal> values = new HashMap<>();
+        values.put("trailingStop", tsValue);
+        values.put("direction", BigDecimal.valueOf(msState.os));
+        values.put("isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO);
+        values.put("pivotHigh", BigDecimal.ZERO);
+        values.put("pivotLow", BigDecimal.ZERO);
+        values.put("signal", BigDecimal.valueOf(ms));
         
-        return Map.of(
-            "trailingStop", result.trailingStop,
-            "direction", result.direction, // 1 = bullish, -1 = bearish, 0 = neutral
-            "isRetracement", isRetracement ? BigDecimal.ONE : BigDecimal.ZERO,
-            "pivotHigh", pivotHighValue,
-            "pivotLow", pivotLowValue,
-            "signal", trendSignal  // 1 = bullish signal, -1 = bearish signal, 0 = no signal
-        );
+        // Build result
+        Map<String, Object> result = new HashMap<>();
+        result.put("values", values);
+        result.put("state", msState);
+        
+        // Add lines if any were created
+        if (!newLines.isEmpty()) {
+            result.put("lines", newLines);
+        }
+        
+        // Add fill shapes
+        double opacity = (100 - areaTransparency) / 100.0;
+        String bullFillColor = convertHexToRgba(bullColor, opacity);
+        String bearFillColor = convertHexToRgba(bearColor, opacity);
+        String retFillColor = convertHexToRgba(retracementColor, opacity);
+        
+        List<Map<String, Object>> fills = new ArrayList<>();
+        FillShape fill = FillShape.builder()
+            .enabled(true)
+            .mode("series")
+            .source1("close")
+            .source2("trailingStop")
+            .colorMode("dynamic")
+            .upFillColor(bullFillColor)
+            .downFillColor(bearFillColor)
+            .neutralFillColor(retFillColor)
+            .fillGaps(true)
+            .display(true)
+            .build();
+        fills.add(fill.toMap());
+        result.put("fills", fills);
+        
+        return result;
+    }
+    
+    /**
+     * Helper method to process a single candle during initialization (buffer-based)
+     */
+    private void processCandleIncremental(List<CandlestickData> candleBuffer, int currentIndex, 
+                                         MarketStructureState state, int pivotLookback, 
+                                         double incrementFactorPct, String resetOn) {
+        CandlestickData currentCandle = candleBuffer.get(currentIndex);
+        int ms = 0;
+        
+        // Check for pivot at (currentIndex - pivotLookback)
+        if (currentIndex >= pivotLookback) {
+            int pivotIndex = currentIndex - pivotLookback;
+            
+            if (isPivotHigh(candleBuffer, pivotIndex, pivotLookback)) {
+                state.phY = candleBuffer.get(pivotIndex).getHigh();
+                state.phX = pivotIndex;
+                state.phCross = false;
+            }
+            
+            if (isPivotLow(candleBuffer, pivotIndex, pivotLookback)) {
+                state.plY = candleBuffer.get(pivotIndex).getLow();
+                state.plX = pivotIndex;
+                state.plCross = false;
+            }
+        }
+        
+        // Check for bullish structure (close above pivot high)
+        if (state.phY != null && currentCandle.getClose().compareTo(state.phY) > 0 && !state.phCross) {
+            if (resetOn.equals("CHoCH")) {
+                ms = (state.os == -1) ? 1 : 0;
+            } else {
+                ms = 1;
+            }
+            
+            state.phCross = true;
+            state.os = 1;
+            
+            // Search for local minima from pivot to current
+            if (state.phX != null && state.phX < candleBuffer.size()) {
+                state.btm = candleBuffer.get(state.phX).getLow();
+                for (int j = state.phX; j <= currentIndex && j < candleBuffer.size(); j++) {
+                    BigDecimal low = candleBuffer.get(j).getLow();
+                    if (low.compareTo(state.btm) < 0) {
+                        state.btm = low;
+                    }
+                }
+            }
+        }
+        
+        // Check for bearish structure (close below pivot low)
+        if (state.plY != null && currentCandle.getClose().compareTo(state.plY) < 0 && !state.plCross) {
+            if (resetOn.equals("CHoCH")) {
+                ms = (state.os == 1) ? -1 : 0;
+            } else {
+                ms = -1;
+            }
+            
+            state.plCross = true;
+            state.os = -1;
+            
+            // Search for local maxima from pivot to current
+            if (state.plX != null && state.plX < candleBuffer.size()) {
+                state.top = candleBuffer.get(state.plX).getHigh();
+                for (int j = state.plX; j <= currentIndex && j < candleBuffer.size(); j++) {
+                    BigDecimal high = candleBuffer.get(j).getHigh();
+                    if (high.compareTo(state.top) > 0) {
+                        state.top = high;
+                    }
+                }
+            }
+        }
+        
+        // Trailing max/min logic
+        if (ms == 1) {
+            state.max = currentCandle.getClose();
+            state.min = null;
+        } else if (ms == -1) {
+            state.min = currentCandle.getClose();
+            state.max = null;
+        } else {
+            if (state.max != null) {
+                state.max = state.max.max(currentCandle.getClose());
+            }
+            if (state.min != null) {
+                state.min = state.min.min(currentCandle.getClose());
+            }
+        }
+        
+        // Calculate trailing stop
+        if (ms == 1) {
+            state.ts = state.btm;
+        } else if (ms == -1) {
+            state.ts = state.top;
+        } else if (state.ts != null && state.os != 0) {
+            if (state.os == 1 && state.max != null && state.prevMax != null) {
+                BigDecimal maxChange = state.max.subtract(state.prevMax);
+                BigDecimal increment = maxChange
+                    .multiply(BigDecimal.valueOf(incrementFactorPct))
+                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+                state.ts = state.ts.add(increment);
+            } else if (state.os == -1 && state.min != null && state.prevMin != null) {
+                BigDecimal minChange = state.min.subtract(state.prevMin);
+                BigDecimal increment = minChange
+                    .multiply(BigDecimal.valueOf(incrementFactorPct))
+                    .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+                state.ts = state.ts.add(increment);
+            }
+        }
+        
+        // Store previous max/min for next iteration
+        state.prevMax = state.max;
+        state.prevMin = state.min;
     }
     
     /**
@@ -186,7 +504,9 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
      *   - "values": Map<String, BigDecimal> with indicator values
      *   - "state": MarketStructureState for next iteration
      *   - "lines": List of market structure break lines (optional)
+     * @deprecated Use onInit() and onNewCandle() instead
      */
+    @Deprecated
     public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
                                                     Map<String, Object> params,
                                                     Object previousState) {
@@ -826,9 +1146,9 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
     public static class MarketStructureState {
         // Pivot state
         BigDecimal phY = null;  // Pivot high price
-        Integer phX = null;     // Pivot high index
+        Integer phX = null;     // Pivot high index (relative to buffer)
         BigDecimal plY = null;  // Pivot low price
-        Integer plX = null;     // Pivot low index
+        Integer plX = null;     // Pivot low index (relative to buffer)
         
         boolean phCross = false;
         boolean plCross = false;
@@ -848,6 +1168,9 @@ public class MarketStructureTrailingStopIndicator extends AbstractIndicator {
         
         // Overall structure: 1 = bullish, -1 = bearish, 0 = neutral
         int os = 0;
+        
+        // Candle buffer for pivot detection (maintains rolling window)
+        List<CandlestickData> candleBuffer = null;
     }
 }
 

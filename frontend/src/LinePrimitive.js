@@ -122,6 +122,38 @@ class LinePaneView {
         this._lines = []; // Initialize empty array
     }
 
+    /**
+     * Normalize time value to Unix timestamp (seconds)
+     * @param {number|string|Date} time - Time value in various formats
+     * @returns {number|null} - Unix timestamp in seconds, or null if invalid
+     */
+    _normalizeTime(time) {
+        // Already a valid Unix timestamp (seconds)
+        if (typeof time === 'number' && time > 0 && isFinite(time)) {
+            // If it looks like milliseconds (> year 2100 in seconds), convert to seconds
+            if (time > 4102444800) { // Jan 1, 2100 in seconds
+                return Math.floor(time / 1000);
+            }
+            return time;
+        }
+        
+        // String: try to parse as ISO date or timestamp
+        if (typeof time === 'string') {
+            const parsed = Date.parse(time);
+            if (!isNaN(parsed)) {
+                return Math.floor(parsed / 1000);
+            }
+        }
+        
+        // Date object
+        if (time instanceof Date) {
+            return Math.floor(time.getTime() / 1000);
+        }
+        
+        // Invalid time value
+        return null;
+    }
+
     update() {
         const series = this._source._series;
         const timeScale = this._source._chart.timeScale();
@@ -146,6 +178,23 @@ class LinePaneView {
         // Filter and transform only visible lines
         this._lines = this._source._linesData
             .filter((line) => {
+                // Validate line has required properties
+                if (!line || line.time1 === undefined || line.time2 === undefined || 
+                    line.price1 === undefined || line.price2 === undefined) {
+                    console.warn('Skipping line with missing properties:', line);
+                    return false;
+                }
+                
+                // Normalize time values to Unix timestamps (seconds)
+                line.time1 = this._normalizeTime(line.time1);
+                line.time2 = this._normalizeTime(line.time2);
+                
+                // Skip lines with invalid times
+                if (line.time1 === null || line.time2 === null) {
+                    console.warn('Skipping line with invalid time values:', line);
+                    return false;
+                }
+                
                 // Skip lines outside visible time range (culling optimization)
                 if (visibleTimeRange) {
                     // Line is visible if any part overlaps with visible range
