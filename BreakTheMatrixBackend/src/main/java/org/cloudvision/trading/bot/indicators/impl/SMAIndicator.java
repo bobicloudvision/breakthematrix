@@ -201,24 +201,63 @@ public class SMAIndicator extends AbstractIndicator {
     }
     
     /**
-     * Process a single tick for real-time updates (optional)
-     * SMA typically doesn't update on individual ticks, only on completed candles
+     * Process a single tick for real-time updates
+     * Calculates what the SMA would be if the current forming candle closed at the current price
+     * Does NOT modify the state - just shows a preview of where SMA would be
      * 
      * @param price Current tick price
      * @param params Configuration parameters
      * @param state Current state
-     * @return Map containing empty values and unchanged state
+     * @return Map containing real-time SMA value and unchanged state
      */
     @Override
     public Map<String, Object> onNewTick(BigDecimal price, Map<String, Object> params, Object state) {
-
-//        System.out.println("SMAIndicator.onNewTick");
-
-        // SMA doesn't update on individual ticks, only on new candles
-        return Map.of(
-            "values", Map.of(),
-            "state", state != null ? state : new SMAState(getIntParameter(params, "period", 20))
-        );
+        // If no state yet, can't calculate tick value
+        if (state == null || !(state instanceof SMAState)) {
+            return Map.of(
+                "values", Map.of(),
+                "state", state != null ? state : new SMAState(getIntParameter(params, "period", 20))
+            );
+        }
+        
+        params = mergeWithDefaults(params);
+        SMAState smaState = (SMAState) state;
+        
+        // Calculate real-time SMA by simulating what it would be if we added the current price
+        // We create a temporary calculation without modifying the actual state
+        BigDecimal realtimeSMA = calculateRealtimeSMA(smaState, price);
+        
+        Map<String, BigDecimal> values = new HashMap<>();
+        values.put("sma", realtimeSMA);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("values", values);
+        result.put("state", state);  // State unchanged!
+        
+        return result;
+    }
+    
+    /**
+     * Calculate real-time SMA by temporarily adding current price to the buffer
+     * This gives a preview of where the SMA will move without actually modifying state
+     */
+    private BigDecimal calculateRealtimeSMA(SMAState state, BigDecimal currentPrice) {
+        if (state.priceBuffer.isEmpty()) {
+            return currentPrice;
+        }
+        
+        // Calculate sum with the new price included
+        BigDecimal tempSum = state.sum.add(currentPrice);
+        
+        // If buffer is at capacity, we'd remove the oldest, so subtract it
+        int bufferSize = state.priceBuffer.size();
+        if (bufferSize >= state.period) {
+            tempSum = tempSum.subtract(state.priceBuffer.getFirst());
+            return tempSum.divide(BigDecimal.valueOf(state.period), 8, java.math.RoundingMode.HALF_UP);
+        } else {
+            // Not at capacity yet, just add to the sum
+            return tempSum.divide(BigDecimal.valueOf(bufferSize + 1), 8, java.math.RoundingMode.HALF_UP);
+        }
     }
     
     @Override

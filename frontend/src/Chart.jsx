@@ -58,6 +58,10 @@ export const ChartComponent = props => {
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
     const isInitialDataLoadRef = useRef(true); // Track if this is the first data load
+    const indicatorsLoadedRef = useRef(false); // Track if indicators have been loaded for current data
+    
+    // Track when data is loaded (boolean state that changes only when data availability changes)
+    const [dataLoaded, setDataLoaded] = useState(false);
 
     useEffect(
         () => {
@@ -165,7 +169,20 @@ export const ChartComponent = props => {
     // Reset initial load flag when provider/symbol/interval changes
     useEffect(() => {
         isInitialDataLoadRef.current = true;
+        indicatorsLoadedRef.current = false; // Reset indicators loaded flag
+        setDataLoaded(false); // Reset data loaded state
     }, [provider, symbol, interval]);
+    
+    // Track when data becomes available (changes from empty to loaded)
+    useEffect(() => {
+        const hasData = data && data.length > 0;
+        if (hasData && !dataLoaded) {
+            console.log('Data loaded, triggering indicators load');
+            setDataLoaded(true);
+        } else if (!hasData && dataLoaded) {
+            setDataLoaded(false);
+        }
+    }, [data && data.length > 0, dataLoaded]); // Only track boolean change, not actual length
 
     // Update data when it changes (only for initial load)
     useEffect(() => {
@@ -233,15 +250,25 @@ export const ChartComponent = props => {
 
     // Handle enabled indicators from IndicatorsTab
     useEffect(() => {
-        if (!seriesManagerRef.current || !data || data.length === 0) {
+        // Wait for series manager and data to be ready
+        if (!seriesManagerRef.current) {
+            console.log('Series manager not ready yet');
+            return;
+        }
+        
+        if (!data || data.length === 0) {
+            console.log('Data not loaded yet, waiting...');
             return;
         }
 
-        console.log('Enabled indicators changed:', enabledIndicators);
+        console.log('Enabled indicators changed:', enabledIndicators, 'Data loaded:', data.length);
 
         // Remove all existing indicator series and shapes (boxes, lines, markers)
         seriesManagerRef.current.removeSeriesByPrefix('indicator_');
         seriesManagerRef.current.clearAllShapes();
+        
+        // Mark that we're loading indicators
+        indicatorsLoadedRef.current = true;
 
         // Fetch and add new indicator series
         const fetchAndAddIndicators = async () => {
@@ -564,7 +591,7 @@ export const ChartComponent = props => {
         };
 
         fetchAndAddIndicators();
-    }, [enabledIndicators, provider, symbol, interval]); // Removed 'data' to prevent re-fetching on WebSocket updates
+    }, [enabledIndicators, provider, symbol, interval, dataLoaded]); // Trigger when data first loads or indicators change
 
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
