@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 public class SRLevelsBreaksIndicator extends AbstractIndicator {
     
     /**
-     * State for progressive calculation
+     * State for event-driven calculation
      */
     public static class SRBreaksState {
         public BigDecimal currentResistance = BigDecimal.ZERO;
@@ -43,6 +43,8 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         public Instant supportTime = null;
         public List<BigDecimal> volumeHistory = new ArrayList<>();
         public int barIndex = 0;
+        public BigDecimal prevClose = null; // Track previous candle close for crossover/crossunder detection
+        public List<CandlestickData> recentCandles = new ArrayList<>(); // Buffer for pivot detection
     }
     
     public SRLevelsBreaksIndicator() {
@@ -112,20 +114,93 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         return params;
     }
     
+    /**
+     * Initialize the indicator with historical data and parameters
+     * 
+     * Processes historical candles to build initial state including:
+     * - Volume history for oscillator calculation
+     * - Recent candles buffer for pivot detection
+     * - Initial S/R levels from pivots
+     * 
+     * @param historicalCandles Historical candlestick data for initialization
+     * @param params Configuration parameters
+     * @return Initial state object (SRBreaksState)
+     */
     @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
-        Map<String, Object> progressive = calculateProgressive(candles, params, null);
-        @SuppressWarnings("unchecked")
-        Map<String, BigDecimal> values = (Map<String, BigDecimal>) progressive.get("values");
-        return values;
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        // Validate and merge with defaults
+        validateParameters(params);
+        params = mergeWithDefaults(params);
+        
+        int leftBars = getIntParameter(params, "leftBars", 15);
+        int rightBars = getIntParameter(params, "rightBars", 15);
+        
+        // Create initial state
+        SRBreaksState state = new SRBreaksState();
+        
+        // Process historical candles to build initial state
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            for (CandlestickData candle : historicalCandles) {
+                // Add to recent candles buffer (keep enough for pivot detection)
+                state.recentCandles.add(candle);
+                int maxBufferSize = leftBars + rightBars + 1;
+                if (state.recentCandles.size() > maxBufferSize) {
+                    state.recentCandles.remove(0);
+                }
+                
+                // Build volume history (keep last 10 for EMA calculation)
+                state.volumeHistory.add(candle.getVolume());
+                if (state.volumeHistory.size() > 10) {
+                    state.volumeHistory.remove(0);
+                }
+                
+                // Update bar index
+                state.barIndex++;
+                
+                // Check for pivots if we have enough data
+                if (state.recentCandles.size() >= leftBars + rightBars + 1) {
+                    int pivotIdx = state.recentCandles.size() - rightBars - 1;
+                    
+                    if (isPivotHigh(state.recentCandles, pivotIdx, leftBars, rightBars)) {
+                        state.currentResistance = state.recentCandles.get(pivotIdx).getHigh();
+                        state.resistanceTime = state.recentCandles.get(pivotIdx).getCloseTime();
+                    }
+                    
+                    if (isPivotLow(state.recentCandles, pivotIdx, leftBars, rightBars)) {
+                        state.currentSupport = state.recentCandles.get(pivotIdx).getLow();
+                        state.supportTime = state.recentCandles.get(pivotIdx).getCloseTime();
+                    }
+                }
+                
+                // Track previous close
+                state.prevClose = candle.getClose();
+            }
+        }
+        
+        return state;
     }
     
+    /**
+     * Process a single historical or live candle
+     * 
+     * Updates state with new candle data and detects:
+     * - New pivot points (S/R levels)
+     * - Break signals with volume confirmation
+     * - Wick-based rejections
+     * 
+     * @param candle The candle to process
+     * @param params Configuration parameters
+     * @param state Current state from previous call (or from onInit)
+     * @return Map containing values, state, lines, and markers
+     */
     @Override
-    public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
-                                                    Map<String, Object> params,
-                                                    Object previousState) {
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+        if (candle == null) {
+            throw new IllegalArgumentException("Candle cannot be null");
+        }
+        
+        // Merge with defaults
         params = mergeWithDefaults(params);
-        validateParameters(params);
         
         int leftBars = getIntParameter(params, "leftBars", 15);
         int rightBars = getIntParameter(params, "rightBars", 15);
@@ -134,142 +209,148 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         String resistanceColor = getStringParameter(params, "resistanceColor", "#FF0000");
         String supportColor = getStringParameter(params, "supportColor", "#233DEE");
         
-        SRBreaksState state = (previousState instanceof SRBreaksState) 
-            ? (SRBreaksState) previousState 
-            : new SRBreaksState();
+        // Cast or create state
+        SRBreaksState srState = (state instanceof SRBreaksState) ? (SRBreaksState) state : new SRBreaksState();
         
-        int minRequired = leftBars + rightBars + 1;
-        if (candles == null || candles.size() < minRequired) {
-            return Map.of(
-                "values", createEmptyResult(),
-                "state", state,
-                "lines", new ArrayList<>(),
-                "markers", new ArrayList<>()
-            );
+        // Add candle to recent buffer
+        srState.recentCandles.add(candle);
+        int maxBufferSize = leftBars + rightBars + 1;
+        if (srState.recentCandles.size() > maxBufferSize) {
+            srState.recentCandles.remove(0);
         }
         
-        int n = candles.size();
-        CandlestickData currentCandle = candles.get(n - 1);
-        state.barIndex++;
-        
-        // Update volume history (keep last 10 for EMA calculation)
-        state.volumeHistory.add(currentCandle.getVolume());
-        if (state.volumeHistory.size() > 10) {
-            state.volumeHistory.remove(0);
+        // Update volume history
+        srState.volumeHistory.add(candle.getVolume());
+        if (srState.volumeHistory.size() > 10) {
+            srState.volumeHistory.remove(0);
         }
+        
+        srState.barIndex++;
         
         // Calculate volume oscillator
-        BigDecimal volumeOsc = calculateVolumeOscillator(state.volumeHistory);
+        BigDecimal volumeOsc = calculateVolumeOscillator(srState.volumeHistory);
         
-        // Check for new pivot high (resistance) at position n - rightBars - 1
-        if (n >= leftBars + rightBars + 1) {
-            int pivotIdx = n - rightBars - 1;
+        // Check for new pivots if we have enough data
+        if (srState.recentCandles.size() >= leftBars + rightBars + 1) {
+            int pivotIdx = srState.recentCandles.size() - rightBars - 1;
             
-            if (isPivotHigh(candles, pivotIdx, leftBars, rightBars)) {
-                state.currentResistance = candles.get(pivotIdx).getHigh();
-                state.resistanceTime = candles.get(pivotIdx).getCloseTime();
+            if (isPivotHigh(srState.recentCandles, pivotIdx, leftBars, rightBars)) {
+                srState.currentResistance = srState.recentCandles.get(pivotIdx).getHigh();
+                srState.resistanceTime = srState.recentCandles.get(pivotIdx).getCloseTime();
             }
             
-            if (isPivotLow(candles, pivotIdx, leftBars, rightBars)) {
-                state.currentSupport = candles.get(pivotIdx).getLow();
-                state.supportTime = candles.get(pivotIdx).getCloseTime();
+            if (isPivotLow(srState.recentCandles, pivotIdx, leftBars, rightBars)) {
+                srState.currentSupport = srState.recentCandles.get(pivotIdx).getLow();
+                srState.supportTime = srState.recentCandles.get(pivotIdx).getCloseTime();
             }
         }
         
         // Detect breaks and create markers
         List<Map<String, Object>> markers = new ArrayList<>();
-        BigDecimal close = currentCandle.getClose();
-        BigDecimal open = currentCandle.getOpen();
-        BigDecimal high = currentCandle.getHigh();
-        BigDecimal low = currentCandle.getLow();
+        BigDecimal close = candle.getClose();
+        BigDecimal open = candle.getOpen();
+        BigDecimal high = candle.getHigh();
+        BigDecimal low = candle.getLow();
         
         String breakType = null;
         
-        if (showBreaks && state.currentSupport.compareTo(BigDecimal.ZERO) > 0) {
-            // Get previous close for crossunder detection
-            BigDecimal prevClose = n > 1 ? candles.get(n - 2).getClose() : close;
-            
-            // Check for support break (crossunder)
-            if (prevClose.compareTo(state.currentSupport) >= 0 && 
-                close.compareTo(state.currentSupport) < 0) {
+        // Check for support break
+        if (showBreaks && srState.currentSupport.compareTo(BigDecimal.ZERO) > 0 && srState.prevClose != null) {
+            // Check for crossunder (previous close >= support, current close < support)
+            if (srState.prevClose.compareTo(srState.currentSupport) >= 0 && 
+                close.compareTo(srState.currentSupport) < 0) {
                 
                 // Check for bear wick
                 BigDecimal bodySize = open.subtract(close).abs();
                 BigDecimal upperWick = high.subtract(open.max(close));
                 
                 if (upperWick.compareTo(bodySize) > 0) {
-                    // Bear wick
+                    // Bear wick (strong rejection)
                     breakType = "bearWick";
-                    markers.add(createBreakMarker(currentCandle, "Bear Wick", 
+                    markers.add(createBreakMarker(candle, "Bear Wick", 
                                                   "#FF0000", "above", "triangle_down"));
                 } else if (volumeOsc.doubleValue() > volumeThreshold) {
-                    // Regular break with volume
+                    // Regular break with volume confirmation
                     breakType = "supportBreak";
-                    markers.add(createBreakMarker(currentCandle, "B", 
+                    markers.add(createBreakMarker(candle, "B", 
                                                   "#FF0000", "above", "circle"));
                 }
             }
         }
         
-        if (showBreaks && state.currentResistance.compareTo(BigDecimal.ZERO) > 0) {
-            // Get previous close for crossover detection
-            BigDecimal prevClose = n > 1 ? candles.get(n - 2).getClose() : close;
-            
-            // Check for resistance break (crossover)
-            if (prevClose.compareTo(state.currentResistance) <= 0 && 
-                close.compareTo(state.currentResistance) > 0) {
+        // Check for resistance break
+        if (showBreaks && srState.currentResistance.compareTo(BigDecimal.ZERO) > 0 && srState.prevClose != null) {
+            // Check for crossover (previous close <= resistance, current close > resistance)
+            if (srState.prevClose.compareTo(srState.currentResistance) <= 0 && 
+                close.compareTo(srState.currentResistance) > 0) {
                 
                 // Check for bull wick
                 BigDecimal bodySize = close.subtract(open).abs();
                 BigDecimal lowerWick = open.min(close).subtract(low);
                 
                 if (lowerWick.compareTo(bodySize) > 0) {
-                    // Bull wick
+                    // Bull wick (strong rejection)
                     breakType = "bullWick";
-                    markers.add(createBreakMarker(currentCandle, "Bull Wick", 
+                    markers.add(createBreakMarker(candle, "Bull Wick", 
                                                   "#00FF00", "below", "triangle_up"));
                 } else if (volumeOsc.doubleValue() > volumeThreshold) {
-                    // Regular break with volume
+                    // Regular break with volume confirmation
                     breakType = "resistanceBreak";
-                    markers.add(createBreakMarker(currentCandle, "B", 
+                    markers.add(createBreakMarker(candle, "B", 
                                                   "#00FF00", "below", "circle"));
                 }
             }
         }
         
-        // Create S/R lines (use stable times for proper deduplication)
+        // Create S/R lines
         List<Map<String, Object>> lines = new ArrayList<>();
         
-        if (state.currentResistance.compareTo(BigDecimal.ZERO) > 0 && state.resistanceTime != null) {
-            // Use fixed end time (resistance time + 20 bars) for stable deduplication
-            long fixedEndTime = state.resistanceTime.getEpochSecond() + (20 * 60); // Assume 1min candles
-            lines.add(createSRLine(state.resistanceTime, 
+        if (srState.currentResistance.compareTo(BigDecimal.ZERO) > 0 && srState.resistanceTime != null) {
+            // Use fixed end time for stable deduplication
+            long fixedEndTime = srState.resistanceTime.getEpochSecond() + (20 * 60);
+            lines.add(createSRLine(srState.resistanceTime, 
                                   Instant.ofEpochSecond(fixedEndTime),
-                                  state.currentResistance, resistanceColor, "Resistance"));
+                                  srState.currentResistance, resistanceColor, "Resistance"));
         }
         
-        if (state.currentSupport.compareTo(BigDecimal.ZERO) > 0 && state.supportTime != null) {
-            // Use fixed end time (support time + 20 bars) for stable deduplication
-            long fixedEndTime = state.supportTime.getEpochSecond() + (20 * 60); // Assume 1min candles
-            lines.add(createSRLine(state.supportTime, 
+        if (srState.currentSupport.compareTo(BigDecimal.ZERO) > 0 && srState.supportTime != null) {
+            // Use fixed end time for stable deduplication
+            long fixedEndTime = srState.supportTime.getEpochSecond() + (20 * 60);
+            lines.add(createSRLine(srState.supportTime, 
                                   Instant.ofEpochSecond(fixedEndTime),
-                                  state.currentSupport, supportColor, "Support"));
+                                  srState.currentSupport, supportColor, "Support"));
         }
+        
+        // Update previous close for next iteration
+        srState.prevClose = close;
         
         // Build values
         Map<String, BigDecimal> values = new HashMap<>();
-        values.put("resistance", state.currentResistance);
-        values.put("support", state.currentSupport);
+        values.put("resistance", srState.currentResistance);
+        values.put("support", srState.currentSupport);
         values.put("volumeOsc", volumeOsc);
         values.put("breakType", breakType != null ? new BigDecimal(1) : BigDecimal.ZERO);
         
-        Map<String, Object> output = new HashMap<>();
-        output.put("values", values);
-        output.put("state", state);
-        output.put("lines", lines);
-        output.put("markers", markers);
+        Map<String, Object> result = new HashMap<>();
+        result.put("values", values);
+        result.put("state", srState);
+        result.put("lines", lines);
+        result.put("markers", markers);
         
-        return output;
+        return result;
+    }
+    
+    /**
+     * Process a single tick for real-time updates (optional)
+     * S/R levels don't update on individual ticks, so we use the default implementation
+     */
+    @Override
+    public Map<String, Object> onNewTick(BigDecimal price, Map<String, Object> params, Object state) {
+        // S/R levels only update on new candles, not on ticks
+        return Map.of(
+            "values", Map.of(),
+            "state", state != null ? state : new SRBreaksState()
+        );
     }
     
     /**
@@ -404,15 +485,6 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         return marker.toMap();
     }
     
-    private Map<String, BigDecimal> createEmptyResult() {
-        Map<String, BigDecimal> result = new HashMap<>();
-        result.put("resistance", BigDecimal.ZERO);
-        result.put("support", BigDecimal.ZERO);
-        result.put("volumeOsc", BigDecimal.ZERO);
-        result.put("breakType", BigDecimal.ZERO);
-        return result;
-    }
-    
     @Override
     public Map<String, IndicatorMetadata> getVisualizationMetadata(Map<String, Object> params) {
         params = mergeWithDefaults(params);
@@ -437,20 +509,6 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         int leftBars = getIntParameter(params, "leftBars", 15);
         int rightBars = getIntParameter(params, "rightBars", 15);
         return leftBars + rightBars + 10; // +10 for volume EMA
-    }
-    
-    protected double getDoubleParameter(Map<String, Object> params, String key, double defaultValue) {
-        Object value = params.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        if (value instanceof Double) {
-            return (Double) value;
-        }
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        return Double.parseDouble(value.toString());
     }
 }
 
