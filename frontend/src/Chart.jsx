@@ -294,9 +294,23 @@ export const ChartComponent = props => {
                         const instanceKey = indicatorData.instanceKey;
                         
                         console.log(`Processing indicator: ${indicatorId} (${instanceKey})`);
+                        console.log('Raw indicatorData structure:', {
+                            hasMetadata: !!indicatorData.metadata,
+                            metadataKeys: indicatorData.metadata ? Object.keys(indicatorData.metadata) : [],
+                            hasSeries: !!indicatorData.series,
+                            seriesKeys: indicatorData.series ? Object.keys(indicatorData.series) : [],
+                            hasShapes: !!indicatorData.shapes,
+                            shapesKeys: indicatorData.shapes ? Object.keys(indicatorData.shapes) : []
+                        });
                         
-                        // Extract metadata - it's nested under the indicator ID
-                        const metadata = indicatorData.metadata ? indicatorData.metadata[indicatorId] : null;
+                        // Extract metadata - it might be nested under indicator ID or at top level
+                        let metadata = indicatorData.metadata ? indicatorData.metadata[indicatorId] : null;
+                        
+                        // If not found under indicator ID, use the whole metadata object
+                        if (!metadata && indicatorData.metadata) {
+                            console.log('Metadata not nested under indicator ID, using top-level metadata');
+                            metadata = indicatorData.metadata;
+                        }
                         
                         if (!metadata) {
                             console.warn(`No metadata found for indicator ${indicatorId}`);
@@ -304,23 +318,45 @@ export const ChartComponent = props => {
                         }
                         
                         // Create API response structure that matches the old format
+                        // Note: shapes can be at top level (indicatorData.shapes) or in metadata
+                        const shapes = indicatorData.shapes || metadata.shapes || {};
                         const apiResponse = {
                             metadata: {
                                 [indicatorId]: metadata
                             },
                             series: indicatorData.series || {},
-                            shapes: metadata.shapes || {}
+                            shapes: shapes
                         };
+                        
+                        // Ensure each series metadata has a displayName
+                        Object.keys(apiResponse.metadata).forEach(seriesKey => {
+                            const seriesMeta = apiResponse.metadata[seriesKey];
+                            if (seriesMeta && !seriesMeta.displayName) {
+                                // Generate human-readable display name from key
+                                // Convert camelCase/PascalCase to Title Case with spaces
+                                const displayName = seriesKey
+                                    .replace(/([A-Z])/g, ' $1') // Add space before capitals
+                                    .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
+                                    .trim();
+                                seriesMeta.displayName = displayName;
+                                console.log(`Generated displayName for ${seriesKey}: "${displayName}"`);
+                            }
+                        });
                         
                         console.log(`Indicator ${indicatorId} data:`, {
                             hasMetadata: !!metadata,
-                            hasShapes: !!apiResponse.shapes,
-                            boxCount: apiResponse.shapes?.boxes?.length || 0,
-                            lineCount: apiResponse.shapes?.lines?.length || 0,
-                            markerCount: apiResponse.shapes?.markers?.length || 0,
-                            arrowCount: apiResponse.shapes?.arrows?.length || 0,
-                            markerShapeCount: apiResponse.shapes?.markerShapes?.length || 0,
-                            seriesKeys: Object.keys(apiResponse.series)
+                            hasShapes: !!shapes,
+                            shapesLocation: indicatorData.shapes ? 'top-level' : (metadata.shapes ? 'metadata' : 'none'),
+                            boxCount: shapes?.boxes?.length || 0,
+                            lineCount: shapes?.lines?.length || 0,
+                            markerCount: shapes?.markers?.length || 0,
+                            arrowCount: shapes?.arrows?.length || 0,
+                            markerShapeCount: shapes?.markerShapes?.length || 0,
+                            seriesKeys: Object.keys(apiResponse.series),
+                            seriesCount: Object.values(apiResponse.series).filter(s => Array.isArray(s)).length,
+                            displayNames: Object.keys(apiResponse.metadata).map(k => 
+                                `${k}: ${apiResponse.metadata[k]?.displayName || 'none'}`
+                            )
                         });
                     
                         // Add series data and shapes (lines, markers) if present
@@ -454,15 +490,16 @@ export const ChartComponent = props => {
                             allArrows.push(...transformedArrows);
                         }
                         
-                        // Collect marker shapes from shapes if present
-                        if (apiResponse.shapes?.markerShapes && Array.isArray(apiResponse.shapes.markerShapes)) {
-                            console.log(`Adding ${apiResponse.shapes.markerShapes.length} marker shapes from indicator ${instanceKey}`);
+                        // Collect markers from shapes if present (support both 'markers' and 'markerShapes')
+                        const markersArray = apiResponse.shapes?.markers || apiResponse.shapes?.markerShapes;
+                        if (markersArray && Array.isArray(markersArray)) {
+                            console.log(`Adding ${markersArray.length} markers from indicator ${instanceKey}`);
                             
-                            // Transform API marker shape format to MarkerPrimitive format
-                            const transformedMarkerShapes = apiResponse.shapes.markerShapes.map(marker => ({
+                            // Transform API marker format to MarkerPrimitive format
+                            const transformedMarkerShapes = markersArray.map(marker => ({
                                 time: marker.time,
                                 price: marker.price,
-                                shape: marker.shape || 'circle',
+                                shape: marker.shape || marker.position || 'circle',
                                 color: marker.color || '#2196F3',
                                 size: marker.size || 6,
                                 borderColor: marker.borderColor,
@@ -851,6 +888,10 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [strategyData, setStrategyData] = useState({});
+    const [wsStatus, setWsStatus] = useState('disconnected'); // 'connecting', 'connected', 'disconnected', 'error'
+    const [wsMessage, setWsMessage] = useState('');
+    const [wsReconnectTrigger, setWsReconnectTrigger] = useState(0);
+    const wsRef = useRef(null);
 
     // Fetch strategy visualization data
     const fetchStrategyData = async (strategyId, symbol) => {
@@ -887,7 +928,7 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                 setError(null);
                 
                 const providerName = typeof provider === 'string' ? provider : (provider.name || provider);
-                const url = `http://localhost:8080/api/trading/historical/${providerName}/${symbol}/${interval}?limit=1000`;
+                const url = `http://localhost:8080/api/trading/historical/${providerName}/${symbol}/${interval}?limit=5000`;
                 
                 console.log('Fetching data from:', url);
                 const response = await fetch(url);
@@ -979,18 +1020,206 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
         fetchAllStrategyData();
     }, [activeStrategies, symbol]);
 
+    // WebSocket connection for real-time indicator updates
+    useEffect(() => {
+        if (!provider || !symbol || !interval) {
+            setWsStatus('disconnected');
+            setWsMessage('No connection');
+            return;
+        }
+
+        // Close existing connection if any
+        if (wsRef.current) {
+            console.log('Closing existing WebSocket connection');
+            wsRef.current.close();
+            wsRef.current = null;
+        }
+
+        // Set connecting state
+        setWsStatus('connecting');
+        setWsMessage('Connecting...');
+
+        // Create new WebSocket connection
+        const ws = new WebSocket('ws://localhost:8080/indicator-ws');
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+            console.log('✅ Connected to indicator WebSocket');
+            setWsStatus('connected');
+            setWsMessage('Connected');
+            
+            // Subscribe to the current context
+            const providerName = typeof provider === 'string' ? provider : (provider.name || provider);
+            ws.send(JSON.stringify({
+                action: 'subscribeContext',
+                provider: providerName,
+                symbol: symbol,
+                interval: interval
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                
+                switch (message.type) {
+                    case 'connected':
+                        console.log('📡', message.message);
+                        setWsStatus('connected');
+                        setWsMessage(message.message || 'Connected');
+                        break;
+                        
+                    case 'contextSubscribed':
+                        console.log('✅ Subscribed to indicator context:', message.context);
+                        console.log('   Active instances:', message.activeInstances);
+                        setWsStatus('connected');
+                        setWsMessage(`Subscribed: ${message.activeInstances || 0} indicators`);
+                        break;
+                        
+                    case 'indicatorUpdate':
+                        console.log('📊 Indicator Update:', {
+                            indicator: message.indicatorId,
+                            instanceKey: message.instanceKey,
+                            time: new Date(message.timestamp),
+                            values: message.values
+                        });
+                        
+                        // Update status message with last update time
+                        const updateTime = new Date(message.timestamp).toLocaleTimeString();
+                        setWsMessage(`Last update: ${updateTime}`);
+                        
+                        // Trigger indicators refresh to get latest data
+                        // This will cause the enabledIndicators effect to re-fetch
+                        window.dispatchEvent(new Event('indicatorsChanged'));
+                        break;
+                        
+                    case 'error':
+                        console.error('❌ WebSocket error:', message.error);
+                        setWsStatus('error');
+                        setWsMessage(`Error: ${message.error}`);
+                        break;
+                        
+                    default:
+                        console.log('📨 WebSocket message:', message);
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                setWsStatus('error');
+                setWsMessage('Parse error');
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('❌ WebSocket error:', error);
+            setWsStatus('error');
+            setWsMessage('Connection error');
+        };
+
+        ws.onclose = () => {
+            console.log('❌ Disconnected from indicator WebSocket');
+            setWsStatus('disconnected');
+            setWsMessage('Disconnected');
+        };
+
+        // Cleanup on unmount or when dependencies change
+        return () => {
+            if (ws.readyState === WebSocket.OPEN) {
+                console.log('Closing WebSocket connection');
+                ws.close();
+            }
+            wsRef.current = null;
+            setWsStatus('disconnected');
+            setWsMessage('Disconnected');
+        };
+    }, [provider, symbol, interval, wsReconnectTrigger]);
+
+    // Get status badge colors
+    const getStatusColors = () => {
+        switch (wsStatus) {
+            case 'connected':
+                return {
+                    bg: 'bg-green-500/20',
+                    border: 'border-green-400/50',
+                    text: 'text-green-300',
+                    dot: 'bg-green-400',
+                    icon: '✓'
+                };
+            case 'connecting':
+                return {
+                    bg: 'bg-yellow-500/20',
+                    border: 'border-yellow-400/50',
+                    text: 'text-yellow-300',
+                    dot: 'bg-yellow-400 animate-pulse',
+                    icon: '⟳'
+                };
+            case 'error':
+                return {
+                    bg: 'bg-red-500/20',
+                    border: 'border-red-400/50',
+                    text: 'text-red-300',
+                    dot: 'bg-red-400',
+                    icon: '✕'
+                };
+            case 'disconnected':
+            default:
+                return {
+                    bg: 'bg-gray-500/20',
+                    border: 'border-gray-400/50',
+                    text: 'text-gray-300',
+                    dot: 'bg-gray-400',
+                    icon: '○'
+                };
+        }
+    };
+
+    const statusColors = getStatusColors();
+
+    // Reconnect function
+    const handleReconnect = () => {
+        if (wsRef.current) {
+            wsRef.current.close();
+            wsRef.current = null;
+        }
+        // Force re-run of the WebSocket effect by incrementing trigger
+        setWsReconnectTrigger(prev => prev + 1);
+    };
+
     return (
-        <ChartComponent 
-            data={data} 
-            loading={loading} 
-            error={error}
-            realCount={realCount}
-            activeStrategies={activeStrategies}
-            strategyData={strategyData}
-            enabledIndicators={enabledIndicators}
-            provider={provider}
-            symbol={symbol}
-            interval={interval}
-        />
+        <div className="relative w-full h-full">
+            {/* WebSocket Status Indicator */}
+            <div className="absolute top-3 right-3 z-10">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md ${statusColors.bg} ${statusColors.border} ${statusColors.text} shadow-lg`}>
+                    <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${statusColors.dot}`}></div>
+                        <span className="text-xs font-medium">{statusColors.icon} Indicators</span>
+                    </div>
+                    <div className="text-xs opacity-80 border-l border-white/20 pl-2">
+                        {wsMessage}
+                    </div>
+                    {(wsStatus === 'disconnected' || wsStatus === 'error') && (
+                        <button
+                            onClick={handleReconnect}
+                            className="ml-2 px-2 py-0.5 text-xs rounded bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
+                            title="Reconnect"
+                        >
+                            ⟳
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <ChartComponent 
+                data={data} 
+                loading={loading} 
+                error={error}
+                realCount={realCount}
+                activeStrategies={activeStrategies}
+                strategyData={strategyData}
+                enabledIndicators={enabledIndicators}
+                provider={provider}
+                symbol={symbol}
+                interval={interval}
+            />
+        </div>
     );
 }

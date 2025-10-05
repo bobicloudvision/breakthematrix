@@ -144,15 +144,18 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         return params;
     }
     
+    /**
+     * Initialize the indicator with historical data and parameters, returns initial state
+     * 
+     * @param historicalCandles Historical candlestick data for initialization
+     * @param params Configuration parameters
+     * @return Initial state object (KNNState)
+     */
     @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
-        params = mergeWithDefaults(params);
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        // Validate parameters
         validateParameters(params);
-        
-        int minRequired = getMinRequiredCandles(params);
-        if (candles == null || candles.size() < minRequired) {
-            return createEmptyResult();
-        }
+        params = mergeWithDefaults(params);
         
         // Get parameters
         String priceValue = getStringParameter(params, "priceValue", "hl2");
@@ -163,56 +166,66 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         int smoothingPeriod = getIntParameter(params, "smoothingPeriod", 50);
         int windowSize = Math.max(numberOfClosestValues, 30);
         
-        // Calculate value_in based on priceValue selection
-        List<BigDecimal> valueIn = calculateValueInput(candles, priceValue, priceValueLength);
+        // Create initial state
+        KNNState state = new KNNState();
+        state.priceValue = priceValue;
+        state.priceValueLength = priceValueLength;
+        state.targetValue = targetValue;
+        state.targetValueLength = targetValueLength;
+        state.numberOfClosestValues = numberOfClosestValues;
+        state.smoothingPeriod = smoothingPeriod;
+        state.windowSize = windowSize;
         
-        // Calculate target_in based on targetValue selection
-        List<BigDecimal> targetIn = calculateTargetInput(candles, targetValue, targetValueLength);
-        
-        if (valueIn.isEmpty() || targetIn.isEmpty()) {
-            return createEmptyResult();
+        // Process historical candles to build initial state
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            for (CandlestickData candle : historicalCandles) {
+                // Add raw price for value input calculation
+                BigDecimal rawPriceValue = extractRawPrice(candle, priceValue);
+                state.rawPriceValues.add(rawPriceValue);
+                
+                // Add close price for target input calculation
+                state.rawTargetValues.add(candle.getClose());
+                
+                // Calculate smoothed values if we have enough data
+                if (state.rawPriceValues.size() >= priceValueLength) {
+                    List<BigDecimal> window = state.rawPriceValues.subList(
+                        state.rawPriceValues.size() - priceValueLength,
+                        state.rawPriceValues.size()
+                    );
+                    BigDecimal smoothedPrice = calculateSmoothedValue(window, priceValue, priceValueLength);
+                    state.valueIn.add(smoothedPrice);
+                }
+                
+                if (state.rawTargetValues.size() >= targetValueLength) {
+                    List<BigDecimal> window = state.rawTargetValues.subList(
+                        state.rawTargetValues.size() - targetValueLength,
+                        state.rawTargetValues.size()
+                    );
+                    BigDecimal smoothedTarget = TechnicalIndicators.calculateRMA(window, targetValueLength);
+                    state.targetIn.add(smoothedTarget);
+                }
+            }
         }
         
-        // Calculate KNN MA
-        BigDecimal knnMA = meanOfKClosest(valueIn, targetIn.get(targetIn.size() - 1), 
-                                         numberOfClosestValues, windowSize);
-        
-        // Calculate knnMA_ (weighted moving average of knnMA)
-        // In Pine Script: ta.wma(knnMA, 5)
-        // For single point calculation, we approximate
-        BigDecimal knnMA_ = knnMA; // Simplified - in full implementation, maintain history
-        
-        // Calculate MAknn_ (running moving average)
-        BigDecimal MAknn_ = knnMA; // Simplified - would need full history for accurate RMA
-        
-        // Calculate KNN prediction
-        BigDecimal close = candles.get(candles.size() - 1).getClose();
-        BigDecimal price = knnMA.add(close).divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
-        
-        // KNN prediction (simplified - would need more history for full implementation)
-        BigDecimal knnPrediction = BigDecimal.ZERO;
-        
-        Map<String, BigDecimal> result = new HashMap<>();
-        result.put("knnClassifier", knnMA_);
-        result.put("avgKnnClassifier", MAknn_);
-        result.put("prediction", knnPrediction);
-        
-        return result;
+        return state;
     }
     
+    /**
+     * Process a single historical or live candle, returns updated state and values
+     * 
+     * @param candle The candle to process
+     * @param params Configuration parameters
+     * @param state Current state from previous call (or from onInit)
+     * @return Map containing "values" (indicator values) and "state" (updated state)
+     */
     @Override
-    public Map<String, Object> calculateProgressive(List<CandlestickData> candles,
-                                                   Map<String, Object> params,
-                                                   Object previousState) {
-        params = mergeWithDefaults(params);
-        
-        int minRequired = getMinRequiredCandles(params);
-        if (candles == null || candles.size() < minRequired) {
-            return Map.of(
-                "values", createEmptyResult(),
-                "state", new KNNState()
-            );
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+        if (candle == null) {
+            throw new IllegalArgumentException("Candle cannot be null");
         }
+        
+        // Merge with defaults
+        params = mergeWithDefaults(params);
         
         // Get parameters
         String priceValue = getStringParameter(params, "priceValue", "hl2");
@@ -223,90 +236,121 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         int smoothingPeriod = getIntParameter(params, "smoothingPeriod", 50);
         int windowSize = Math.max(numberOfClosestValues, 30);
         
-        // Initialize or get state
-        KNNState state = (previousState instanceof KNNState) ? 
-            (KNNState) previousState : new KNNState();
+        // Cast or create state
+        KNNState knnState = (state instanceof KNNState) ? (KNNState) state : new KNNState();
+        knnState.priceValue = priceValue;
+        knnState.priceValueLength = priceValueLength;
+        knnState.targetValue = targetValue;
+        knnState.targetValueLength = targetValueLength;
+        knnState.numberOfClosestValues = numberOfClosestValues;
+        knnState.smoothingPeriod = smoothingPeriod;
+        knnState.windowSize = windowSize;
         
-        // Calculate value_in for all candles
-        List<BigDecimal> valueIn = calculateValueInput(candles, priceValue, priceValueLength);
+        // Add raw price values
+        BigDecimal rawPriceValue = extractRawPrice(candle, priceValue);
+        knnState.rawPriceValues.add(rawPriceValue);
+        if (knnState.rawPriceValues.size() > smoothingPeriod + windowSize + 20) {
+            knnState.rawPriceValues.remove(0);
+        }
         
-        // Calculate target_in for all candles
-        List<BigDecimal> targetIn = calculateTargetInput(candles, targetValue, targetValueLength);
+        knnState.rawTargetValues.add(candle.getClose());
+        if (knnState.rawTargetValues.size() > smoothingPeriod + windowSize + 20) {
+            knnState.rawTargetValues.remove(0);
+        }
         
-        if (valueIn.isEmpty() || targetIn.isEmpty()) {
-            return Map.of(
-                "values", createEmptyResult(),
-                "state", state
+        // Calculate smoothed price value
+        if (knnState.rawPriceValues.size() >= priceValueLength) {
+            List<BigDecimal> window = knnState.rawPriceValues.subList(
+                knnState.rawPriceValues.size() - priceValueLength,
+                knnState.rawPriceValues.size()
             );
+            BigDecimal smoothedPrice = calculateSmoothedValue(window, priceValue, priceValueLength);
+            knnState.valueIn.add(smoothedPrice);
+            if (knnState.valueIn.size() > smoothingPeriod + windowSize + 10) {
+                knnState.valueIn.remove(0);
+            }
+        }
+        
+        // Calculate smoothed target value
+        if (knnState.rawTargetValues.size() >= targetValueLength) {
+            List<BigDecimal> window = knnState.rawTargetValues.subList(
+                knnState.rawTargetValues.size() - targetValueLength,
+                knnState.rawTargetValues.size()
+            );
+            BigDecimal smoothedTarget = TechnicalIndicators.calculateRMA(window, targetValueLength);
+            knnState.targetIn.add(smoothedTarget);
+            if (knnState.targetIn.size() > smoothingPeriod + windowSize + 10) {
+                knnState.targetIn.remove(0);
+            }
+        }
+        
+        // Check if we have enough data
+        if (knnState.valueIn.isEmpty() || knnState.targetIn.isEmpty()) {
+            Map<String, BigDecimal> values = createEmptyResult();
+            return Map.of("values", values, "state", knnState);
         }
         
         // Calculate KNN MA for current candle
-        BigDecimal currentTarget = targetIn.get(targetIn.size() - 1);
-        BigDecimal knnMA = meanOfKClosest(valueIn, currentTarget, numberOfClosestValues, windowSize);
+        BigDecimal currentTarget = knnState.targetIn.get(knnState.targetIn.size() - 1);
+        BigDecimal knnMA = meanOfKClosest(knnState.valueIn, currentTarget, numberOfClosestValues, windowSize);
         
         // Update KNN MA history
-        state.knnMAHistory.add(knnMA);
-        if (state.knnMAHistory.size() > smoothingPeriod + 10) {
-            state.knnMAHistory.remove(0);
+        knnState.knnMAHistory.add(knnMA);
+        if (knnState.knnMAHistory.size() > smoothingPeriod + 10) {
+            knnState.knnMAHistory.remove(0);
         }
         
         // Calculate knnMA_ (weighted moving average)
         BigDecimal knnMA_;
-        if (state.knnMAHistory.size() >= 5) {
-            knnMA_ = TechnicalIndicators.calculateWMA(state.knnMAHistory, Math.min(5, state.knnMAHistory.size()));
+        if (knnState.knnMAHistory.size() >= 5) {
+            knnMA_ = TechnicalIndicators.calculateWMA(knnState.knnMAHistory, Math.min(5, knnState.knnMAHistory.size()));
         } else {
             knnMA_ = knnMA;
         }
         
         // Calculate MAknn_ (running moving average)
         BigDecimal MAknn_;
-        if (state.knnMAHistory.size() >= smoothingPeriod) {
-            MAknn_ = TechnicalIndicators.calculateRMA(state.knnMAHistory, smoothingPeriod);
+        if (knnState.knnMAHistory.size() >= smoothingPeriod) {
+            MAknn_ = TechnicalIndicators.calculateRMA(knnState.knnMAHistory, smoothingPeriod);
         } else {
             MAknn_ = knnMA_;
         }
         
         // Calculate KNN prediction
-        BigDecimal close = candles.get(candles.size() - 1).getClose();
+        BigDecimal close = candle.getClose();
         BigDecimal price = knnMA.add(close).divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
         
         // Update price history for KNN classifier
-        state.priceHistory.add(price);
-        if (state.priceHistory.size() > 20) {
-            state.priceHistory.remove(0);
+        knnState.priceHistory.add(price);
+        if (knnState.priceHistory.size() > 20) {
+            knnState.priceHistory.remove(0);
         }
         
         // Update smoothed values for KNN prediction
-        state.closeHistory.add(knnMA);
-        state.openHistory.add(knnMA_);
-        if (state.closeHistory.size() > smoothingPeriod + 10) {
-            state.closeHistory.remove(0);
-            state.openHistory.remove(0);
+        knnState.closeHistory.add(knnMA);
+        knnState.openHistory.add(knnMA_);
+        if (knnState.closeHistory.size() > smoothingPeriod + 10) {
+            knnState.closeHistory.remove(0);
+            knnState.openHistory.remove(0);
         }
-        
-        // Calculate c and o for KNN prediction
-        BigDecimal c = state.closeHistory.size() >= smoothingPeriod ?
-            TechnicalIndicators.calculateRMA(state.closeHistory, smoothingPeriod) : knnMA;
-        BigDecimal o = state.openHistory.size() >= smoothingPeriod ?
-            TechnicalIndicators.calculateRMA(state.openHistory, smoothingPeriod) : knnMA_;
         
         // KNN prediction
-        BigDecimal knnPredictionRaw = knnClassifier(state.priceHistory, state.closeHistory, 
-                                                   state.openHistory, price, smoothingPeriod);
+        BigDecimal knnPredictionRaw = knnClassifier(knnState.priceHistory, knnState.closeHistory, 
+                                                   knnState.openHistory, price, smoothingPeriod);
         
         // Smooth prediction
-        state.predictionHistory.add(knnPredictionRaw);
-        if (state.predictionHistory.size() > 5) {
-            state.predictionHistory.remove(0);
+        knnState.predictionHistory.add(knnPredictionRaw);
+        if (knnState.predictionHistory.size() > 5) {
+            knnState.predictionHistory.remove(0);
         }
         
-        BigDecimal knnPrediction = state.predictionHistory.size() >= 3 ?
-            TechnicalIndicators.calculateWMA(state.predictionHistory, Math.min(3, state.predictionHistory.size())) :
+        BigDecimal knnPrediction = knnState.predictionHistory.size() >= 3 ?
+            TechnicalIndicators.calculateWMA(knnState.predictionHistory, Math.min(3, knnState.predictionHistory.size())) :
             knnPredictionRaw;
         
         // Determine color based on trend
         String color;
-        BigDecimal prevKnnMA = state.prevKnnMA;
+        BigDecimal prevKnnMA = knnState.prevKnnMA;
         if (prevKnnMA != null) {
             if (knnMA_.compareTo(prevKnnMA) > 0) {
                 color = getStringParameter(params, "upColor", "#00FF00");
@@ -326,11 +370,10 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         
         // List to store marker shapes
         List<Map<String, Object>> markers = new ArrayList<>();
-        CandlestickData currentCandle = candles.get(candles.size() - 1);
         
         // Signal: KNN crossed over Average KNN (BULLISH)
-        if (state.prevKnnMA != null && state.prevMAknn != null) {
-            boolean crossoverMA = state.prevKnnMA.compareTo(state.prevMAknn) <= 0 && 
+        if (knnState.prevKnnMA != null && knnState.prevMAknn != null) {
+            boolean crossoverMA = knnState.prevKnnMA.compareTo(knnState.prevMAknn) <= 0 && 
                                  knnMA_.compareTo(MAknn_) > 0;
             if (crossoverMA) {
                 signals.put("signal", "BULLISH");
@@ -339,13 +382,13 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
                 
                 // Calculate exact crossover price using linear interpolation
                 BigDecimal crossPrice = calculateCrossoverPrice(
-                    state.prevKnnMA, knnMA_,
-                    state.prevMAknn, MAknn_
+                    knnState.prevKnnMA, knnMA_,
+                    knnState.prevMAknn, MAknn_
                 );
                 
                 // Add bullish marker at exact crossover point
                 MarkerShape marker = MarkerShape.builder()
-                    .time(currentCandle.getCloseTime().getEpochSecond())
+                    .time(candle.getCloseTime().getEpochSecond())
                     .price(crossPrice)
                     .shape("circle")
                     .color("#00FF00")
@@ -357,7 +400,7 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
             }
             
             // Signal: KNN crossed under Average KNN (BEARISH)
-            boolean crossunderMA = state.prevKnnMA.compareTo(state.prevMAknn) >= 0 && 
+            boolean crossunderMA = knnState.prevKnnMA.compareTo(knnState.prevMAknn) >= 0 && 
                                   knnMA_.compareTo(MAknn_) < 0;
             if (crossunderMA) {
                 signals.put("signal", "BEARISH");
@@ -366,13 +409,13 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
                 
                 // Calculate exact crossover price using linear interpolation
                 BigDecimal crossPrice = calculateCrossoverPrice(
-                    state.prevKnnMA, knnMA_,
-                    state.prevMAknn, MAknn_
+                    knnState.prevKnnMA, knnMA_,
+                    knnState.prevMAknn, MAknn_
                 );
                 
                 // Add bearish marker at exact crossover point
                 MarkerShape marker = MarkerShape.builder()
-                    .time(currentCandle.getCloseTime().getEpochSecond())
+                    .time(candle.getCloseTime().getEpochSecond())
                     .price(crossPrice)
                     .shape("circle")
                     .color("#FF0000")
@@ -385,9 +428,9 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         }
         
         // Update state with previous values
-        state.prevKnnMA = knnMA_;
-        state.prevMAknn = MAknn_;
-        state.currentColor = color;
+        knnState.prevKnnMA = knnMA_;
+        knnState.prevMAknn = MAknn_;
+        knnState.currentColor = color;
         
         Map<String, BigDecimal> values = new HashMap<>();
         values.put("knnClassifier", knnMA_);
@@ -396,7 +439,7 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
         
         Map<String, Object> result = new HashMap<>();
         result.put("values", values);
-        result.put("state", state);
+        result.put("state", knnState);
         result.put("signals", signals);
         
         // Add markers if any were created
@@ -563,6 +606,38 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
     }
     
     /**
+     * Extract raw price from candle based on method
+     */
+    private BigDecimal extractRawPrice(CandlestickData candle, String method) {
+        return switch (method.toLowerCase()) {
+            case "open" -> candle.getOpen();
+            case "high" -> candle.getHigh();
+            case "low" -> candle.getLow();
+            case "close" -> candle.getClose();
+            default -> candle.getHigh().add(candle.getLow())
+                .divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP); // hl2
+        };
+    }
+    
+    /**
+     * Calculate smoothed value from window based on method
+     */
+    private BigDecimal calculateSmoothedValue(List<BigDecimal> window, String method, int length) {
+        if (window.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        
+        return switch (method.toLowerCase()) {
+            case "sma", "hl2" -> TechnicalIndicators.calculateSMA(window, length);
+            case "wma" -> TechnicalIndicators.calculateWMA(window, length);
+            case "ema" -> TechnicalIndicators.calculateEMA(window, length);
+            case "hma" -> TechnicalIndicators.calculateHMA(window, length);
+            case "vwap" -> TechnicalIndicators.calculateSMA(window, length); // Approximation
+            default -> TechnicalIndicators.calculateSMA(window, length);
+        };
+    }
+    
+    /**
      * Calculate value input based on selected method
      */
     private List<BigDecimal> calculateValueInput(List<CandlestickData> candles, 
@@ -685,11 +760,31 @@ public class AITrendNavigatorIndicator extends AbstractIndicator {
      * State class for progressive calculation
      */
     private static class KNNState {
+        // Configuration parameters
+        String priceValue;
+        int priceValueLength;
+        String targetValue;
+        int targetValueLength;
+        int numberOfClosestValues;
+        int smoothingPeriod;
+        int windowSize;
+        
+        // Raw values for calculation
+        List<BigDecimal> rawPriceValues = new ArrayList<>();
+        List<BigDecimal> rawTargetValues = new ArrayList<>();
+        
+        // Smoothed values
+        List<BigDecimal> valueIn = new ArrayList<>();
+        List<BigDecimal> targetIn = new ArrayList<>();
+        
+        // KNN calculation state
         List<BigDecimal> knnMAHistory = new ArrayList<>();
         List<BigDecimal> priceHistory = new ArrayList<>();
         List<BigDecimal> closeHistory = new ArrayList<>();
         List<BigDecimal> openHistory = new ArrayList<>();
         List<BigDecimal> predictionHistory = new ArrayList<>();
+        
+        // Previous values for signal detection
         BigDecimal prevKnnMA = null;
         BigDecimal prevMAknn = null;
         String currentColor = null;
