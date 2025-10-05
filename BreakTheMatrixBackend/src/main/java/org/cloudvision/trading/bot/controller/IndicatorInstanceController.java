@@ -212,9 +212,9 @@ public class IndicatorInstanceController {
      */
     @Operation(
         summary = "Update indicator instance parameters",
-        description = "Updates the parameters of an active indicator instance and recalculates all historical data with the new parameters. " +
-                     "Returns a new instance key that reflects the updated parameters. " +
-                     "The old instance will be deactivated and a new one created with the new parameters."
+        description = "Updates the parameters of an active indicator instance IN-PLACE and recalculates all historical data with the new parameters. " +
+                     "The instance key REMAINS THE SAME - no need to track a new key on the frontend. " +
+                     "The indicator is reinitialized with new parameters and all historical data is automatically recalculated."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
         description = "New parameters to apply to the indicator. The indicator will be reinitialized and all historical data recalculated.",
@@ -261,8 +261,7 @@ public class IndicatorInstanceController {
                     {
                       "success": true,
                       "message": "Indicator parameters updated successfully",
-                      "oldInstanceKey": "Binance:BTCUSDT:5m:sma:7a8b9c",
-                      "newInstanceKey": "Binance:BTCUSDT:5m:sma:f3e2d1",
+                      "instanceKey": "Binance:BTCUSDT:5m:sma:7a8b9c",
                       "details": {
                         "indicatorId": "sma",
                         "provider": "Binance",
@@ -275,7 +274,7 @@ public class IndicatorInstanceController {
                           "period": 50,
                           "color": "#2962FF"
                         },
-                        "createdAt": "2025-10-05T10:30:00Z",
+                        "updatedAt": "2025-10-05T10:30:00Z",
                         "initializedWithCandles": 50,
                         "historicalResultsStored": 4950
                       }
@@ -295,47 +294,46 @@ public class IndicatorInstanceController {
     })
     @PatchMapping("/{instanceKey}")
     public ResponseEntity<?> updateIndicatorParams(
-            @PathVariable @Parameter(description = "Current instance key") String instanceKey,
+            @PathVariable @Parameter(description = "Instance key (will remain the same after update)") String instanceKey,
             @RequestBody UpdateParamsRequest request) {
         
         try {
-            // Get old instance for comparison
-            IndicatorInstance oldInstance = instanceManager.getInstance(instanceKey);
+            // Get instance and save old params for comparison
+            IndicatorInstance instance = instanceManager.getInstance(instanceKey);
             
-            if (oldInstance == null) {
+            if (instance == null) {
                 return ResponseEntity.status(404).body(Map.of(
                     "success", false,
                     "error", "Instance not found: " + instanceKey
                 ));
             }
             
-            Map<String, Object> oldParams = oldInstance.getParams();
+            Map<String, Object> oldParams = new HashMap<>(instance.getParams());
             
-            // Update parameters and get new instance key
-            String newInstanceKey = instanceManager.updateIndicatorParams(
+            // Update parameters in-place (same instance key)
+            instanceManager.updateIndicatorParams(
                 instanceKey,
                 request.getParams() != null ? request.getParams() : new HashMap<>()
             );
             
-            // Get new instance
-            IndicatorInstance newInstance = instanceManager.getInstance(newInstanceKey);
+            // Get updated instance (same key, updated data)
+            IndicatorInstance updatedInstance = instanceManager.getInstance(instanceKey);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Indicator parameters updated successfully");
-            response.put("oldInstanceKey", instanceKey);
-            response.put("newInstanceKey", newInstanceKey);
+            response.put("instanceKey", instanceKey); // Same key!
             
             Map<String, Object> details = new HashMap<>();
-            details.put("indicatorId", newInstance.getIndicatorId());
-            details.put("provider", newInstance.getProvider());
-            details.put("symbol", newInstance.getSymbol());
-            details.put("interval", newInstance.getInterval());
+            details.put("indicatorId", updatedInstance.getIndicatorId());
+            details.put("provider", updatedInstance.getProvider());
+            details.put("symbol", updatedInstance.getSymbol());
+            details.put("interval", updatedInstance.getInterval());
             details.put("oldParams", oldParams);
-            details.put("newParams", newInstance.getParams());
-            details.put("createdAt", newInstance.getCreatedAt());
-            details.put("initializedWithCandles", newInstance.getState().getCandleCount());
-            details.put("historicalResultsStored", newInstance.getHistoricalResultCount());
+            details.put("newParams", updatedInstance.getParams());
+            details.put("updatedAt", updatedInstance.getLastUpdate());
+            details.put("initializedWithCandles", updatedInstance.getState().getCandleCount());
+            details.put("historicalResultsStored", updatedInstance.getHistoricalResultCount());
             
             response.put("details", details);
             

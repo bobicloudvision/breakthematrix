@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IndicatorConfigModal } from './IndicatorConfigModal';
 
-export function IndicatorsTab() {
+export function IndicatorsTab({ onOpenConfigInSidebar }) {
   const [indicators, setIndicators] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedIndicator, setSelectedIndicator] = useState(null);
-  const [editingInstance, setEditingInstance] = useState(null); // Track which instance is being edited
   const [showBrowseModal, setShowBrowseModal] = useState(false); // Control browse modal
   const [searchQuery, setSearchQuery] = useState(''); // Search filter
   const [enabledIndicators, setEnabledIndicators] = useState([]);
@@ -69,15 +66,16 @@ export function IndicatorsTab() {
     fetchActiveInstances();
   }, []);
 
-  const getInitialParams = (indicatorId) => {
+  const getInitialParams = (instanceToEdit = null) => {
     // If editing an existing instance, return its params
-    if (editingInstance) {
+    if (instanceToEdit) {
       return {
-        provider: editingInstance.provider,
-        symbol: editingInstance.symbol,
-        interval: editingInstance.interval,
+        provider: instanceToEdit.provider,
+        symbol: instanceToEdit.symbol,
+        interval: instanceToEdit.interval,
         count: 5000,
-        params: editingInstance.params || {}
+        params: instanceToEdit.params || {},
+        instanceKey: instanceToEdit.instanceKey
       };
     }
     
@@ -92,88 +90,17 @@ export function IndicatorsTab() {
   };
 
   const handleOpenConfig = (indicator, instanceToEdit = null) => {
-    setSelectedIndicator(indicator);
-    setEditingInstance(instanceToEdit);
+    if (onOpenConfigInSidebar) {
+      const initialParams = getInitialParams(instanceToEdit);
+      const isEditing = !!instanceToEdit;
+      onOpenConfigInSidebar(indicator, initialParams, isEditing);
+    }
     setShowBrowseModal(false); // Close browse modal when opening config
-  };
-
-  const handleCloseModal = () => {
-    setSelectedIndicator(null);
-    setEditingInstance(null);
   };
 
   const handleCloseBrowseModal = () => {
     setShowBrowseModal(false);
     setSearchQuery('');
-  };
-
-  const handleApplyIndicator = async (indicatorId, params) => {
-    try {
-      // If editing, use PATCH to update the existing instance
-      if (editingInstance) {
-        const patchPayload = {
-          params: params.params || {}
-        };
-        
-        const res = await fetch(
-          `http://localhost:8080/api/indicators/instances/${encodeURIComponent(editingInstance.instanceKey)}`,
-          {
-            method: 'PATCH',
-            headers: {
-              accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(patchPayload),
-          }
-        );
-        
-        if (!res.ok) {
-          throw new Error(`Failed to update indicator: HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        console.log(`Updated indicator instance:`, data);
-      } else {
-        // Activate a new instance
-        const activatePayload = {
-          indicatorId: indicatorId,
-          provider: params.provider,
-          symbol: params.symbol,
-          interval: params.interval,
-          params: params.params || {},
-          historyCount: params.count || 5000
-        };
-        
-        const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
-          method: 'POST',
-          headers: {
-            accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(activatePayload),
-        });
-        
-        if (!res.ok) {
-          throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        console.log(`Activated indicator instance:`, data);
-      }
-      
-      // Refresh the active instances list
-      await fetchActiveInstances();
-      
-      // Trigger custom event to notify chart
-      window.dispatchEvent(new Event('indicatorsChanged'));
-      
-      // Close modal
-      setSelectedIndicator(null);
-      setEditingInstance(null);
-    } catch (e) {
-      console.error('Error applying indicator:', e);
-      setError(e.message);
-    }
   };
 
   const removeIndicator = async (instanceKey) => {
@@ -484,17 +411,6 @@ export function IndicatorsTab() {
           </div>
         </div>,
         document.body
-      )}
-
-      {/* Config Modal */}
-      {selectedIndicator && (
-        <IndicatorConfigModal
-          indicator={selectedIndicator}
-          initialParams={getInitialParams(selectedIndicator.id)}
-          onClose={handleCloseModal}
-          onApply={handleApplyIndicator}
-          isEditing={!!editingInstance}
-        />
       )}
     </div>
   );

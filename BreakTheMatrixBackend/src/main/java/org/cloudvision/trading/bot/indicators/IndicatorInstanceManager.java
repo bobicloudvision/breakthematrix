@@ -355,46 +355,94 @@ public class IndicatorInstanceManager {
     /**
      * Update parameters for an existing indicator instance and recalculate historical data
      * This will:
-     * 1. Deactivate the old instance
-     * 2. Create a new instance with updated parameters
-     * 3. Load and recalculate all historical data with new parameters
-     * 4. Return the new instance key (which will include the new params hash)
+     * 1. Keep the same instance key (no change to instance key)
+     * 2. Update the parameters on the existing instance
+     * 3. Reinitialize the indicator with new parameters
+     * 4. Reload and recalculate all historical data with new parameters
+     * 5. Return the same instance key
      * 
-     * @param oldInstanceKey The current instance key
+     * @param instanceKey The instance key
      * @param newParams The new parameters to apply
-     * @return New instance key with updated parameters
+     * @return The same instance key (unchanged)
      * @throws IllegalArgumentException if instance not found
      */
-    public String updateIndicatorParams(String oldInstanceKey, Map<String, Object> newParams) {
-        // Get the old instance
-        IndicatorInstance oldInstance = activeInstances.get(oldInstanceKey);
+    public String updateIndicatorParams(String instanceKey, Map<String, Object> newParams) {
+        // Get the instance
+        IndicatorInstance instance = activeInstances.get(instanceKey);
         
-        if (oldInstance == null) {
-            throw new IllegalArgumentException("Instance not found: " + oldInstanceKey);
+        if (instance == null) {
+            throw new IllegalArgumentException("Instance not found: " + instanceKey);
         }
         
-        // Extract context from old instance
-        String indicatorId = oldInstance.getIndicatorId();
-        String provider = oldInstance.getProvider();
-        String symbol = oldInstance.getSymbol();
-        String interval = oldInstance.getInterval();
+        // Extract context from instance
+        String indicatorId = instance.getIndicatorId();
+        String provider = instance.getProvider();
+        String symbol = instance.getSymbol();
+        String interval = instance.getInterval();
         
-        System.out.println("🔄 Updating indicator params: " + oldInstanceKey);
-        System.out.println("   Old params: " + oldInstance.getParams());
+        System.out.println("🔄 Updating indicator params: " + instanceKey);
+        System.out.println("   Old params: " + instance.getParams());
         System.out.println("   New params: " + newParams);
         
-        // Deactivate the old instance
-        deactivateIndicator(oldInstanceKey);
+        // Get the indicator implementation
+        Indicator indicator = getIndicator(indicatorId);
         
-        // Activate a new instance with the new parameters
-        // This will automatically load historical data and recalculate everything
-        String newInstanceKey = activateIndicator(indicatorId, provider, symbol, interval, newParams);
+        // Load maximum available historical candles (up to buffer limit)
+        int candlesToLoad = IndicatorInstance.MAX_HISTORY_SIZE; // 5000
         
-        System.out.println("✅ Updated indicator instance");
-        System.out.println("   Old key: " + oldInstanceKey);
-        System.out.println("   New key: " + newInstanceKey);
+        List<CandlestickData> candles = historyService.getLastNCandlesticks(
+            provider, symbol, interval, candlesToLoad
+        );
         
-        return newInstanceKey;
+        // Initialize indicator with minimum required candles for warm-up
+        int minRequired = indicator.getMinRequiredCandles(newParams);
+        Object state = indicator.onInit(
+            candles.subList(0, Math.min(minRequired, candles.size())), 
+            newParams
+        );
+        
+        // Update the instance state and params
+        instance.updateParams(newParams, state, minRequired);
+        
+        // Clear old historical results
+        instance.clearHistoricalResults();
+        
+        // Recalculate all historical data with new parameters
+        System.out.println("📊 Recalculating historical buffer with " + candles.size() + " candles...");
+        for (int i = minRequired; i < candles.size(); i++) {
+            CandlestickData candle = candles.get(i);
+            
+            // Process the candle with new state
+            Map<String, Object> result = indicator.onNewCandle(candle, newParams, instance.getState().getState());
+            
+            // Extract values and new state
+            @SuppressWarnings("unchecked")
+            Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+            Object newState = result.get("state");
+            
+            // Extract additional data
+            Map<String, Object> additionalData = extractAdditionalData(result);
+            
+            // Update state
+            instance.getState().setState(newState);
+            instance.getState().incrementCandleCount();
+            
+            // Create and store result
+            IndicatorResult indicatorResult = new IndicatorResult(
+                candle.getOpenTime(),
+                values != null ? values : Map.of(),
+                candle,
+                additionalData
+            );
+            
+            instance.addHistoricalResult(indicatorResult);
+        }
+        
+        System.out.println("✅ Updated indicator instance (same key)");
+        System.out.println("   Instance key: " + instanceKey + " (unchanged)");
+        System.out.println("   Historical results: " + instance.getHistoricalResultCount());
+        
+        return instanceKey; // Return the same key
     }
     
     /**
@@ -868,8 +916,8 @@ public class IndicatorInstanceManager {
         private final String provider;
         private final String symbol;
         private final String interval;
-        private final Map<String, Object> params;
-        private final IndicatorState state;
+        private Map<String, Object> params; // Made mutable for in-place updates
+        private IndicatorState state; // Made mutable for in-place updates
         
         // Metadata
         private final Instant createdAt;
@@ -878,7 +926,7 @@ public class IndicatorInstanceManager {
         
         // Historical results storage (circular buffer with max size)
         private final java.util.Deque<IndicatorResult> historicalResults;
-        private static final int MAX_HISTORY_SIZE = 5000;
+        public static final int MAX_HISTORY_SIZE = 5000;
         
         public IndicatorInstance(String instanceKey, String indicatorId, 
                                String provider, String symbol, String interval,
@@ -889,7 +937,7 @@ public class IndicatorInstanceManager {
             this.provider = provider;
             this.symbol = symbol;
             this.interval = interval;
-            this.params = params != null ? params : Map.of();
+            this.params = params != null ? new HashMap<>(params) : new HashMap<>();
             this.state = state;
             this.createdAt = Instant.now();
             this.lastUpdate = Instant.now();
@@ -912,6 +960,32 @@ public class IndicatorInstanceManager {
         // Setters for metadata
         public void setLastUpdate(Instant lastUpdate) { this.lastUpdate = lastUpdate; }
         public void incrementUpdateCount() { this.updateCount++; }
+        
+        /**
+         * Update parameters and reinitialize state for in-place parameter updates
+         * This allows updating indicator parameters without changing the instance key
+         */
+        public void updateParams(Map<String, Object> newParams, Object newState, int minRequired) {
+            this.params = newParams != null ? new HashMap<>(newParams) : new HashMap<>();
+            this.state = new IndicatorState(
+                this.indicatorId,
+                this.provider,
+                this.symbol,
+                this.interval,
+                this.params,
+                newState,
+                minRequired
+            );
+            this.lastUpdate = Instant.now();
+        }
+        
+        /**
+         * Clear all historical results
+         * Used when recalculating with new parameters
+         */
+        public void clearHistoricalResults() {
+            this.historicalResults.clear();
+        }
         
         // Historical results management
         public void addHistoricalResult(IndicatorResult result) {

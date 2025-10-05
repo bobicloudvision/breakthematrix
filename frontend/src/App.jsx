@@ -8,6 +8,7 @@ import { StrategiesTab } from "./StrategiesTab";
 import { AccountsTab } from "./AccountsTab";
 import { PositionsTab } from "./PositionsTab";
 import { IndicatorsTab } from "./IndicatorsTab";
+import { IndicatorConfigModal } from "./IndicatorConfigModal";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -20,6 +21,13 @@ export default function App() {
   const [enabledIndicators, setEnabledIndicators] = useState([]);
   const [bottomBarHeight, setBottomBarHeight] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
+  const [isResizingRightSidebar, setIsResizingRightSidebar] = useState(false);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  
+  // Indicator config in sidebar state
+  const [sidebarIndicatorConfig, setSidebarIndicatorConfig] = useState(null);
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -64,6 +72,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('bottomBarHeight', bottomBarHeight.toString());
   }, [bottomBarHeight]);
+
+  // Load and save right sidebar width
+  useEffect(() => {
+    const savedWidth = localStorage.getItem('rightSidebarWidth');
+    if (savedWidth) {
+      setRightSidebarWidth(parseInt(savedWidth, 10));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('rightSidebarWidth', rightSidebarWidth.toString());
+  }, [rightSidebarWidth]);
 
   // Fetch active strategies on component mount
   useEffect(() => {
@@ -117,7 +137,7 @@ export default function App() {
     };
   }, [selectedProvider, symbol, interval]);
 
-  // Handle resize mouse events
+  // Handle resize mouse events for bottom bar
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
@@ -153,6 +173,43 @@ export default function App() {
     };
   }, [isResizing]);
 
+  // Handle resize mouse events for right sidebar
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizingRightSidebar) return;
+      
+      // Calculate the delta from the starting position
+      const deltaX = resizeStartX - e.clientX;
+      const newWidth = resizeStartWidth + deltaX;
+      
+      // Set min and max width constraints
+      const minWidth = 280;
+      const maxWidth = 800;
+      
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setRightSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingRightSidebar(false);
+    };
+
+    if (isResizingRightSidebar) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingRightSidebar, resizeStartX, resizeStartWidth]);
+
   const handleProviderSelect = (provider) => {
     setSelectedProvider(provider);
     console.log('Selected provider:', provider);
@@ -180,6 +237,87 @@ export default function App() {
     }
   };
 
+  // Handle opening indicator config in sidebar
+  const handleOpenIndicatorConfig = (indicator, initialParams, isEditing) => {
+    setSidebarIndicatorConfig({ indicator, initialParams, isEditing });
+  };
+
+  // Handle closing indicator config in sidebar
+  const handleCloseIndicatorConfig = () => {
+    setSidebarIndicatorConfig(null);
+  };
+
+  // Handle applying indicator from sidebar
+  const handleApplyIndicatorFromSidebar = async (indicatorId, params, shouldClose = true) => {
+    try {
+      // If editing, use PATCH to update the existing instance
+      if (sidebarIndicatorConfig?.isEditing && sidebarIndicatorConfig?.initialParams?.instanceKey) {
+        const patchPayload = {
+          params: params.params || {}
+        };
+        
+        const res = await fetch(
+          `http://localhost:8080/api/indicators/instances/${encodeURIComponent(sidebarIndicatorConfig.initialParams.instanceKey)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(patchPayload),
+          }
+        );
+        
+        if (!res.ok) {
+          throw new Error(`Failed to update indicator: HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log(`Updated indicator instance:`, data);
+      } else {
+        // Activate a new instance
+        const activatePayload = {
+          indicatorId: indicatorId,
+          provider: params.provider,
+          symbol: params.symbol,
+          interval: params.interval,
+          params: params.params || {},
+          historyCount: params.count || 5000
+        };
+        
+        const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(activatePayload),
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log(`Activated indicator instance:`, data);
+      }
+      
+      // Refresh enabled indicators (this will trigger the Chart effect to reload)
+      await fetchEnabledIndicators();
+      
+      // Note: We don't dispatch 'indicatorsChanged' event here because
+      // fetchEnabledIndicators() already updates the state which triggers the Chart effect.
+      // Dispatching the event would cause a double-fetch and duplicate indicators.
+      
+      // Only close sidebar config if explicitly requested (not for auto-save)
+      if (shouldClose) {
+        setSidebarIndicatorConfig(null);
+      }
+    } catch (e) {
+      console.error('Error applying indicator:', e);
+    }
+  };
+
   const intervalOptions = [
     { value: '1m', label: '1m' },
     { value: '5m', label: '5m' },
@@ -195,12 +333,12 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen w-full">
+    <div className="min-h-screen w-full overflow-hidden">
 
 
-      <div className="flex h-screen">
+      <div className="flex h-screen overflow-hidden">
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Top Bar */}
           <header className="sticky top-0 z-20 w-full border-b border-cyan-500/20 bg-gradient-to-r from-slate-900/90 via-gray-900/90 to-slate-900/90 backdrop-blur-xl shadow-2xl shadow-cyan-500/10">
             <div className="px-4 py-3">
@@ -408,15 +546,45 @@ export default function App() {
                 {activeTab === 'strategies' && <StrategiesTab />}
                 {activeTab === 'accounts' && <AccountsTab />}
                 {activeTab === 'positions' && <PositionsTab />}
-                {activeTab === 'indicators' && <IndicatorsTab />}
+                {activeTab === 'indicators' && (
+                  <IndicatorsTab 
+                    onOpenConfigInSidebar={handleOpenIndicatorConfig}
+                  />
+                )}
               </div>
             </div>
           </main>
         </div>
 
-        {/* Right Sidebar - Bot Dashboard */}
-        <div className="w-80 border-l border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5 overflow-y-auto">
-          <BotControl interval={interval} historicalLimit={1000} />
+        {/* Right Sidebar - Bot Dashboard or Indicator Config */}
+        <div 
+          style={{ width: `${rightSidebarWidth}px` }}
+          className="relative border-l border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5 overflow-y-auto flex-shrink-0"
+        >
+          {/* Resize Handle */}
+          <div
+            onMouseDown={(e) => {
+              setResizeStartX(e.clientX);
+              setResizeStartWidth(rightSidebarWidth);
+              setIsResizingRightSidebar(true);
+            }}
+            className="absolute left-0 top-0 w-1 h-full cursor-ew-resize hover:bg-cyan-500/50 active:bg-cyan-500/70 transition-colors duration-150 z-10 group"
+          >
+            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-20 w-0.5 bg-slate-600/50 group-hover:bg-cyan-500/70 rounded-full transition-colors duration-150"></div>
+          </div>
+          
+          {sidebarIndicatorConfig ? (
+            <IndicatorConfigModal
+              indicator={sidebarIndicatorConfig.indicator}
+              initialParams={sidebarIndicatorConfig.initialParams}
+              isEditing={sidebarIndicatorConfig.isEditing}
+              onClose={handleCloseIndicatorConfig}
+              onApply={handleApplyIndicatorFromSidebar}
+              isSidebar={true}
+            />
+          ) : (
+            <BotControl interval={interval} historicalLimit={1000} />
+          )}
         </div>
       </div>
     </div>
