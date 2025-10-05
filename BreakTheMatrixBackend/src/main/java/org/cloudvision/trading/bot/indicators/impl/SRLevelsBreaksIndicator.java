@@ -332,7 +332,7 @@ public class SRLevelsBreaksIndicator extends AbstractIndicator {
         values.put("breakType", breakType != null ? new BigDecimal(1) : BigDecimal.ZERO);
         
         Map<String, Object> result = new HashMap<>();
-        result.put("values", values);
+//        result.put("values", values);
         result.put("state", srState);
         result.put("lines", lines);
         result.put("markers", markers);
