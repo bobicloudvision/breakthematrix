@@ -23,6 +23,7 @@ public class SMAIndicator extends AbstractIndicator {
     /**
      * Internal state class to track SMA calculation data
      * Uses a circular buffer for efficient rolling window calculations
+     * Thread-safe implementation to handle concurrent access
      */
     public static class SMAState {
         private final LinkedList<BigDecimal> priceBuffer;
@@ -35,7 +36,7 @@ public class SMAIndicator extends AbstractIndicator {
             this.sum = BigDecimal.ZERO;
         }
         
-        public void addPrice(BigDecimal price) {
+        public synchronized void addPrice(BigDecimal price) {
             priceBuffer.add(price);
             sum = sum.add(price);
             
@@ -46,7 +47,7 @@ public class SMAIndicator extends AbstractIndicator {
             }
         }
         
-        public BigDecimal calculateSMA() {
+        public synchronized BigDecimal calculateSMA() {
             if (priceBuffer.isEmpty()) {
                 return BigDecimal.ZERO;
             }
@@ -57,7 +58,7 @@ public class SMAIndicator extends AbstractIndicator {
             return sum.divide(BigDecimal.valueOf(period), 8, java.math.RoundingMode.HALF_UP);
         }
         
-        public int getBufferSize() {
+        public synchronized int getBufferSize() {
             return priceBuffer.size();
         }
         
@@ -240,31 +241,34 @@ public class SMAIndicator extends AbstractIndicator {
     /**
      * Calculate real-time SMA by temporarily adding current price to the buffer
      * This gives a preview of where the SMA will move without actually modifying state
+     * Thread-safe to prevent concurrent modification issues
      */
     private BigDecimal calculateRealtimeSMA(SMAState state, BigDecimal currentPrice) {
-        if (state.priceBuffer.isEmpty()) {
-            return currentPrice;
-        }
-        
-        // Calculate sum with the new price included
-        BigDecimal tempSum = state.sum.add(currentPrice);
-        
-        // If buffer is at capacity, we'd remove the oldest, so subtract it
-        int bufferSize = state.priceBuffer.size();
-        if (bufferSize >= state.period) {
-            // Defensive check to prevent race conditions
+        synchronized (state) {
             if (state.priceBuffer.isEmpty()) {
                 return currentPrice;
             }
-            tempSum = tempSum.subtract(state.priceBuffer.getFirst());
-            return tempSum.divide(BigDecimal.valueOf(state.period), 8, java.math.RoundingMode.HALF_UP);
-        } else {
-            // Not at capacity yet, just add to the sum
-            // Defensive check in case buffer was cleared
-            if (bufferSize == 0) {
-                return currentPrice;
+            
+            // Calculate sum with the new price included
+            BigDecimal tempSum = state.sum.add(currentPrice);
+            
+            // If buffer is at capacity, we'd remove the oldest, so subtract it
+            int bufferSize = state.priceBuffer.size();
+            if (bufferSize >= state.period) {
+                // Defensive check to prevent race conditions
+                if (state.priceBuffer.isEmpty()) {
+                    return currentPrice;
+                }
+                tempSum = tempSum.subtract(state.priceBuffer.getFirst());
+                return tempSum.divide(BigDecimal.valueOf(state.period), 8, java.math.RoundingMode.HALF_UP);
+            } else {
+                // Not at capacity yet, just add to the sum
+                // Defensive check in case buffer was cleared
+                if (bufferSize == 0) {
+                    return currentPrice;
+                }
+                return tempSum.divide(BigDecimal.valueOf(bufferSize + 1), 8, java.math.RoundingMode.HALF_UP);
             }
-            return tempSum.divide(BigDecimal.valueOf(bufferSize + 1), 8, java.math.RoundingMode.HALF_UP);
         }
     }
     
