@@ -275,7 +275,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
         
         // Build result
         Map<String, Object> result = new HashMap<>();
-        result.put("values", values);
+//        result.put("values", values);
         result.put("state", state);
         result.put("boxes", boxes);
         
