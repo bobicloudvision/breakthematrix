@@ -130,6 +130,19 @@ export function ReplayTab({ provider, symbol, interval }) {
     return null;
   };
 
+  // Poll session status when there's an active session
+  useEffect(() => {
+    if (!activeSession) return;
+
+    fetchSessionStatus(activeSession); // Initial fetch
+
+    const interval = setInterval(() => {
+      fetchSessionStatus(activeSession);
+    }, 1000); // Poll every second
+
+    return () => clearInterval(interval);
+  }, [activeSession]);
+
   const handlePlayPause = async () => {
     if (!activeSession) return;
 
@@ -162,8 +175,8 @@ export function ReplayTab({ provider, symbol, interval }) {
 
     setControlLoading(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/replay/${activeSession}/stop`, {
-        method: 'POST',
+      const res = await fetch(`http://localhost:8080/api/replay/${activeSession}`, {
+        method: 'DELETE',
         headers: {
           'accept': '*/*',
         },
@@ -188,16 +201,18 @@ export function ReplayTab({ provider, symbol, interval }) {
     if (!activeSession) return;
 
     try {
-      const res = await fetch(`http://localhost:8080/api/replay/${activeSession}/speed?speed=${newSpeed}`, {
+      const res = await fetch(`http://localhost:8080/api/replay/${activeSession}/speed`, {
         method: 'POST',
         headers: {
           'accept': '*/*',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ speed: parseFloat(newSpeed) }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        console.log('Speed changed:', data.message || data);
+        console.log('Speed changed:', data.message);
         setSpeed(newSpeed);
         // Fetch updated status immediately for responsive UI
         await fetchSessionStatus(activeSession);

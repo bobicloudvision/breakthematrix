@@ -1,6 +1,5 @@
 package org.cloudvision.trading.bot.controller;
 
-import org.cloudvision.trading.bot.indicators.IndicatorInstanceManager;
 import org.cloudvision.trading.bot.replay.ReplayConfig;
 import org.cloudvision.trading.bot.replay.ReplayService;
 import org.cloudvision.trading.bot.replay.ReplaySession;
@@ -13,7 +12,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * REST API for replay functionality
@@ -340,62 +338,5 @@ public class ReplayController {
         }
     }
     
-    /**
-     * Get available indicators for replay attachment
-     * Returns active indicator instances that can be reused
-     * 
-     * GET /api/replay/available-indicators?provider=Binance&symbol=BTCUSDT&interval=5m
-     */
-    @GetMapping("/available-indicators")
-    public ResponseEntity<?> getAvailableIndicators(
-            @RequestParam(required = false) String provider,
-            @RequestParam(required = false) String symbol,
-            @RequestParam(required = false) String interval) {
-        try {
-            List<IndicatorInstanceManager.IndicatorInstance> instances;
-            
-            if (provider != null && symbol != null && interval != null) {
-                // Filter by context
-                instances = indicatorManager.getInstancesForContext(provider, symbol, interval);
-            } else {
-                // Get all active instances
-                instances = indicatorManager.getAllInstances();
-            }
-            
-            List<Map<String, Object>> indicatorList = instances.stream()
-                .map(instance -> {
-                    Map<String, Object> info = new HashMap<>();
-                    info.put("instanceKey", instance.getInstanceKey());
-                    info.put("indicatorId", instance.getIndicatorId());
-                    info.put("provider", instance.getProvider());
-                    info.put("symbol", instance.getSymbol());
-                    info.put("interval", instance.getInterval());
-                    info.put("params", instance.getParams());
-                    info.put("createdAt", instance.getCreatedAt());
-                    info.put("lastUpdate", instance.getLastUpdate());
-                    info.put("updateCount", instance.getUpdateCount());
-                    return info;
-                })
-                .collect(Collectors.toList());
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("totalIndicators", indicatorList.size());
-            response.put("indicators", indicatorList);
-            
-            if (provider != null && symbol != null && interval != null) {
-                response.put("context", Map.of(
-                    "provider", provider,
-                    "symbol", symbol,
-                    "interval", interval
-                ));
-            }
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", e.getMessage()));
-        }
-    }
 }
 
