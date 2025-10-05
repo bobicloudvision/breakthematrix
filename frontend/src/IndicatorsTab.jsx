@@ -131,6 +131,74 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
     }
   };
 
+  // Instantly apply indicator with default parameters
+  const applyIndicatorInstantly = async (indicator) => {
+    try {
+      // First, fetch indicator details to get default parameters
+      const detailsRes = await fetch(`http://localhost:8080/api/indicators/${indicator.id}`, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      });
+      
+      if (!detailsRes.ok) {
+        throw new Error(`Failed to fetch indicator details: HTTP ${detailsRes.status}`);
+      }
+      
+      const details = await detailsRes.json();
+      
+      // Build default params
+      const defaultParams = {};
+      if (details.parameters) {
+        Object.values(details.parameters).forEach(param => {
+          defaultParams[param.name] = param.defaultValue;
+        });
+      }
+      
+      // Get current trading settings
+      const provider = localStorage.getItem('tradingProvider') || 'Binance';
+      const symbol = localStorage.getItem('tradingSymbol') || 'BTCUSDT';
+      const interval = localStorage.getItem('tradingInterval') || '5m';
+      
+      // Activate the indicator with default params
+      const activatePayload = {
+        indicatorId: indicator.id,
+        provider: provider,
+        symbol: symbol,
+        interval: interval,
+        params: defaultParams,
+        historyCount: 5000
+      };
+      
+      const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(activatePayload),
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      console.log(`Activated indicator instance:`, data);
+      
+      // Refresh the active instances list
+      await fetchActiveInstances();
+      
+      // Trigger custom event to notify chart
+      window.dispatchEvent(new Event('indicatorsChanged'));
+      
+      // Close browse modal
+      setShowBrowseModal(false);
+    } catch (e) {
+      console.error('Error applying indicator:', e);
+      setError(e.message);
+    }
+  };
+
   // Filter indicators based on search query
   const filteredIndicators = indicators.filter(indicator => {
     if (!searchQuery) return true;
@@ -142,16 +210,6 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
       indicator.category.toLowerCase().includes(query)
     );
   });
-
-  // Group filtered indicators by category
-  const groupedIndicators = filteredIndicators.reduce((acc, indicator) => {
-    const category = indicator.categoryDisplayName || indicator.category;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(indicator);
-    return acc;
-  }, {});
 
   // Get indicator details by ID
   const getIndicatorById = (id) => indicators.find(ind => ind.id === id);
@@ -335,76 +393,73 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                     Try refreshing
                   </button>
                 </div>
+              ) : filteredIndicators.length === 0 && searchQuery ? (
+                <div className="text-center text-white/50 py-16">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-lg mb-1">No indicators match</p>
+                  <p className="text-white/40">"{searchQuery}"</p>
+                </div>
               ) : (
-                <div className="space-y-8">
-                  {Object.entries(groupedIndicators).map(([category, categoryIndicators]) => (
-                    <div key={category}>
-                      {/* Category Header */}
-                      <div className="flex items-center gap-3 mb-4 sticky top-0 bg-gradient-to-r from-gray-900 via-gray-900 to-transparent py-2 -mx-2 px-2 z-10">
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-                        <h3 className="text-cyan-400 text-sm font-bold uppercase tracking-wider">
-                          {category}
-                        </h3>
-                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredIndicators.map((indicator) => (
+                    <div 
+                      key={indicator.id}
+                      className="group relative bg-gradient-to-br from-black/40 to-black/20 rounded-lg border border-white/10 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-200 p-3 overflow-hidden"
+                    >
+                      {/* Gradient overlay on hover */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-blue-500/0 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-200 rounded-lg pointer-events-none"></div>
                       
-                      {/* Indicators Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {categoryIndicators.map((indicator) => (
-                          <div 
-                            key={indicator.id}
-                            className="group relative bg-gradient-to-br from-black/40 to-black/20 rounded-xl border border-white/10 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-300 p-4 cursor-pointer overflow-hidden"
-                            onClick={() => handleOpenConfig(indicator)}
-                          >
-                            {/* Gradient overlay on hover */}
-                            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-blue-500/0 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-300 rounded-xl"></div>
-                            
-                            <div className="relative flex flex-col gap-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="text-white font-semibold text-sm mb-1 group-hover:text-cyan-300 transition-colors">
-                                    {indicator.name}
-                                  </h3>
-                                  <span className="text-xs text-white/40 font-mono">
-                                    {indicator.id}
-                                  </span>
-                                </div>
-                                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-cyan-400/50 group-hover:bg-cyan-400 transition-all group-hover:scale-125"></div>
-                              </div>
-                              
-                              <p className="text-xs text-white/50 leading-relaxed line-clamp-2 group-hover:text-white/70 transition-colors">
-                                {indicator.description}
-                              </p>
-                              
-                              <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                                <span className="text-xs px-2 py-1 rounded-md bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-300 border border-cyan-500/20 font-medium">
-                                  {indicator.category}
-                                </span>
-                                <span className="text-xs text-cyan-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                  Add
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                </span>
-                              </div>
-                            </div>
+                      <div className="relative flex flex-col gap-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-white font-semibold text-sm mb-0.5 group-hover:text-cyan-300 transition-colors truncate">
+                              {indicator.name}
+                            </h3>
+                            <span className="text-xs text-white/30 font-mono truncate block">
+                              {indicator.id}
+                            </span>
                           </div>
-                        ))}
+                        </div>
+                        
+                        <p className="text-xs text-white/50 leading-relaxed line-clamp-2 group-hover:text-white/60 transition-colors">
+                          {indicator.description}
+                        </p>
+                        
+                        {/* Action Buttons */}
+                        <div className="flex gap-1.5 mt-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              applyIndicatorInstantly(indicator);
+                            }}
+                            className="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-100 border border-cyan-400/40 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all flex items-center justify-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenConfig(indicator);
+                            }}
+                            className="px-2 py-1.5 text-xs font-medium rounded bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                            title="Configure parameters"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
-                  
-                  {filteredIndicators.length === 0 && searchQuery && (
-                    <div className="text-center text-white/50 py-16">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                      </div>
-                      <p className="text-lg mb-1">No indicators match</p>
-                      <p className="text-white/40">"{searchQuery}"</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
