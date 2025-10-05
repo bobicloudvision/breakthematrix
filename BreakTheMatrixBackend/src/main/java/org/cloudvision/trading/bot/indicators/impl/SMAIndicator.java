@@ -252,10 +252,18 @@ public class SMAIndicator extends AbstractIndicator {
         // If buffer is at capacity, we'd remove the oldest, so subtract it
         int bufferSize = state.priceBuffer.size();
         if (bufferSize >= state.period) {
+            // Defensive check to prevent race conditions
+            if (state.priceBuffer.isEmpty()) {
+                return currentPrice;
+            }
             tempSum = tempSum.subtract(state.priceBuffer.getFirst());
             return tempSum.divide(BigDecimal.valueOf(state.period), 8, java.math.RoundingMode.HALF_UP);
         } else {
             // Not at capacity yet, just add to the sum
+            // Defensive check in case buffer was cleared
+            if (bufferSize == 0) {
+                return currentPrice;
+            }
             return tempSum.divide(BigDecimal.valueOf(bufferSize + 1), 8, java.math.RoundingMode.HALF_UP);
         }
     }
