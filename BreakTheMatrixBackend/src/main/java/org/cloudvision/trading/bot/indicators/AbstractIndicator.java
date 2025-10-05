@@ -80,6 +80,23 @@ public abstract class AbstractIndicator implements Indicator {
     }
     
     /**
+     * Helper method to get double parameter with default value
+     */
+    protected double getDoubleParameter(Map<String, Object> params, String key, double defaultValue) {
+        Object value = params.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Double) {
+            return (Double) value;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return Double.parseDouble(value.toString());
+    }
+    
+    /**
      * Create parameters map from defaults
      */
     protected Map<String, Object> mergeWithDefaults(Map<String, Object> params) {

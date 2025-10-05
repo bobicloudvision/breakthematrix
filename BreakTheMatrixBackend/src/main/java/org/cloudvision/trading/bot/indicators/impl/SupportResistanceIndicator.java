@@ -74,12 +74,14 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         public List<SRLevel> supportLevels = new ArrayList<>();
         public List<SRLevel> resistanceLevels = new ArrayList<>();
         public int barIndex = 0;
+        public List<CandlestickData> candleBuffer = new ArrayList<>(); // Keep recent candles for pivot detection
+        public int maxBufferSize = 100; // Keep last 100 candles
     }
     
     public SupportResistanceIndicator() {
         super("sr", "Support & Resistance", 
               "Identifies key support and resistance levels based on pivot points",
-              Indicator.IndicatorCategory.CUSTOM);
+              Indicator.IndicatorCategory.OVERLAY);
     }
     
     @Override
@@ -207,117 +209,72 @@ public class SupportResistanceIndicator extends AbstractIndicator {
     }
     
     @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
-        // Use progressive calculation and return only the values
-        Map<String, Object> progressive = calculateProgressive(candles, params, null);
-        @SuppressWarnings("unchecked")
-        Map<String, BigDecimal> values = (Map<String, BigDecimal>) progressive.get("values");
-        return values;
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        params = mergeWithDefaults(params);
+        
+        SRState state = new SRState();
+        int pivotLookback = getIntParameter(params, "pivotLookback", 5);
+        
+        // If we have historical candles, process them to build initial state
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            // Add all historical candles to buffer
+            state.candleBuffer.addAll(historicalCandles);
+            
+            // Process each candle to detect pivots and build levels
+            for (int i = 0; i < historicalCandles.size(); i++) {
+                state.barIndex++;
+                CandlestickData candle = historicalCandles.get(i);
+                
+                // Only check for pivots if we have enough candles
+                if (i >= pivotLookback * 2) {
+                    int pivotIdx = i - pivotLookback;
+                    processCandle(candle, pivotIdx, state, params);
+                }
+            }
+            
+            // Trim buffer to max size
+            trimCandleBuffer(state);
+        }
+        
+        return state;
     }
     
     @Override
-    public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
-                                                    Map<String, Object> params,
-                                                    Object previousState) {
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object stateObj) {
         params = mergeWithDefaults(params);
-        validateParameters(params);
-        
-        int pivotLookback = getIntParameter(params, "pivotLookback", 5);
-        double zoneWidthPct = getDoubleParameter(params, "zoneWidthPercent", 0.3);
-        int maxLevels = getIntParameter(params, "maxLevels", 5);
-        double mergeThresholdPct = getDoubleParameter(params, "mergeThresholdPercent", 0.5);
-        int minTouchesForStrong = getIntParameter(params, "minTouchesForStrong", 3);
-        double breakConfirmationPct = getDoubleParameter(params, "breakConfirmationPercent", 0.2);
         
         // Cast or create state
-        SRState state = (previousState instanceof SRState) 
-            ? (SRState) previousState 
-            : new SRState();
+        SRState state = (stateObj instanceof SRState) ? (SRState) stateObj : new SRState();
         
-        if (candles == null || candles.size() < pivotLookback * 2 + 1) {
-            return Map.of(
-                "values", createEmptyResult(),
-                "state", state,
-                "boxes", new ArrayList<>()
-            );
-        }
+        int pivotLookback = getIntParameter(params, "pivotLookback", 5);
         
-        int n = candles.size();
-        CandlestickData currentCandle = candles.get(n - 1);
+        // Add new candle to buffer
+        state.candleBuffer.add(candle);
         state.barIndex++;
         
-        // Check for pivot high (resistance) at lookback position
-        if (n >= pivotLookback * 2 + 1) {
-            int pivotIdx = n - pivotLookback - 1;
-            if (isPivotHigh(candles, pivotIdx, pivotLookback)) {
-                CandlestickData pivotCandle = candles.get(pivotIdx);
-                addResistanceLevel(state, pivotCandle.getHigh(), pivotCandle.getCloseTime(), 
-                                  zoneWidthPct, mergeThresholdPct, maxLevels);
-            }
-            
-            if (isPivotLow(candles, pivotIdx, pivotLookback)) {
-                CandlestickData pivotCandle = candles.get(pivotIdx);
-                addSupportLevel(state, pivotCandle.getLow(), pivotCandle.getCloseTime(), 
-                               zoneWidthPct, mergeThresholdPct, maxLevels);
-            }
+        // Check for pivot at the appropriate lookback position
+        int bufferSize = state.candleBuffer.size();
+        if (bufferSize >= pivotLookback * 2 + 1) {
+            int pivotIdx = bufferSize - pivotLookback - 1;
+            processCandle(candle, pivotIdx, state, params);
         }
         
         // Update level status (touches and breaks)
-        updateLevelStatus(state, currentCandle, breakConfirmationPct);
+        double breakConfirmationPct = getDoubleParameter(params, "breakConfirmationPercent", 0.2);
+        updateLevelStatus(state, candle, breakConfirmationPct);
         
         // Clean up old/weak levels
+        int maxLevels = getIntParameter(params, "maxLevels", 5);
         cleanupLevels(state, maxLevels);
         
+        // Trim candle buffer to prevent unlimited growth
+        trimCandleBuffer(state);
+        
         // Build result values
-        Map<String, BigDecimal> values = calculateOutputValues(state, currentCandle.getClose());
+        Map<String, BigDecimal> values = calculateOutputValues(state, candle.getClose());
         
-        // Convert levels to boxes for visualization (with filters to reduce clutter)
-        boolean showBroken = getBooleanParameter(params, "showBrokenLevels", false);
-        boolean onlyShowNearby = getBooleanParameter(params, "onlyShowNearby", true);
-        double maxDistancePct = getDoubleParameter(params, "maxDistancePercent", 3.0);
-        String supportColor = getStringParameter(params, "supportColor", "rgba(34, 139, 34, 0.2)");
-        String resistanceColor = getStringParameter(params, "resistanceColor", "rgba(220, 20, 60, 0.2)");
-        int extendBackBars = getIntParameter(params, "extendBackBars", 20);
-        
-        BigDecimal currentPrice = currentCandle.getClose();
-        BigDecimal maxDistance = currentPrice.multiply(BigDecimal.valueOf(maxDistancePct / 100.0));
-        
-        List<BoxShape> boxShapes = new ArrayList<>();
-        
-        // Convert support levels to boxes (thin horizontal zones)
-        for (SRLevel level : state.supportLevels) {
-            if (level.broken && !showBroken) continue;
-            
-            // Filter by distance if onlyShowNearby is enabled
-            if (onlyShowNearby) {
-                BigDecimal distance = currentPrice.subtract(level.price).abs();
-                if (distance.compareTo(maxDistance) > 0) continue;
-            }
-            
-            boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
-                                           supportColor, minTouchesForStrong, 
-                                           extendBackBars, candles));
-        }
-        
-        // Convert resistance levels to boxes (thin horizontal zones)
-        for (SRLevel level : state.resistanceLevels) {
-            if (level.broken && !showBroken) continue;
-            
-            // Filter by distance if onlyShowNearby is enabled
-            if (onlyShowNearby) {
-                BigDecimal distance = currentPrice.subtract(level.price).abs();
-                if (distance.compareTo(maxDistance) > 0) continue;
-            }
-            
-            boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
-                                           resistanceColor, minTouchesForStrong,
-                                           extendBackBars, candles));
-        }
-        
-        // Convert BoxShape objects to Map for API serialization
-        List<Map<String, Object>> boxes = boxShapes.stream()
-            .map(BoxShape::toMap)
-            .collect(Collectors.toList());
+        // Convert levels to boxes for visualization
+        List<Map<String, Object>> boxes = convertLevelsToBoxes(state, candle, params);
         
         Map<String, Object> output = new HashMap<>();
         output.put("values", values);
@@ -325,6 +282,91 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         output.put("boxes", boxes);
         
         return output;
+    }
+    
+    /**
+     * Process a candle and detect pivots
+     */
+    private void processCandle(CandlestickData candle, int pivotIdx, SRState state, Map<String, Object> params) {
+        int pivotLookback = getIntParameter(params, "pivotLookback", 5);
+        double zoneWidthPct = getDoubleParameter(params, "zoneWidthPercent", 0.3);
+        double mergeThresholdPct = getDoubleParameter(params, "mergeThresholdPercent", 0.5);
+        int maxLevels = getIntParameter(params, "maxLevels", 5);
+        
+        // Check for pivot high (resistance)
+        if (isPivotHigh(state.candleBuffer, pivotIdx, pivotLookback)) {
+            CandlestickData pivotCandle = state.candleBuffer.get(pivotIdx);
+            addResistanceLevel(state, pivotCandle.getHigh(), pivotCandle.getCloseTime(), 
+                              zoneWidthPct, mergeThresholdPct, maxLevels);
+        }
+        
+        // Check for pivot low (support)
+        if (isPivotLow(state.candleBuffer, pivotIdx, pivotLookback)) {
+            CandlestickData pivotCandle = state.candleBuffer.get(pivotIdx);
+            addSupportLevel(state, pivotCandle.getLow(), pivotCandle.getCloseTime(), 
+                           zoneWidthPct, mergeThresholdPct, maxLevels);
+        }
+    }
+    
+    /**
+     * Convert levels to boxes for visualization
+     */
+    private List<Map<String, Object>> convertLevelsToBoxes(SRState state, CandlestickData currentCandle, Map<String, Object> params) {
+        boolean showBroken = getBooleanParameter(params, "showBrokenLevels", false);
+        boolean onlyShowNearby = getBooleanParameter(params, "onlyShowNearby", true);
+        double maxDistancePct = getDoubleParameter(params, "maxDistancePercent", 3.0);
+        String supportColor = getStringParameter(params, "supportColor", "rgba(34, 139, 34, 0.2)");
+        String resistanceColor = getStringParameter(params, "resistanceColor", "rgba(220, 20, 60, 0.2)");
+        int extendBackBars = getIntParameter(params, "extendBackBars", 20);
+        int minTouchesForStrong = getIntParameter(params, "minTouchesForStrong", 3);
+        
+        BigDecimal currentPrice = currentCandle.getClose();
+        BigDecimal maxDistance = currentPrice.multiply(BigDecimal.valueOf(maxDistancePct / 100.0));
+        
+        List<BoxShape> boxShapes = new ArrayList<>();
+        
+        // Convert support levels to boxes
+        for (SRLevel level : state.supportLevels) {
+            if (level.broken && !showBroken) continue;
+            
+            if (onlyShowNearby) {
+                BigDecimal distance = currentPrice.subtract(level.price).abs();
+                if (distance.compareTo(maxDistance) > 0) continue;
+            }
+            
+            boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
+                                           supportColor, minTouchesForStrong, 
+                                           extendBackBars, state.candleBuffer));
+        }
+        
+        // Convert resistance levels to boxes
+        for (SRLevel level : state.resistanceLevels) {
+            if (level.broken && !showBroken) continue;
+            
+            if (onlyShowNearby) {
+                BigDecimal distance = currentPrice.subtract(level.price).abs();
+                if (distance.compareTo(maxDistance) > 0) continue;
+            }
+            
+            boxShapes.add(convertLevelToBox(level, currentCandle.getCloseTime(), 
+                                           resistanceColor, minTouchesForStrong,
+                                           extendBackBars, state.candleBuffer));
+        }
+        
+        // Convert BoxShape objects to Map for API serialization
+        return boxShapes.stream()
+            .map(BoxShape::toMap)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Trim candle buffer to prevent unlimited growth
+     */
+    private void trimCandleBuffer(SRState state) {
+        if (state.candleBuffer.size() > state.maxBufferSize) {
+            int excess = state.candleBuffer.size() - state.maxBufferSize;
+            state.candleBuffer = new ArrayList<>(state.candleBuffer.subList(excess, state.candleBuffer.size()));
+        }
     }
     
     /**
@@ -670,23 +712,6 @@ public class SupportResistanceIndicator extends AbstractIndicator {
         params = mergeWithDefaults(params);
         int pivotLookback = getIntParameter(params, "pivotLookback", 5);
         return pivotLookback * 2 + 1;
-    }
-    
-    /**
-     * Helper method to get double parameter with default value
-     */
-    protected double getDoubleParameter(Map<String, Object> params, String key, double defaultValue) {
-        Object value = params.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        if (value instanceof Double) {
-            return (Double) value;
-        }
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        return Double.parseDouble(value.toString());
     }
 }
 

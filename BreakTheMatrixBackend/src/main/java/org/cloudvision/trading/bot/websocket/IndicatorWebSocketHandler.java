@@ -1,7 +1,11 @@
 package org.cloudvision.trading.bot.websocket;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.bot.indicators.IndicatorInstanceManager;
@@ -39,6 +43,24 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class IndicatorWebSocketHandler extends TextWebSocketHandler {
     
+    /**
+     * Custom BigDecimal serializer to limit precision and avoid excessive decimal places
+     */
+    private static class BigDecimalSerializer extends JsonSerializer<java.math.BigDecimal> {
+        @Override
+        public void serialize(java.math.BigDecimal value, JsonGenerator gen, SerializerProvider serializers) 
+                throws IOException {
+            if (value == null) {
+                gen.writeNull();
+            } else {
+                // Round to 8 decimal places for reasonable precision
+                java.math.BigDecimal rounded = value.setScale(8, java.math.RoundingMode.HALF_UP);
+                // Strip trailing zeros for cleaner output
+                gen.writeNumber(rounded.stripTrailingZeros().toPlainString());
+            }
+        }
+    }
+    
     private final TradingBot tradingBot;
     private final IndicatorInstanceManager instanceManager;
     private final ObjectMapper objectMapper;
@@ -61,6 +83,11 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        
+        // Register custom BigDecimal serializer to avoid excessive precision
+        SimpleModule bigDecimalModule = new SimpleModule();
+        bigDecimalModule.addSerializer(java.math.BigDecimal.class, new BigDecimalSerializer());
+        this.objectMapper.registerModule(bigDecimalModule);
         
         // Register with TradingBot to receive candlestick data
         this.tradingBot.addDataHandler(this::processData);

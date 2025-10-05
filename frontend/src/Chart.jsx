@@ -1122,7 +1122,8 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                         
                     case 'candleUpdate': 
                         // Handle real-time candlestick updates
-                        const candleData = message.candle || message.data;
+                        // Extract candle data from message (could be message.candle, message.data.candle, or message.data)
+                        const candleData = message.candle || message.data?.candle || message.data;
                         if (candleData && seriesRef.current) {
                             const candleTime = candleData.timestamp;
                             
@@ -1171,34 +1172,41 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                         break;
                     
                     case 'indicatorUpdate':
+                        // Extract indicator data from message.data
+                        const indicatorData = message.data || message;
+                        
                         console.log('📊 Indicator Update:', {
-                            indicator: message.indicatorId,
-                            instanceKey: message.instanceKey,
-                            time: new Date(message.timestamp),
-                            values: message.values
+                            indicator: indicatorData.indicatorId,
+                            instanceKey: indicatorData.instanceKey,
+                            time: new Date(indicatorData.timestamp),
+                            values: indicatorData.values
                         });
                         
                         // Update status message with last update time
-                        const updateTime = new Date(message.timestamp).toLocaleTimeString();
+                        const updateTime = new Date(indicatorData.timestamp).toLocaleTimeString();
                         setWsMessage(`Last update: ${updateTime}`);
                         
                         // Update indicator series in real-time without re-fetching
-                        if (seriesManagerRef.current && message.values && message.timestamp) {
-                            const instanceKey = message.instanceKey;
+                        if (seriesManagerRef.current && indicatorData.values && indicatorData.timestamp) {
+                            const instanceKey = indicatorData.instanceKey;
                             const indicatorPrefix = `indicator_${instanceKey}`;
                             
                             // Convert ISO timestamp to Unix timestamp (seconds)
-                            const timeValue = Math.floor(new Date(message.timestamp).getTime() / 1000);
+                            const timeValue = Math.floor(new Date(indicatorData.timestamp).getTime() / 1000);
+                            
+                            console.log(`Attempting to update indicator ${instanceKey} at time ${timeValue}`, indicatorData.values);
                             
                             // Update each series in the values object
-                            Object.entries(message.values).forEach(([seriesKey, value]) => {
+                            Object.entries(indicatorData.values).forEach(([seriesKey, value]) => {
                                 // Try to find and update the series
                                 // Series could be named like: indicator_Binance:ETHUSDT:1m:sma:9998834d_sma
                                 const possibleSeriesIds = [
-                                    `${indicatorPrefix}_${seriesKey}`,  // e.g., indicator_..._sma
-                                    `${indicatorPrefix}_${message.indicatorId}`, // e.g., indicator_..._sma (using indicatorId)
+                                    `${indicatorPrefix}_${seriesKey}`,  // e.g., indicator_Binance:ETHUSDT:1m:sma:9998834d_sma
+                                    `${indicatorPrefix}_${indicatorData.indicatorId}`, // e.g., indicator_Binance:ETHUSDT:1m:sma:9998834d_sma (using indicatorId)
                                     indicatorPrefix // Just the prefix (for single-series indicators)
                                 ];
+                                
+                                console.log(`Trying to find series for ${seriesKey}, checking:`, possibleSeriesIds);
                                 
                                 let updated = false;
                                 for (const seriesId of possibleSeriesIds) {
@@ -1216,7 +1224,9 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                                 }
                                 
                                 if (!updated) {
-                                    console.warn(`⚠️ Could not find series to update for ${seriesKey}, tried:`, possibleSeriesIds);
+                                    console.warn(`⚠️ Could not find series to update for ${seriesKey}`);
+                                    console.warn(`   Tried:`, possibleSeriesIds);
+                                    console.warn(`   Available series:`, seriesManagerRef.current.getAllSeriesIds());
                                 }
                             });
                         }
