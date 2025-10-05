@@ -5,6 +5,7 @@ import org.cloudvision.trading.websocket.OrderFlowWebSocketHandler;
 import org.cloudvision.trading.bot.websocket.StrategyVisualizationWebSocketHandler;
 import org.cloudvision.trading.bot.websocket.PositionsWebSocketHandler;
 import org.cloudvision.trading.bot.websocket.IndicatorWebSocketHandler;
+import org.cloudvision.trading.bot.websocket.ReplayWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
@@ -20,19 +21,22 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final StrategyVisualizationWebSocketHandler strategyVisualizationWebSocketHandler;
     private final PositionsWebSocketHandler positionsWebSocketHandler;
     private final IndicatorWebSocketHandler indicatorWebSocketHandler;
+    private final ReplayWebSocketHandler replayWebSocketHandler;
 
     public WebSocketConfig(EchoWebSocketHandler echoWebSocketHandler, 
                           TradingWebSocketHandler tradingWebSocketHandler,
                           OrderFlowWebSocketHandler orderFlowWebSocketHandler,
                           StrategyVisualizationWebSocketHandler strategyVisualizationWebSocketHandler,
                           PositionsWebSocketHandler positionsWebSocketHandler,
-                          IndicatorWebSocketHandler indicatorWebSocketHandler) {
+                          IndicatorWebSocketHandler indicatorWebSocketHandler,
+                          ReplayWebSocketHandler replayWebSocketHandler) {
         this.echoWebSocketHandler = echoWebSocketHandler;
         this.tradingWebSocketHandler = tradingWebSocketHandler;
         this.orderFlowWebSocketHandler = orderFlowWebSocketHandler;
         this.strategyVisualizationWebSocketHandler = strategyVisualizationWebSocketHandler;
         this.positionsWebSocketHandler = positionsWebSocketHandler;
         this.indicatorWebSocketHandler = indicatorWebSocketHandler;
+        this.replayWebSocketHandler = replayWebSocketHandler;
     }
 
     @Override
@@ -43,6 +47,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(strategyVisualizationWebSocketHandler, "/strategy-viz-ws").setAllowedOrigins("*");
         registry.addHandler(positionsWebSocketHandler, "/positions-ws").setAllowedOrigins("*");
         registry.addHandler(indicatorWebSocketHandler, "/indicator-ws").setAllowedOrigins("*");
+        registry.addHandler(replayWebSocketHandler, "/replay-ws").setAllowedOrigins("*");
     }
 }
 

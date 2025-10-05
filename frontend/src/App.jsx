@@ -9,6 +9,7 @@ import { AccountsTab } from "./AccountsTab";
 import { PositionsTab } from "./PositionsTab";
 import { IndicatorsTab } from "./IndicatorsTab";
 import { IndicatorConfigModal } from "./IndicatorConfigModal";
+import { ReplayTab } from "./ReplayTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -539,6 +540,16 @@ export default function App() {
                 >
                   Indicators
                 </button>
+                <button 
+                  onClick={() => setActiveTab('replay')}
+                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    activeTab === 'replay' 
+                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
+                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                  }`}
+                >
+                  Replay
+                </button>
                 {/* Future tabs: Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-3.25rem)]">
@@ -549,6 +560,13 @@ export default function App() {
                 {activeTab === 'indicators' && (
                   <IndicatorsTab 
                     onOpenConfigInSidebar={handleOpenIndicatorConfig}
+                  />
+                )}
+                {activeTab === 'replay' && (
+                  <ReplayTab 
+                    provider={selectedProvider}
+                    symbol={symbol}
+                    interval={interval}
                   />
                 )}
               </div>
