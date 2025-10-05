@@ -30,8 +30,12 @@ import java.util.stream.Collectors;
  * 4. Track volume strength (pivot volume / average volume)
  * 5. Mark OBs as "mitigated" when price breaks through them
  * 
- * OUTPUT VALUES (calculate method):
- * - marketStructure: 0 (uptrend) or 1 (downtrend)
+ * EVENT-DRIVEN ARCHITECTURE:
+ * - onInit(historicalCandles, params): Processes historical candles to build initial order blocks
+ * - onNewCandle(candle, params, state): Processes each new candle incrementally
+ * - State is maintained across calls for efficient real-time updates
+ * 
+ * OUTPUT VALUES (onNewCandle method):
  * - bullishOBTop: Top of most recent active bullish order block
  * - bullishOBBottom: Bottom of most recent active bullish order block
  * - bearishOBTop: Top of most recent active bearish order block
@@ -40,9 +44,9 @@ import java.util.stream.Collectors;
  * - activeBullishOBs: Count of active bullish order blocks
  * - activeBearishOBs: Count of active bearish order blocks
  * 
- * OUTPUT (calculateProgressive method):
+ * OUTPUT (boxes):
  * Returns formatted BOXES for visualization with time/price coordinates, colors, and labels.
- * Use this method for charting and visual display of order blocks.
+ * Automatically included in onNewCandle response for charting and visual display.
  */
 @Component
 public class OrderBlockIndicator extends AbstractIndicator {
@@ -72,12 +76,13 @@ public class OrderBlockIndicator extends AbstractIndicator {
         }
     }
     
-    // State for progressive calculation (used in calculateProgressive)
+    // State for event-driven calculation
     public static class OrderBlockState {
         public List<OrderBlock> bullishOrderBlocks = new ArrayList<>();
         public List<OrderBlock> bearishOrderBlocks = new ArrayList<>();
         public int marketStructure = 0; // 0 = uptrend, 1 = downtrend
         public int barIndex = 0;
+        public List<CandlestickData> candleBuffer = new ArrayList<>(); // Keep recent candles for pivot detection
     }
     
     public OrderBlockIndicator() {
@@ -158,198 +163,123 @@ public class OrderBlockIndicator extends AbstractIndicator {
         return params;
     }
     
-    @Override
-    public Map<String, BigDecimal> calculate(List<CandlestickData> candles, Map<String, Object> params) {
-        params = mergeWithDefaults(params);
-        validateParameters(params);
-        
-        int volumePivotLength = getIntParameter(params, "volumePivotLength", 5);
-        String mitigationMethod = getStringParameter(params, "mitigationMethod", "Wick");
-        
-        if (candles == null || candles.size() < volumePivotLength * 2 + 1) {
-            return createEmptyResult();
-        }
-        
-        // Extract price data
-        List<BigDecimal> highs = candles.stream().map(CandlestickData::getHigh).collect(Collectors.toList());
-        List<BigDecimal> lows = candles.stream().map(CandlestickData::getLow).collect(Collectors.toList());
-        List<BigDecimal> closes = candles.stream().map(CandlestickData::getClose).collect(Collectors.toList());
-        List<BigDecimal> volumes = candles.stream().map(CandlestickData::getVolume).collect(Collectors.toList());
-        List<Instant> timestamps = candles.stream().map(CandlestickData::getCloseTime).collect(Collectors.toList());
-        
-        // Calculate market structure (no previous state in simple calculate method)
-        int marketStructure = updateMarketStructure(highs, lows, volumePivotLength, 0);
-        
-        // Detect volume pivot
-        BigDecimal pivotVolume = detectVolumePivot(volumes, volumePivotLength);
-        BigDecimal volumeStrength = BigDecimal.ZERO;
-        
-        Map<String, BigDecimal> result = new HashMap<>();
-//        result.put("marketStructure", new BigDecimal(marketStructure));
-        
-        if (pivotVolume != null) {
-            int pivotIndex = volumePivotLength;
-            volumeStrength = calculateVolumeStrength(volumes, pivotIndex);
-            result.put("volumeStrength", volumeStrength);
-            
-            // Check if we detected a new order block
-            if (marketStructure == 1) { // Downtrend - Bullish OB
-                BigDecimal top = getHL2(highs, lows, pivotIndex);
-                BigDecimal bottom = lows.get(lows.size() - 1 - pivotIndex);
-                result.put("bullishOBTop", top);
-                result.put("bullishOBBottom", bottom);
-            } else if (marketStructure == 0) { // Uptrend - Bearish OB
-                BigDecimal top = highs.get(highs.size() - 1 - pivotIndex);
-                BigDecimal bottom = getHL2(highs, lows, pivotIndex);
-                result.put("bearishOBTop", top);
-                result.put("bearishOBBottom", bottom);
-            }
-        }
-        
-        // Add default values for missing keys
-        result.putIfAbsent("volumeStrength", BigDecimal.ZERO);
-        result.putIfAbsent("bullishOBTop", BigDecimal.ZERO);
-        result.putIfAbsent("bullishOBBottom", BigDecimal.ZERO);
-        result.putIfAbsent("bearishOBTop", BigDecimal.ZERO);
-        result.putIfAbsent("bearishOBBottom", BigDecimal.ZERO);
-        result.put("activeBullishOBs", BigDecimal.ZERO);
-        result.put("activeBearishOBs", BigDecimal.ZERO);
-        
-        return result;
-    }
-    
     /**
-     * Progressive calculation that maintains state across candles
-     * This is the recommended method for real-time or historical sequential processing
+     * Initialize the indicator with historical data and parameters, returns initial state
      * 
-     * @return Map containing:
-     *   - "values": Map<String, BigDecimal> with indicator values (marketStructure, volumeStrength, etc.)
-     *   - "state": OrderBlockState for next iteration (internal use only)
-     *   - "boxes": List<Map<String, Object>> formatted boxes for visualization (time1/2, price1/2, colors, text)
+     * @param historicalCandles Historical candlestick data for initialization
+     * @param params Configuration parameters
+     * @return Initial state object (OrderBlockState)
      */
-    public Map<String, Object> calculateProgressive(List<CandlestickData> candles, 
-                                                    Map<String, Object> params,
-                                                    Object previousState) {
-        params = mergeWithDefaults(params);
+    @Override
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        // Validate parameters
         validateParameters(params);
+        params = mergeWithDefaults(params);
         
         int volumePivotLength = getIntParameter(params, "volumePivotLength", 5);
         int maxBullishOBs = getIntParameter(params, "maxBullishOrderBlocks", 3);
         int maxBearishOBs = getIntParameter(params, "maxBearishOrderBlocks", 3);
         String mitigationMethod = getStringParameter(params, "mitigationMethod", "Wick");
         
-        // Cast previousState to OrderBlockState (or create new if null)
-        OrderBlockState state = (previousState instanceof OrderBlockState) 
-            ? (OrderBlockState) previousState 
-            : new OrderBlockState();
+        // Create initial state
+        OrderBlockState state = new OrderBlockState();
         
-        if (candles == null || candles.size() < volumePivotLength * 2 + 1) {
-            return Map.of(
-                "values", createEmptyResult(),
-                "state", state,
-                "boxes", new ArrayList<>()
-            );
-        }
-        
-        // Extract price data
-        List<BigDecimal> highs = candles.stream().map(CandlestickData::getHigh).collect(Collectors.toList());
-        List<BigDecimal> lows = candles.stream().map(CandlestickData::getLow).collect(Collectors.toList());
-        List<BigDecimal> closes = candles.stream().map(CandlestickData::getClose).collect(Collectors.toList());
-        List<BigDecimal> volumes = candles.stream().map(CandlestickData::getVolume).collect(Collectors.toList());
-        List<Instant> timestamps = candles.stream().map(CandlestickData::getCloseTime).collect(Collectors.toList());
-        
-        CandlestickData currentCandle = candles.get(candles.size() - 1);
-        state.barIndex++;
-        
-        // Update market structure (preserve previous state)
-        state.marketStructure = updateMarketStructure(highs, lows, volumePivotLength, state.marketStructure);
-        
-        // Detect volume pivot
-        BigDecimal pivotVolume = detectVolumePivot(volumes, volumePivotLength);
-        BigDecimal volumeStrength = BigDecimal.ZERO;
-        
-        if (pivotVolume != null) {
-            int pivotIndex = volumePivotLength;
-            volumeStrength = calculateVolumeStrength(volumes, pivotIndex);
-            Instant obTimestamp = timestamps.get(timestamps.size() - 1 - pivotIndex);
+        // If we have historical candles, process them to build initial state
+        if (historicalCandles != null && !historicalCandles.isEmpty()) {
+            // We need a rolling window approach for pivot detection
+            // Store recent candles in a buffer for lookback analysis
+            List<CandlestickData> candleBuffer = new ArrayList<>();
             
-            // Create new order block
-            if (state.marketStructure == 1) { // Downtrend - Bullish OB
-                BigDecimal top = getHL2(highs, lows, pivotIndex);
-                BigDecimal bottom = lows.get(lows.size() - 1 - pivotIndex);
-                OrderBlock ob = new OrderBlock(top, bottom, obTimestamp, state.barIndex - pivotIndex, volumeStrength);
-                addOrderBlock(state.bullishOrderBlocks, ob, maxBullishOBs);
-            } else if (state.marketStructure == 0) { // Uptrend - Bearish OB
-                BigDecimal top = highs.get(highs.size() - 1 - pivotIndex);
-                BigDecimal bottom = getHL2(highs, lows, pivotIndex);
-                OrderBlock ob = new OrderBlock(top, bottom, obTimestamp, state.barIndex - pivotIndex, volumeStrength);
-                addOrderBlock(state.bearishOrderBlocks, ob, maxBearishOBs);
+            for (int i = 0; i < historicalCandles.size(); i++) {
+                CandlestickData candle = historicalCandles.get(i);
+                candleBuffer.add(candle);
+                state.barIndex++;
+                
+                // Only process pivots if we have enough candles in buffer
+                if (candleBuffer.size() >= volumePivotLength * 2 + 1) {
+                    processCandle(candleBuffer, volumePivotLength, maxBullishOBs, maxBearishOBs, 
+                                 mitigationMethod, state, candle);
+                    
+                    // Keep buffer size manageable (only need recent candles for pivot detection)
+                    if (candleBuffer.size() > volumePivotLength * 3) {
+                        candleBuffer.remove(0);
+                    }
+                }
             }
         }
         
-        // Check for mitigation
-        BigDecimal targetPrice = "Wick".equals(mitigationMethod) ? currentCandle.getLow() : currentCandle.getClose();
-        checkMitigation(state.bullishOrderBlocks, targetPrice, true);
+        return state;
+    }
+    
+    /**
+     * Process a single historical or live candle, returns updated state and values
+     * 
+     * @param candle The candle to process
+     * @param params Configuration parameters
+     * @param stateObj Current state from previous call (or from onInit)
+     * @return Map containing "values" (indicator values), "state" (updated state), and "boxes" (visualization)
+     */
+    @Override
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object stateObj) {
+        if (candle == null) {
+            throw new IllegalArgumentException("Candle cannot be null");
+        }
         
-        targetPrice = "Wick".equals(mitigationMethod) ? currentCandle.getHigh() : currentCandle.getClose();
-        checkMitigation(state.bearishOrderBlocks, targetPrice, false);
+        // Merge with defaults
+        params = mergeWithDefaults(params);
+        
+        int volumePivotLength = getIntParameter(params, "volumePivotLength", 5);
+        int maxBullishOBs = getIntParameter(params, "maxBullishOrderBlocks", 3);
+        int maxBearishOBs = getIntParameter(params, "maxBearishOrderBlocks", 3);
+        String mitigationMethod = getStringParameter(params, "mitigationMethod", "Wick");
+        
+        // Cast or create state
+        OrderBlockState state = (stateObj instanceof OrderBlockState) 
+            ? (OrderBlockState) stateObj 
+            : new OrderBlockState();
+        
+        // Add candle to buffer
+        if (state.candleBuffer == null) {
+            state.candleBuffer = new ArrayList<>();
+        }
+        state.candleBuffer.add(candle);
+        state.barIndex++;
+        
+        // Process pivot detection if we have enough candles
+        if (state.candleBuffer.size() >= volumePivotLength * 2 + 1) {
+            processCandle(state.candleBuffer, volumePivotLength, maxBullishOBs, maxBearishOBs, 
+                         mitigationMethod, state, candle);
+            
+            // Keep buffer size manageable
+            if (state.candleBuffer.size() > volumePivotLength * 3) {
+                state.candleBuffer.remove(0);
+            }
+        }
+        
+        // Check for mitigation on current candle
+        BigDecimal targetPrice = "Wick".equals(mitigationMethod) ? candle.getLow() : candle.getClose();
+        checkMitigation(state.bullishOrderBlocks, targetPrice, true, candle.getCloseTime());
+        
+        targetPrice = "Wick".equals(mitigationMethod) ? candle.getHigh() : candle.getClose();
+        checkMitigation(state.bearishOrderBlocks, targetPrice, false, candle.getCloseTime());
         
         // Check for touched order blocks
-        markTouchedOrderBlocks(state.bullishOrderBlocks, currentCandle, true);
-        markTouchedOrderBlocks(state.bearishOrderBlocks, currentCandle, false);
+        markTouchedOrderBlocks(state.bullishOrderBlocks, candle, true);
+        markTouchedOrderBlocks(state.bearishOrderBlocks, candle, false);
+        
+        // Build result values
+        Map<String, BigDecimal> values = calculateOutputValues(state);
+        
+        // Convert order blocks to boxes for visualization
+        List<Map<String, Object>> boxes = convertOrderBlocksToBoxes(state, candle, params);
         
         // Build result
-        Map<String, BigDecimal> values = new HashMap<>();
-//        values.put("marketStructure", new BigDecimal(state.marketStructure));
-        values.put("volumeStrength", volumeStrength);
+        Map<String, Object> result = new HashMap<>();
+        result.put("values", values);
+        result.put("state", state);
+        result.put("boxes", boxes);
         
-        // Get most recent active order blocks
-        OrderBlock activeBullOB = getActiveOrderBlock(state.bullishOrderBlocks);
-        OrderBlock activeBearOB = getActiveOrderBlock(state.bearishOrderBlocks);
-        
-        values.put("bullishOBTop", activeBullOB != null ? activeBullOB.top : BigDecimal.ZERO);
-        values.put("bullishOBBottom", activeBullOB != null ? activeBullOB.bottom : BigDecimal.ZERO);
-        values.put("bearishOBTop", activeBearOB != null ? activeBearOB.top : BigDecimal.ZERO);
-        values.put("bearishOBBottom", activeBearOB != null ? activeBearOB.bottom : BigDecimal.ZERO);
-        
-        long activeBullCount = state.bullishOrderBlocks.stream().filter(ob -> !ob.mitigated).count();
-        long activeBearCount = state.bearishOrderBlocks.stream().filter(ob -> !ob.mitigated).count();
-        
-        values.put("activeBullishOBs", new BigDecimal(activeBullCount));
-        values.put("activeBearishOBs", new BigDecimal(activeBearCount));
-        
-        // Convert order blocks to BoxShape objects for visualization
-        boolean showMitigated = getBooleanParameter(params, "showMitigatedBoxes", false);
-        String bullishColor = getStringParameter(params, "bullishColor", "rgba(22, 148, 0, 0.15)");
-        String bearishColor = getStringParameter(params, "bearishColor", "rgba(255, 17, 0, 0.15)");
-        Instant currentTime = currentCandle.getCloseTime();
-        
-        List<BoxShape> boxShapes = new ArrayList<>();
-        
-        // Convert bullish order blocks to boxes
-        for (OrderBlock ob : state.bullishOrderBlocks) {
-            if (ob.mitigated && !showMitigated) continue;
-            boxShapes.add(convertToBox(ob, currentTime, bullishColor, true));
-        }
-        
-        // Convert bearish order blocks to boxes
-        for (OrderBlock ob : state.bearishOrderBlocks) {
-            if (ob.mitigated && !showMitigated) continue;
-            boxShapes.add(convertToBox(ob, currentTime, bearishColor, false));
-        }
-        
-        // Convert BoxShape objects to Map for API serialization
-        List<Map<String, Object>> boxes = boxShapes.stream()
-            .map(BoxShape::toMap)
-            .collect(Collectors.toList());
-        
-        // Return formatted boxes for visualization
-        Map<String, Object> output = new HashMap<>();
-        output.put("values", values);
-        output.put("state", state);
-        output.put("boxes", boxes); // Formatted boxes ready for charting
-        
-        return output;
+        return result;
     }
     
     /**
@@ -419,7 +349,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
         
         // Note: Order blocks themselves are rendered as boxes/rectangles
         // which requires special handling in the frontend
-        // The actual box data is provided through the calculateProgressive method
+        // The actual box data is provided through the onNewCandle method in the "boxes" key
         
         return metadata;
     }
@@ -433,17 +363,106 @@ public class OrderBlockIndicator extends AbstractIndicator {
     
     // ============ Helper Methods ============
     
-    private Map<String, BigDecimal> createEmptyResult() {
-        Map<String, BigDecimal> result = new HashMap<>();
-//        result.put("marketStructure", BigDecimal.ZERO);
-        result.put("volumeStrength", BigDecimal.ZERO);
-        result.put("bullishOBTop", BigDecimal.ZERO);
-        result.put("bullishOBBottom", BigDecimal.ZERO);
-        result.put("bearishOBTop", BigDecimal.ZERO);
-        result.put("bearishOBBottom", BigDecimal.ZERO);
-        result.put("activeBullishOBs", BigDecimal.ZERO);
-        result.put("activeBearishOBs", BigDecimal.ZERO);
-        return result;
+    /**
+     * Process a single candle for pivot detection and order block creation
+     */
+    private void processCandle(List<CandlestickData> candleBuffer, int volumePivotLength, 
+                               int maxBullishOBs, int maxBearishOBs, String mitigationMethod,
+                               OrderBlockState state, CandlestickData currentCandle) {
+        // Extract price data from buffer
+        List<BigDecimal> highs = candleBuffer.stream().map(CandlestickData::getHigh).collect(Collectors.toList());
+        List<BigDecimal> lows = candleBuffer.stream().map(CandlestickData::getLow).collect(Collectors.toList());
+        List<BigDecimal> volumes = candleBuffer.stream().map(CandlestickData::getVolume).collect(Collectors.toList());
+        List<Instant> timestamps = candleBuffer.stream().map(CandlestickData::getCloseTime).collect(Collectors.toList());
+        
+        // Update market structure
+        state.marketStructure = updateMarketStructure(highs, lows, volumePivotLength, state.marketStructure);
+        
+        // Detect volume pivot
+        BigDecimal pivotVolume = detectVolumePivot(volumes, volumePivotLength);
+        
+        if (pivotVolume != null) {
+            int pivotIndex = volumePivotLength;
+            BigDecimal volumeStrength = calculateVolumeStrength(volumes, pivotIndex);
+            Instant obTimestamp = timestamps.get(timestamps.size() - 1 - pivotIndex);
+            
+            // Create new order block based on market structure
+            if (state.marketStructure == 1) { // Downtrend - Bullish OB
+                BigDecimal top = getHL2(highs, lows, pivotIndex);
+                BigDecimal bottom = lows.get(lows.size() - 1 - pivotIndex);
+                OrderBlock ob = new OrderBlock(top, bottom, obTimestamp, state.barIndex - pivotIndex, volumeStrength);
+                addOrderBlock(state.bullishOrderBlocks, ob, maxBullishOBs);
+            } else if (state.marketStructure == 0) { // Uptrend - Bearish OB
+                BigDecimal top = highs.get(highs.size() - 1 - pivotIndex);
+                BigDecimal bottom = getHL2(highs, lows, pivotIndex);
+                OrderBlock ob = new OrderBlock(top, bottom, obTimestamp, state.barIndex - pivotIndex, volumeStrength);
+                addOrderBlock(state.bearishOrderBlocks, ob, maxBearishOBs);
+            }
+        }
+    }
+    
+    /**
+     * Calculate output values from current state
+     */
+    private Map<String, BigDecimal> calculateOutputValues(OrderBlockState state) {
+        Map<String, BigDecimal> values = new HashMap<>();
+        
+        // Calculate volume strength from most recent order block
+        BigDecimal volumeStrength = BigDecimal.ZERO;
+        if (!state.bullishOrderBlocks.isEmpty()) {
+            volumeStrength = state.bullishOrderBlocks.get(0).volumeStrength;
+        } else if (!state.bearishOrderBlocks.isEmpty()) {
+            volumeStrength = state.bearishOrderBlocks.get(0).volumeStrength;
+        }
+        values.put("volumeStrength", volumeStrength);
+        
+        // Get most recent active order blocks
+        OrderBlock activeBullOB = getActiveOrderBlock(state.bullishOrderBlocks);
+        OrderBlock activeBearOB = getActiveOrderBlock(state.bearishOrderBlocks);
+        
+        values.put("bullishOBTop", activeBullOB != null ? activeBullOB.top : BigDecimal.ZERO);
+        values.put("bullishOBBottom", activeBullOB != null ? activeBullOB.bottom : BigDecimal.ZERO);
+        values.put("bearishOBTop", activeBearOB != null ? activeBearOB.top : BigDecimal.ZERO);
+        values.put("bearishOBBottom", activeBearOB != null ? activeBearOB.bottom : BigDecimal.ZERO);
+        
+        long activeBullCount = state.bullishOrderBlocks.stream().filter(ob -> !ob.mitigated).count();
+        long activeBearCount = state.bearishOrderBlocks.stream().filter(ob -> !ob.mitigated).count();
+        
+        values.put("activeBullishOBs", new BigDecimal(activeBullCount));
+        values.put("activeBearishOBs", new BigDecimal(activeBearCount));
+        
+        return values;
+    }
+    
+    /**
+     * Convert order blocks to boxes for visualization
+     */
+    private List<Map<String, Object>> convertOrderBlocksToBoxes(OrderBlockState state, 
+                                                                CandlestickData currentCandle, 
+                                                                Map<String, Object> params) {
+        boolean showMitigated = getBooleanParameter(params, "showMitigatedBoxes", false);
+        String bullishColor = getStringParameter(params, "bullishColor", "rgba(22, 148, 0, 0.15)");
+        String bearishColor = getStringParameter(params, "bearishColor", "rgba(255, 17, 0, 0.15)");
+        Instant currentTime = currentCandle.getCloseTime();
+        
+        List<BoxShape> boxShapes = new ArrayList<>();
+        
+        // Convert bullish order blocks to boxes
+        for (OrderBlock ob : state.bullishOrderBlocks) {
+            if (ob.mitigated && !showMitigated) continue;
+            boxShapes.add(convertToBox(ob, currentTime, bullishColor, true));
+        }
+        
+        // Convert bearish order blocks to boxes
+        for (OrderBlock ob : state.bearishOrderBlocks) {
+            if (ob.mitigated && !showMitigated) continue;
+            boxShapes.add(convertToBox(ob, currentTime, bearishColor, false));
+        }
+        
+        // Convert BoxShape objects to Map for API serialization
+        return boxShapes.stream()
+            .map(BoxShape::toMap)
+            .collect(Collectors.toList());
     }
     
     private int updateMarketStructure(List<BigDecimal> highs, List<BigDecimal> lows, int volumePivotLength, int previousStructure) {
@@ -566,7 +585,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
         }
     }
     
-    private void checkMitigation(List<OrderBlock> blocks, BigDecimal targetPrice, boolean isBullish) {
+    private void checkMitigation(List<OrderBlock> blocks, BigDecimal targetPrice, boolean isBullish, Instant mitigationTime) {
         for (OrderBlock ob : blocks) {
             if (!ob.mitigated) {
                 boolean mitigated = isBullish ? 
@@ -575,7 +594,7 @@ public class OrderBlockIndicator extends AbstractIndicator {
                 
                 if (mitigated) {
                     ob.mitigated = true;
-                    ob.mitigationTime = Instant.now();
+                    ob.mitigationTime = mitigationTime;
                 }
             }
         }
