@@ -185,7 +185,7 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
 //            System.out.println("📡 Broadcasting data to " + sessions.size() + " WebSocket sessions: " + data.getSymbol());
             
             Map<String, Object> messageData = Map.of(
-                "type", "tradingData",
+                "type", "candleUpdate", // Frontend expects "candleUpdate" for real-time candle updates
                 "symbol", data.getSymbol(),
                 "timestamp", data.getTimestamp(),
                 "provider", data.getProvider(),
@@ -198,19 +198,25 @@ public class TradingWebSocketHandler extends TextWebSocketHandler {
                 messageData = new java.util.HashMap<>(messageData);
                 
                 Map<String, Object> candlestickMap = new java.util.HashMap<>();
-                candlestickMap.put("open", candlestick.getOpen());
-                candlestickMap.put("high", candlestick.getHigh());
-                candlestickMap.put("low", candlestick.getLow());
-                candlestickMap.put("close", candlestick.getClose());
-                candlestickMap.put("volume", candlestick.getVolume());
-                candlestickMap.put("quoteAssetVolume", candlestick.getQuoteAssetVolume());
+                // Convert BigDecimal to double for proper charting display
+                candlestickMap.put("open", candlestick.getOpen().doubleValue());
+                candlestickMap.put("high", candlestick.getHigh().doubleValue());
+                candlestickMap.put("low", candlestick.getLow().doubleValue());
+                candlestickMap.put("close", candlestick.getClose().doubleValue());
+                candlestickMap.put("volume", candlestick.getVolume().doubleValue());
+                candlestickMap.put("quoteAssetVolume", candlestick.getQuoteAssetVolume().doubleValue());
                 candlestickMap.put("numberOfTrades", candlestick.getNumberOfTrades());
                 candlestickMap.put("interval", candlestick.getInterval());
-                candlestickMap.put("openTime", candlestick.getOpenTime());
-                candlestickMap.put("closeTime", candlestick.getCloseTime());
+                // Timestamps - provide both formats for compatibility
+                candlestickMap.put("openTime", candlestick.getOpenTime().toString());
+                candlestickMap.put("closeTime", candlestick.getCloseTime().toString());
+                candlestickMap.put("time", candlestick.getOpenTime().getEpochSecond()); // Unix seconds (TradingView)
+                candlestickMap.put("timestamp", candlestick.getOpenTime().getEpochSecond()); // Unix seconds (alias)
+                candlestickMap.put("timeMs", candlestick.getOpenTime().toEpochMilli()); // Unix milliseconds (Chart.js)
                 candlestickMap.put("isClosed", candlestick.isClosed());
                 
-                messageData.put("candlestick", candlestickMap);
+                // Frontend expects "candle" key, not "candlestick"
+                messageData.put("candle", candlestickMap);
             } 
             // Add trade data if available (order flow)
             else if (data.hasTradeData()) {

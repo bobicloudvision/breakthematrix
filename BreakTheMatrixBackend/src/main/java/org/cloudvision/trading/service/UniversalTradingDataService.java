@@ -49,7 +49,7 @@ public class UniversalTradingDataService {
             if (candlestickHistoryService != null) {
                 try {
                     System.out.println("📥 Fetching historical data for " + symbol + " before subscribing...");
-                    List<CandlestickData> historicalData = provider.getHistoricalKlines(symbol, interval, 1000);
+                    List<CandlestickData> historicalData = provider.getHistoricalKlines(symbol, interval, 5000);
                     
                     if (!historicalData.isEmpty()) {
                         candlestickHistoryService.addCandlesticks(providerName, symbol, interval.getValue(), historicalData);

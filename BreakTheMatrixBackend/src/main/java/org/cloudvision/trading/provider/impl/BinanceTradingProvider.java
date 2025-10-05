@@ -522,10 +522,8 @@ public class BinanceTradingProvider implements TradingDataProvider {
             if (dataHandler != null) {
                 dataHandler.accept(tradingData);
             }
-            
-//            System.out.println("🕯️ " + symbol + " (" + intervalStr + ") OHLC: " +
-//                             open + "/" + high + "/" + low + "/" + close + " [" + (isClosed ? "CLOSED" : "LIVE") + "]");
-//
+
+
         } catch (Exception e) {
             System.err.println("❌ Error parsing direct kline data: " + e.getMessage());
             e.printStackTrace();

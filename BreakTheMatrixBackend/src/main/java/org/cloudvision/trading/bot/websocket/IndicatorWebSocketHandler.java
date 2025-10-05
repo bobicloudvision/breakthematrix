@@ -254,6 +254,9 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
         if (data.hasCandlestickData()) {
             CandlestickData candle = data.getCandlestickData();
             
+            // Broadcast raw candle update to all sessions (for chart updates)
+            broadcastCandleUpdate(candle);
+            
             if (candle.isClosed()) {
                 // Closed candle - full indicator update
                 processCandleClose(candle);
@@ -403,6 +406,74 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             System.err.println("❌ Failed to broadcast indicator update: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+    
+    /**
+     * Broadcast raw candlestick update to all sessions subscribed to this context
+     */
+    private void broadcastCandleUpdate(CandlestickData candle) {
+        try {
+            String contextKey = String.format("%s:%s:%s", 
+                candle.getProvider(), candle.getSymbol(), candle.getInterval());
+            
+            // Build candle update message
+            Map<String, Object> updateMessage = new HashMap<>();
+            updateMessage.put("type", "candleUpdate");
+            updateMessage.put("provider", candle.getProvider());
+            updateMessage.put("symbol", candle.getSymbol());
+            updateMessage.put("interval", candle.getInterval());
+            
+            // Add candle data with proper format for frontend
+            Map<String, Object> candleData = new HashMap<>();
+            candleData.put("openTime", candle.getOpenTime().toString());
+            candleData.put("closeTime", candle.getCloseTime().toString());
+            candleData.put("time", candle.getOpenTime().getEpochSecond()); // Unix seconds (TradingView)
+            candleData.put("timestamp", candle.getOpenTime().getEpochSecond()); // Unix seconds (alias)
+            candleData.put("timeMs", candle.getOpenTime().toEpochMilli()); // Unix milliseconds (Chart.js)
+            candleData.put("open", candle.getOpen().doubleValue());
+            candleData.put("high", candle.getHigh().doubleValue());
+            candleData.put("low", candle.getLow().doubleValue());
+            candleData.put("close", candle.getClose().doubleValue());
+            candleData.put("volume", candle.getVolume().doubleValue());
+            candleData.put("closed", candle.isClosed());
+            updateMessage.put("candle", candleData);
+            
+            TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
+            
+            // Send to all sessions subscribed to this context
+            int sentCount = 0;
+            for (Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
+                String sessionId = entry.getKey();
+                WebSocketSession session = entry.getValue();
+                
+                try {
+                    if (session.isOpen() && shouldSendToContext(sessionId, contextKey)) {
+                        session.sendMessage(message);
+                        sentCount++;
+                    }
+                } catch (IOException e) {
+                    System.err.println("❌ Failed to send candle update to session " + 
+                                     sessionId + ": " + e.getMessage());
+                }
+            }
+            
+            // Log only when sessions are actually receiving updates
+            if (sentCount > 0 && Math.random() < 0.01) {
+                System.out.println("📤 Candle update sent to " + sentCount + " session(s)");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to broadcast candle update: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Check if a session should receive updates for this context
+     */
+    private boolean shouldSendToContext(String sessionId, String contextKey) {
+        Set<String> sessionContexts = sessionContextSubscriptions.get(sessionId);
+        return sessionContexts != null && sessionContexts.contains(contextKey);
     }
     
     /**

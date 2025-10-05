@@ -824,7 +824,7 @@ export const ChartComponent = props => {
 // Transform API data to chart format
 const transformApiData = (apiData) => {
     return apiData.map(candle => ({
-        time: new Date(candle.openTime).getTime() / 1000, // Convert to Unix timestamp
+        time: candle.timestamp, // Use timestamp field directly (already in seconds)
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -1076,6 +1076,42 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                         setWsMessage(`Subscribed: ${message.activeInstances || 0} indicators`);
                         break;
                         
+                    case 'candleUpdate': 
+                        // Handle real-time candlestick updates
+                        const candleData = message.candle || message.data;
+                        if (candleData) {
+                            const candleTime = candleData.timestamp;
+                            
+                            setData(prevCandles => {
+                                // Check if candle already exists at this timestamp
+                                const existingCandleIndex = prevCandles.findIndex(c => c.time === candleTime);
+                                
+                                const newCandle = {
+                                    time: candleTime,
+                                    open: candleData.open,
+                                    high: candleData.high,
+                                    low: candleData.low,
+                                    close: candleData.close
+                                };
+                                
+                                if (existingCandleIndex >= 0) {
+                                    // UPDATE existing candle
+                                    const updatedCandles = [...prevCandles];
+                                    updatedCandles[existingCandleIndex] = newCandle;
+                                    return updatedCandles;
+                                } else {
+                                    // ADD new candle
+                                    return [...prevCandles, newCandle];
+                                }
+                            });
+                            
+                            // Update real count if this is a closed candle
+                            if (candleData.closed) {
+                                setRealCount(prev => prev + 1);
+                            }
+                        }
+                        break;
+                    
                     case 'indicatorUpdate':
                         console.log('📊 Indicator Update:', {
                             indicator: message.indicatorId,
