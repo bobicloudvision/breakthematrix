@@ -12,6 +12,8 @@ export function ReplayTab({ provider, symbol, interval }) {
   const [activeSession, setActiveSession] = useState(null);
   const [sessionStatus, setSessionStatus] = useState(null);
   const [controlLoading, setControlLoading] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = React.useRef(null);
 
   // Fetch available data on mount and when provider/symbol/interval changes
   useEffect(() => {
@@ -130,17 +132,92 @@ export function ReplayTab({ provider, symbol, interval }) {
     return null;
   };
 
-  // Poll session status when there's an active session
+  // WebSocket connection for real-time updates
   useEffect(() => {
-    if (!activeSession) return;
+    if (!activeSession) {
+      // Clean up WebSocket if session ends
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+        setWsConnected(false);
+      }
+      return;
+    }
 
-    fetchSessionStatus(activeSession); // Initial fetch
+    // Connect to WebSocket
+    const ws = new WebSocket('ws://localhost:8080/replay-ws');
+    wsRef.current = ws;
 
-    const interval = setInterval(() => {
-      fetchSessionStatus(activeSession);
-    }, 1000); // Poll every second
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setWsConnected(true);
+      
+      // Subscribe to the session
+      ws.send(JSON.stringify({
+        action: 'subscribe',
+        sessionId: activeSession
+      }));
+    };
 
-    return () => clearInterval(interval);
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === 'subscribed') {
+          console.log('Subscribed to session:', message.sessionId);
+          if (message.status) {
+            setSessionStatus(message.status);
+          }
+        } else if (message.type === 'replayUpdate') {
+          // Real-time replay updates with candle and status
+          console.log('Replay update - Candle:', message.currentIndex, '/', message.totalCandles, 
+                      `(${message.progress.toFixed(1)}%)`, message.candle?.symbol, 
+                      '@', message.candle?.close);
+          
+          // Update status with the full message (it contains all status fields)
+          setSessionStatus({
+            state: message.state,
+            currentIndex: message.currentIndex,
+            totalCandles: message.totalCandles,
+            progress: message.progress,
+            speed: message.speed,
+            currentTime: message.candle?.openTime,
+            symbol: message.candle?.symbol,
+            interval: message.candle?.interval,
+            sessionId: message.sessionId,
+            indicatorCount: Object.keys(message.indicators || {}).length
+          });
+
+          // Candle data is available for chart updates if needed
+          // message.candle contains: open, high, low, close, volume, time, etc.
+        } else if (message.type === 'complete') {
+          console.log('Replay complete');
+          // Optionally show a completion notification
+        } else if (message.type === 'error') {
+          console.error('WebSocket error:', message.message);
+          setError(message.message);
+        }
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setWsConnected(false);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setWsConnected(false);
+    };
+
+    // Cleanup on unmount or session change
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
   }, [activeSession]);
 
   const handlePlayPause = async () => {
@@ -246,8 +323,16 @@ export function ReplayTab({ provider, symbol, interval }) {
         {activeSession && sessionStatus && (
           <div className="mb-6 p-6 bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-lg border border-purple-500/50 shadow-lg shadow-purple-500/20">
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-purple-300 mb-1">Active Replay Session</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-lg font-bold text-purple-300">Active Replay Session</h3>
+                  {wsConnected && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full border border-green-500/30">
+                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-300 font-medium">Live</span>
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-purple-400 font-mono">{activeSession}</p>
               </div>
               <div className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -580,6 +665,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                     <li>• Speed 0 = paused, 1 = real-time, higher = faster playback</li>
                     <li>• Use quick select buttons for common time ranges</li>
                     <li>• Provider, symbol, and interval are taken from main settings</li>
+                    <li>• Real-time updates via WebSocket when session is active</li>
                   </ul>
                 </div>
               </div>
