@@ -273,8 +273,8 @@ public class EngulfingCandleIndicator extends AbstractIndicator {
         values.put("rsi", rsi != null ? rsi : BigDecimal.ZERO);
         values.put("bullishEngulfing", bullishEngulfing ? BigDecimal.ONE : BigDecimal.ZERO);
         values.put("bearishEngulfing", bearishEngulfing ? BigDecimal.ONE : BigDecimal.ZERO);
-        values.put("buySignal", buySignal ? BigDecimal.ONE : BigDecimal.ZERO);
-        values.put("sellSignal", sellSignal ? BigDecimal.ONE : BigDecimal.ZERO);
+//        values.put("buySignal", buySignal ? BigDecimal.ONE : BigDecimal.ZERO);
+//        values.put("sellSignal", sellSignal ? BigDecimal.ONE : BigDecimal.ZERO);
         
         Map<String, Object> result = new HashMap<>();
 //        result.put("values", values);

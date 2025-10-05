@@ -68,7 +68,8 @@ export function IndicatorConfigModal({
   };
 
   const handleApply = () => {
-    // Just pass the configuration, Chart will handle fetching data
+    // Pass the configuration to parent component
+    // Parent will handle either POST (new instance) or PATCH (update existing)
     onApply(indicator.id, params);
   };
 
@@ -148,7 +149,8 @@ export function IndicatorConfigModal({
                       type="text"
                       value={params.symbol || ''}
                       onChange={(e) => handleParamChange('symbol', e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                      disabled={isEditing}
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -156,7 +158,8 @@ export function IndicatorConfigModal({
                     <select
                       value={params.interval || '5m'}
                       onChange={(e) => handleParamChange('interval', e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                      disabled={isEditing}
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="1m">1m</option>
                       <option value="5m">5m</option>
@@ -172,7 +175,8 @@ export function IndicatorConfigModal({
                       type="text"
                       value={params.provider || 'Binance'}
                       onChange={(e) => handleParamChange('provider', e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                      disabled={isEditing}
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -181,10 +185,16 @@ export function IndicatorConfigModal({
                       type="number"
                       value={params.count || 5000}
                       onChange={(e) => handleParamChange('count', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                      disabled={isEditing}
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
+                {isEditing && (
+                  <p className="text-xs text-white/40 mt-2">
+                    <span className="text-cyan-400">ℹ</span> Provider, Symbol, Interval, and Data Points cannot be changed when editing. Only indicator parameters can be updated.
+                  </p>
+                )}
               </div>
 
               {/* Indicator Parameters */}

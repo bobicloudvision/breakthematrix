@@ -109,43 +109,57 @@ export function IndicatorsTab() {
 
   const handleApplyIndicator = async (indicatorId, params) => {
     try {
-      // If editing, deactivate the old instance first
+      // If editing, use PATCH to update the existing instance
       if (editingInstance) {
-        await fetch(
+        const patchPayload = {
+          params: params.params || {}
+        };
+        
+        const res = await fetch(
           `http://localhost:8080/api/indicators/instances/${encodeURIComponent(editingInstance.instanceKey)}`,
           {
-            method: 'DELETE',
-            headers: { accept: '*/*' },
+            method: 'PATCH',
+            headers: {
+              accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(patchPayload),
           }
         );
-        console.log(`Deactivated old indicator instance: ${editingInstance.instanceKey}`);
+        
+        if (!res.ok) {
+          throw new Error(`Failed to update indicator: HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log(`Updated indicator instance:`, data);
+      } else {
+        // Activate a new instance
+        const activatePayload = {
+          indicatorId: indicatorId,
+          provider: params.provider,
+          symbol: params.symbol,
+          interval: params.interval,
+          params: params.params || {},
+          historyCount: params.count || 5000
+        };
+        
+        const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(activatePayload),
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log(`Activated indicator instance:`, data);
       }
-      
-      // Activate the new/updated instance
-      const activatePayload = {
-        indicatorId: indicatorId,
-        provider: params.provider,
-        symbol: params.symbol,
-        interval: params.interval,
-        params: params.params || {},
-        historyCount: params.count || 5000
-      };
-      
-      const res = await fetch('http://localhost:8080/api/indicators/instances/activate', {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(activatePayload),
-      });
-      
-      if (!res.ok) {
-        throw new Error(`Failed to activate indicator: HTTP ${res.status}`);
-      }
-      
-      const data = await res.json();
-      console.log(`Activated indicator instance:`, data);
       
       // Refresh the active instances list
       await fetchActiveInstances();

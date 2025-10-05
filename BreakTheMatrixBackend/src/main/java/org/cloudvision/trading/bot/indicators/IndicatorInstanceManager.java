@@ -353,6 +353,51 @@ public class IndicatorInstanceManager {
     }
     
     /**
+     * Update parameters for an existing indicator instance and recalculate historical data
+     * This will:
+     * 1. Deactivate the old instance
+     * 2. Create a new instance with updated parameters
+     * 3. Load and recalculate all historical data with new parameters
+     * 4. Return the new instance key (which will include the new params hash)
+     * 
+     * @param oldInstanceKey The current instance key
+     * @param newParams The new parameters to apply
+     * @return New instance key with updated parameters
+     * @throws IllegalArgumentException if instance not found
+     */
+    public String updateIndicatorParams(String oldInstanceKey, Map<String, Object> newParams) {
+        // Get the old instance
+        IndicatorInstance oldInstance = activeInstances.get(oldInstanceKey);
+        
+        if (oldInstance == null) {
+            throw new IllegalArgumentException("Instance not found: " + oldInstanceKey);
+        }
+        
+        // Extract context from old instance
+        String indicatorId = oldInstance.getIndicatorId();
+        String provider = oldInstance.getProvider();
+        String symbol = oldInstance.getSymbol();
+        String interval = oldInstance.getInterval();
+        
+        System.out.println("🔄 Updating indicator params: " + oldInstanceKey);
+        System.out.println("   Old params: " + oldInstance.getParams());
+        System.out.println("   New params: " + newParams);
+        
+        // Deactivate the old instance
+        deactivateIndicator(oldInstanceKey);
+        
+        // Activate a new instance with the new parameters
+        // This will automatically load historical data and recalculate everything
+        String newInstanceKey = activateIndicator(indicatorId, provider, symbol, interval, newParams);
+        
+        System.out.println("✅ Updated indicator instance");
+        System.out.println("   Old key: " + oldInstanceKey);
+        System.out.println("   New key: " + newInstanceKey);
+        
+        return newInstanceKey;
+    }
+    
+    /**
      * Update a specific indicator instance with a new candle
      * 
      * @param instanceKey Instance key

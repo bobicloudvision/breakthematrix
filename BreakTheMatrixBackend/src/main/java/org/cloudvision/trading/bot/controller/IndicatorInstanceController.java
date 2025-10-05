@@ -207,6 +207,153 @@ public class IndicatorInstanceController {
     }
     
     /**
+     * Update parameters for an existing indicator instance
+     * PATCH /api/indicators/instances/{instanceKey}
+     */
+    @Operation(
+        summary = "Update indicator instance parameters",
+        description = "Updates the parameters of an active indicator instance and recalculates all historical data with the new parameters. " +
+                     "Returns a new instance key that reflects the updated parameters. " +
+                     "The old instance will be deactivated and a new one created with the new parameters."
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        description = "New parameters to apply to the indicator. The indicator will be reinitialized and all historical data recalculated.",
+        required = true,
+        content = @Content(
+            mediaType = "application/json",
+            examples = {
+                @ExampleObject(
+                    name = "Update SMA period",
+                    description = "Changes SMA period from 20 to 50",
+                    value = """
+                    {
+                      "params": {
+                        "period": 50,
+                        "color": "#2962FF"
+                      }
+                    }
+                    """
+                ),
+                @ExampleObject(
+                    name = "Update RSI settings",
+                    description = "Updates RSI period and overbought/oversold levels",
+                    value = """
+                    {
+                      "params": {
+                        "period": 14,
+                        "overbought": 70,
+                        "oversold": 30
+                      }
+                    }
+                    """
+                )
+            }
+        )
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Indicator parameters updated successfully",
+            content = @Content(
+                mediaType = "application/json",
+                examples = @ExampleObject(
+                    value = """
+                    {
+                      "success": true,
+                      "message": "Indicator parameters updated successfully",
+                      "oldInstanceKey": "Binance:BTCUSDT:5m:sma:7a8b9c",
+                      "newInstanceKey": "Binance:BTCUSDT:5m:sma:f3e2d1",
+                      "details": {
+                        "indicatorId": "sma",
+                        "provider": "Binance",
+                        "symbol": "BTCUSDT",
+                        "interval": "5m",
+                        "oldParams": {
+                          "period": 20
+                        },
+                        "newParams": {
+                          "period": 50,
+                          "color": "#2962FF"
+                        },
+                        "createdAt": "2025-10-05T10:30:00Z",
+                        "initializedWithCandles": 50,
+                        "historicalResultsStored": 4950
+                      }
+                    }
+                    """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Instance not found"
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid parameters"
+        )
+    })
+    @PatchMapping("/{instanceKey}")
+    public ResponseEntity<?> updateIndicatorParams(
+            @PathVariable @Parameter(description = "Current instance key") String instanceKey,
+            @RequestBody UpdateParamsRequest request) {
+        
+        try {
+            // Get old instance for comparison
+            IndicatorInstance oldInstance = instanceManager.getInstance(instanceKey);
+            
+            if (oldInstance == null) {
+                return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "error", "Instance not found: " + instanceKey
+                ));
+            }
+            
+            Map<String, Object> oldParams = oldInstance.getParams();
+            
+            // Update parameters and get new instance key
+            String newInstanceKey = instanceManager.updateIndicatorParams(
+                instanceKey,
+                request.getParams() != null ? request.getParams() : new HashMap<>()
+            );
+            
+            // Get new instance
+            IndicatorInstance newInstance = instanceManager.getInstance(newInstanceKey);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Indicator parameters updated successfully");
+            response.put("oldInstanceKey", instanceKey);
+            response.put("newInstanceKey", newInstanceKey);
+            
+            Map<String, Object> details = new HashMap<>();
+            details.put("indicatorId", newInstance.getIndicatorId());
+            details.put("provider", newInstance.getProvider());
+            details.put("symbol", newInstance.getSymbol());
+            details.put("interval", newInstance.getInterval());
+            details.put("oldParams", oldParams);
+            details.put("newParams", newInstance.getParams());
+            details.put("createdAt", newInstance.getCreatedAt());
+            details.put("initializedWithCandles", newInstance.getState().getCandleCount());
+            details.put("historicalResultsStored", newInstance.getHistoricalResultCount());
+            
+            response.put("details", details);
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
+        }
+    }
+    
+    /**
      * Deactivate an indicator instance
      * DELETE /api/indicators/instances/{instanceKey}
      */
@@ -501,6 +648,13 @@ public class IndicatorInstanceController {
         
         public String getInterval() { return interval; }
         public void setInterval(String interval) { this.interval = interval; }
+        
+        public Map<String, Object> getParams() { return params; }
+        public void setParams(Map<String, Object> params) { this.params = params; }
+    }
+    
+    public static class UpdateParamsRequest {
+        private Map<String, Object> params;
         
         public Map<String, Object> getParams() { return params; }
         public void setParams(Map<String, Object> params) { this.params = params; }
