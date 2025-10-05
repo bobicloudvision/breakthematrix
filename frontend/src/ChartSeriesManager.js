@@ -685,6 +685,16 @@ export class ChartSeriesManager {
     }
 
     /**
+     * Get a series by ID
+     * @param {string} id - The series ID
+     * @returns {object|null} - The series object or null if not found
+     */
+    getSeries(id) {
+        const seriesInfo = this.seriesMap.get(id);
+        return seriesInfo ? seriesInfo.series : null;
+    }
+
+    /**
      * Get all series IDs
      */
     getAllSeriesIds() {

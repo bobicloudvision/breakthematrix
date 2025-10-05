@@ -35,6 +35,8 @@ export const ChartComponent = props => {
         provider,
         symbol,
         interval,
+        seriesRef: externalSeriesRef,
+        seriesManagerRef: externalSeriesManagerRef,
         colors: {
             backgroundColor = 'transparent',
             textColor = '#fff',
@@ -49,8 +51,9 @@ export const ChartComponent = props => {
 
     const chartContainerRef = useRef();
     const chartRef = useRef();
-    const seriesRef = useRef();
-    const seriesManagerRef = useRef(null); // Centralized series and box manager
+    // Use external refs if provided, otherwise create local refs (for backwards compatibility)
+    const seriesRef = externalSeriesRef || useRef();
+    const seriesManagerRef = externalSeriesManagerRef || useRef(null);
     const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
@@ -164,11 +167,11 @@ export const ChartComponent = props => {
         isInitialDataLoadRef.current = true;
     }, [provider, symbol, interval]);
 
-    // Update data when it changes
+    // Update data when it changes (only for initial load)
     useEffect(() => {
-        if (seriesRef.current && data && data.length > 0) {
+        if (seriesRef.current && data && data.length > 0 && isInitialDataLoadRef.current) {
             try {
-                console.log('Updating chart with new data:', data.length, 'candles');
+                console.log('Setting initial chart data:', data.length, 'candles');
                 seriesRef.current.setData(data);
                 
                 // Update series manager's chart data reference
@@ -176,8 +179,8 @@ export const ChartComponent = props => {
                     seriesManagerRef.current.setChartData(data);
                 }
                 
-                // Only apply default zoom on initial load, not on subsequent updates
-                if (chartRef.current && isInitialDataLoadRef.current) {
+                // Apply default zoom on initial load
+                if (chartRef.current) {
                     // Default zoom: show last N REAL candles (exclude future placeholders)
                     const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
                     const endIndex = realCount > 0 ? realCount - 1 : data.length - 1;
@@ -190,9 +193,10 @@ export const ChartComponent = props => {
                     } else {
                         chartRef.current.timeScale().fitContent();
                     }
-                    // Mark initial load as complete
-                    isInitialDataLoadRef.current = false;
                 }
+                
+                // Mark initial load as complete
+                isInitialDataLoadRef.current = false;
             } catch (error) {
                 console.error('Error updating chart data:', error);
             }
@@ -225,7 +229,7 @@ export const ChartComponent = props => {
 
             return () => clearTimeout(timeoutId);
         }
-    }, [strategyData, data]);
+    }, [strategyData]); // Removed 'data' to prevent re-adding on WebSocket updates
 
     // Handle enabled indicators from IndicatorsTab
     useEffect(() => {
@@ -560,7 +564,7 @@ export const ChartComponent = props => {
         };
 
         fetchAndAddIndicators();
-    }, [enabledIndicators, data, provider, symbol, interval]);
+    }, [enabledIndicators, provider, symbol, interval]); // Removed 'data' to prevent re-fetching on WebSocket updates
 
     // Add indicators to chart
     const addIndicators = (chart, strategyData) => {
@@ -901,6 +905,10 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
     const [wsMessage, setWsMessage] = useState('');
     const [wsReconnectTrigger, setWsReconnectTrigger] = useState(0);
     const wsRef = useRef(null);
+    
+    // Refs shared between Chart and ChartComponent for WebSocket updates
+    const seriesRef = useRef(null);
+    const seriesManagerRef = useRef(null);
 
     // Fetch strategy visualization data
     const fetchStrategyData = async (strategyId, symbol) => {
@@ -1088,35 +1096,49 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                     case 'candleUpdate': 
                         // Handle real-time candlestick updates
                         const candleData = message.candle || message.data;
-                        if (candleData) {
+                        if (candleData && seriesRef.current) {
                             const candleTime = candleData.timestamp;
                             
-                            setData(prevCandles => {
-                                // Check if candle already exists at this timestamp
-                                const existingCandleIndex = prevCandles.findIndex(c => c.time === candleTime);
-                                
-                                const newCandle = {
-                                    time: candleTime,
-                                    open: candleData.open,
-                                    high: candleData.high,
-                                    low: candleData.low,
-                                    close: candleData.close
-                                };
-                                
-                                if (existingCandleIndex >= 0) {
-                                    // UPDATE existing candle
-                                    const updatedCandles = [...prevCandles];
-                                    updatedCandles[existingCandleIndex] = newCandle;
-                                    return updatedCandles;
-                                } else {
-                                    // ADD new candle
-                                    return [...prevCandles, newCandle];
-                                }
-                            });
+                            const newCandle = {
+                                time: candleTime,
+                                open: candleData.open,
+                                high: candleData.high,
+                                low: candleData.low,
+                                close: candleData.close
+                            };
                             
-                            // Update real count if this is a closed candle
-                            if (candleData.closed) {
-                                setRealCount(prev => prev + 1);
+                            // Use update() method to avoid redrawing the entire chart
+                            try {
+                                seriesRef.current.update(newCandle);
+                                
+                                // Also update the data array in memory for consistency
+                                setData(prevCandles => {
+                                    const existingCandleIndex = prevCandles.findIndex(c => c.time === candleTime);
+                                    
+                                    let updatedCandles;
+                                    if (existingCandleIndex >= 0) {
+                                        // UPDATE existing candle in memory
+                                        updatedCandles = [...prevCandles];
+                                        updatedCandles[existingCandleIndex] = newCandle;
+                                    } else {
+                                        // ADD new candle to memory
+                                        updatedCandles = [...prevCandles, newCandle];
+                                    }
+                                    
+                                    // Update series manager's chart data reference
+                                    if (seriesManagerRef.current) {
+                                        seriesManagerRef.current.setChartData(updatedCandles);
+                                    }
+                                    
+                                    return updatedCandles;
+                                });
+                                
+                                // Update real count if this is a closed candle
+                                if (candleData.closed) {
+                                    setRealCount(prev => prev + 1);
+                                }
+                            } catch (error) {
+                                console.error('Error updating candle:', error);
                             }
                         }
                         break;
@@ -1133,9 +1155,44 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                         const updateTime = new Date(message.timestamp).toLocaleTimeString();
                         setWsMessage(`Last update: ${updateTime}`);
                         
-                        // Trigger indicators refresh to get latest data
-                        // This will cause the enabledIndicators effect to re-fetch
-                        window.dispatchEvent(new Event('indicatorsChanged'));
+                        // Update indicator series in real-time without re-fetching
+                        if (seriesManagerRef.current && message.values && message.timestamp) {
+                            const instanceKey = message.instanceKey;
+                            const indicatorPrefix = `indicator_${instanceKey}`;
+                            
+                            // Convert ISO timestamp to Unix timestamp (seconds)
+                            const timeValue = Math.floor(new Date(message.timestamp).getTime() / 1000);
+                            
+                            // Update each series in the values object
+                            Object.entries(message.values).forEach(([seriesKey, value]) => {
+                                // Try to find and update the series
+                                // Series could be named like: indicator_Binance:ETHUSDT:1m:sma:9998834d_sma
+                                const possibleSeriesIds = [
+                                    `${indicatorPrefix}_${seriesKey}`,  // e.g., indicator_..._sma
+                                    `${indicatorPrefix}_${message.indicatorId}`, // e.g., indicator_..._sma (using indicatorId)
+                                    indicatorPrefix // Just the prefix (for single-series indicators)
+                                ];
+                                
+                                let updated = false;
+                                for (const seriesId of possibleSeriesIds) {
+                                    const series = seriesManagerRef.current.getSeries(seriesId);
+                                    if (series) {
+                                        try {
+                                            series.update({ time: timeValue, value: value });
+                                            console.log(`✅ Updated ${seriesId} with value ${value} at ${timeValue}`);
+                                            updated = true;
+                                            break;
+                                        } catch (error) {
+                                            console.error(`Error updating series ${seriesId}:`, error);
+                                        }
+                                    }
+                                }
+                                
+                                if (!updated) {
+                                    console.warn(`⚠️ Could not find series to update for ${seriesKey}, tried:`, possibleSeriesIds);
+                                }
+                            });
+                        }
                         break;
                         
                     case 'error':
@@ -1264,6 +1321,8 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
                 provider={provider}
                 symbol={symbol}
                 interval={interval}
+                seriesRef={seriesRef}
+                seriesManagerRef={seriesManagerRef}
             />
         </div>
     );

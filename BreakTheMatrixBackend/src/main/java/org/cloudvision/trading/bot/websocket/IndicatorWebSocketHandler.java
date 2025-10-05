@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.bot.indicators.IndicatorInstanceManager;
+import org.cloudvision.trading.bot.model.IndicatorResponse;
 import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TradingData;
 import org.springframework.stereotype.Component;
@@ -316,7 +317,10 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             String instanceKey = entry.getKey();
             IndicatorInstanceManager.IndicatorResult result = entry.getValue();
             
-            broadcastTickUpdate(instanceKey, result, provider, symbol, interval, price);
+            // Only broadcast if the indicator has tick values (some indicators don't support ticks)
+            if (result.getValues() != null && !result.getValues().isEmpty()) {
+                broadcastTickUpdate(instanceKey, result, provider, symbol, interval, price);
+            }
         }
     }
     
@@ -352,31 +356,17 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             String contextKey = String.format("%s:%s:%s", 
                 instance.getProvider(), instance.getSymbol(), instance.getInterval());
             
-            // Build update message
+            // Create unified response for WebSocket update
+            IndicatorResponse indicatorResponse = IndicatorResponse.forWebSocketUpdate(
+                instance, 
+                result, 
+                candle
+            );
+            
+            // Build update message wrapper
             Map<String, Object> updateMessage = new HashMap<>();
             updateMessage.put("type", "indicatorUpdate");
-            updateMessage.put("instanceKey", instanceKey);
-            updateMessage.put("indicatorId", instance.getIndicatorId());
-            updateMessage.put("provider", instance.getProvider());
-            updateMessage.put("symbol", instance.getSymbol());
-            updateMessage.put("interval", instance.getInterval());
-            updateMessage.put("timestamp", result.getTimestamp());
-            updateMessage.put("values", result.getValues());
-            
-            if (!result.getAdditionalData().isEmpty()) {
-                updateMessage.put("additionalData", result.getAdditionalData());
-            }
-            
-            // Add candle data
-            Map<String, Object> candleData = new HashMap<>();
-            candleData.put("openTime", candle.getOpenTime());
-            candleData.put("closeTime", candle.getCloseTime());
-            candleData.put("open", candle.getOpen());
-            candleData.put("high", candle.getHigh());
-            candleData.put("low", candle.getLow());
-            candleData.put("close", candle.getClose());
-            candleData.put("volume", candle.getVolume());
-            updateMessage.put("candle", candleData);
+            updateMessage.put("data", indicatorResponse);
             
             TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
             
@@ -493,21 +483,17 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             
             String contextKey = String.format("%s:%s:%s", provider, symbol, interval);
             
-            // Build tick update message (lighter than full update)
+            // Create unified response for tick update
+            IndicatorResponse indicatorResponse = IndicatorResponse.builder()
+                .fromInstance(instance)
+                .fromResult(result)
+                .build();
+            
+            // Build tick update message wrapper
             Map<String, Object> updateMessage = new HashMap<>();
             updateMessage.put("type", "indicatorTick");
-            updateMessage.put("instanceKey", instanceKey);
-            updateMessage.put("indicatorId", instance.getIndicatorId());
-            updateMessage.put("provider", provider);
-            updateMessage.put("symbol", symbol);
-            updateMessage.put("interval", interval);
-            updateMessage.put("timestamp", result.getTimestamp());
             updateMessage.put("price", price);
-            updateMessage.put("values", result.getValues());
-            
-            if (!result.getAdditionalData().isEmpty()) {
-                updateMessage.put("additionalData", result.getAdditionalData());
-            }
+            updateMessage.put("data", indicatorResponse);
             
             TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
             

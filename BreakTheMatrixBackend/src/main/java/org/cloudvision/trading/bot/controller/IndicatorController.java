@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cloudvision.trading.bot.indicators.Indicator;
 import org.cloudvision.trading.bot.indicators.IndicatorParameter;
 import org.cloudvision.trading.bot.indicators.IndicatorInstanceManager;
+import org.cloudvision.trading.bot.model.IndicatorResponse;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
 import org.cloudvision.trading.bot.visualization.ShapeRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -388,23 +389,27 @@ public class IndicatorController {
                 );
             
             // Calculate current values for all active indicators
-            List<Map<String, Object>> indicatorsData = new ArrayList<>();
+            List<IndicatorResponse> indicatorsData = new ArrayList<>();
             
             for (IndicatorInstanceManager.IndicatorInstance instance : activeInstances) {
                 // Get current values from the active instance (no recalculation!)
                 IndicatorInstanceManager.IndicatorResult result = 
                     indicatorManager.updateWithCandle(instance.getInstanceKey(), latestCandle);
                 
-                Map<String, Object> indicatorData = new HashMap<>();
-                indicatorData.put("indicatorId", instance.getIndicatorId());
-                indicatorData.put("instanceKey", instance.getInstanceKey());
-                indicatorData.put("params", instance.getParams());
-                indicatorData.put("timestamp", result.getTimestamp());
-                indicatorData.put("values", result.getValues());
-                indicatorData.put("additionalData", result.getAdditionalData());
-                indicatorData.put("updateCount", instance.getUpdateCount());
+                // Get visualization metadata
+                Map<String, IndicatorMetadata> metadata = indicatorManager.getVisualizationMetadata(
+                    instance.getIndicatorId(),
+                    instance.getParams()
+                );
                 
-                indicatorsData.add(indicatorData);
+                // Create unified response
+                IndicatorResponse response = IndicatorResponse.forCurrentValue(
+                    instance, 
+                    result, 
+                    metadata
+                );
+                
+                indicatorsData.add(response);
             }
             
             // Build response
@@ -806,7 +811,7 @@ examples = {
             
             // Process data for each active indicator
             // NOTE: We get stored results that were calculated in real-time, NOT recalculated!
-            List<Map<String, Object>> indicatorsData = new ArrayList<>();
+            List<IndicatorResponse> indicatorsData = new ArrayList<>();
             
             for (IndicatorInstanceManager.IndicatorInstance instance : activeInstances) {
                 String indicatorId = instance.getIndicatorId();
@@ -816,94 +821,20 @@ examples = {
                 List<IndicatorInstanceManager.IndicatorResult> dataPoints = 
                     indicatorManager.getHistoricalData(instanceKey, requestedCount);
                 
-                // Collect shapes
-                Map<String, List<Map<String, Object>>> shapesByType = new HashMap<>();
-                boolean hasShapes = false;
-                
-                for (IndicatorInstanceManager.IndicatorResult dp : dataPoints) {
-                    if (dp.getAdditionalData() != null) {
-                        Map<String, List<Map<String, Object>>> shapesFromPoint = 
-                            ShapeRegistry.extractShapes(dp.getAdditionalData());
-                        
-                        if (!shapesFromPoint.isEmpty()) {
-                            hasShapes = true;
-                            for (Map.Entry<String, List<Map<String, Object>>> entry : shapesFromPoint.entrySet()) {
-                                shapesByType.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                                          .addAll(entry.getValue());
-                            }
-                        }
-                    }
-                }
-                
-                // Deduplicate shapes
-                Map<String, List<Map<String, Object>>> uniqueShapesByType = new HashMap<>();
-                for (Map.Entry<String, List<Map<String, Object>>> entry : shapesByType.entrySet()) {
-                    List<Map<String, Object>> uniqueShapes = ShapeRegistry.deduplicate(
-                        entry.getKey(), 
-                        entry.getValue()
-                    );
-                    uniqueShapesByType.put(entry.getKey(), uniqueShapes);
-                }
-                
-                // Create series data
-                Map<String, List<Map<String, Object>>> seriesData = new HashMap<>();
-                if (!dataPoints.isEmpty()) {
-                    Map<String, BigDecimal> firstValues = dataPoints.get(0).getValues();
-                    
-                    for (String key : firstValues.keySet()) {
-                        List<Map<String, Object>> seriesPoints = dataPoints.stream()
-                            .map(dp -> {
-                                Map<String, Object> seriesPoint = new HashMap<>();
-                                seriesPoint.put("time", dp.getTimestamp().getEpochSecond());
-                                BigDecimal value = dp.getValues().get(key);
-                                seriesPoint.put("value", value != null ? value : BigDecimal.ZERO);
-                                
-                                if (dp.getAdditionalData() != null && !dp.getAdditionalData().isEmpty()) {
-                                    Map<String, Object> additionalData = new HashMap<>(dp.getAdditionalData());
-                                    ShapeRegistry.extractShapes(additionalData);
-                                    if (!additionalData.isEmpty()) {
-                                        seriesPoint.putAll(additionalData);
-                                    }
-                                }
-                                
-                                return seriesPoint;
-                            })
-                            .collect(Collectors.toList());
-                        seriesData.put(key, seriesPoints);
-                    }
-                }
-                
                 // Get visualization metadata
                 Map<String, IndicatorMetadata> metadata = indicatorManager.getVisualizationMetadata(
                     indicatorId,
                     instance.getParams()
                 );
                 
-                // Build response for this indicator
-                Map<String, Object> indicatorResponse = new HashMap<>();
-                indicatorResponse.put("indicatorId", indicatorId);
-                indicatorResponse.put("instanceKey", instanceKey);
-                indicatorResponse.put("params", instance.getParams());
-                indicatorResponse.put("count", dataPoints.size());
-                indicatorResponse.put("metadata", metadata);
-                indicatorResponse.put("updateCount", instance.getUpdateCount());
+                // Create unified response for historical data
+                IndicatorResponse response = IndicatorResponse.forHistoricalData(
+                    instance, 
+                    dataPoints, 
+                    metadata
+                );
                 
-                if (metadata != null && !metadata.isEmpty()) {
-                    indicatorResponse.put("series", seriesData);
-                }
-                
-                if (hasShapes && !uniqueShapesByType.isEmpty()) {
-                    indicatorResponse.put("supportsShapes", true);
-                    indicatorResponse.put("shapes", uniqueShapesByType);
-                    
-                    Map<String, Integer> shapeSummary = new HashMap<>();
-                    for (Map.Entry<String, List<Map<String, Object>>> entry : uniqueShapesByType.entrySet()) {
-                        shapeSummary.put(entry.getKey(), entry.getValue().size());
-                    }
-                    indicatorResponse.put("shapesSummary", shapeSummary);
-                }
-                
-                indicatorsData.add(indicatorResponse);
+                indicatorsData.add(response);
             }
             
             // Build final response
