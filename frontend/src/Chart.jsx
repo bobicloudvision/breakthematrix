@@ -54,6 +54,7 @@ export const ChartComponent = props => {
     const markerPluginRef = useRef(null); // v5 marker plugin instance
     const isAddingIndicatorsRef = useRef(false);
     const isMountedRef = useRef(true);
+    const isInitialDataLoadRef = useRef(true); // Track if this is the first data load
 
     useEffect(
         () => {
@@ -158,6 +159,11 @@ export const ChartComponent = props => {
         [backgroundColor, textColor, upColor, downColor, wickUpColor, wickDownColor, borderUpColor, borderDownColor]
     );
 
+    // Reset initial load flag when provider/symbol/interval changes
+    useEffect(() => {
+        isInitialDataLoadRef.current = true;
+    }, [provider, symbol, interval]);
+
     // Update data when it changes
     useEffect(() => {
         if (seriesRef.current && data && data.length > 0) {
@@ -170,7 +176,8 @@ export const ChartComponent = props => {
                     seriesManagerRef.current.setChartData(data);
                 }
                 
-                if (chartRef.current) {
+                // Only apply default zoom on initial load, not on subsequent updates
+                if (chartRef.current && isInitialDataLoadRef.current) {
                     // Default zoom: show last N REAL candles (exclude future placeholders)
                     const defaultZoomCandles = window.BTM_DEFAULT_ZOOM_CANDLES || 100;
                     const endIndex = realCount > 0 ? realCount - 1 : data.length - 1;
@@ -183,6 +190,8 @@ export const ChartComponent = props => {
                     } else {
                         chartRef.current.timeScale().fitContent();
                     }
+                    // Mark initial load as complete
+                    isInitialDataLoadRef.current = false;
                 }
             } catch (error) {
                 console.error('Error updating chart data:', error);
