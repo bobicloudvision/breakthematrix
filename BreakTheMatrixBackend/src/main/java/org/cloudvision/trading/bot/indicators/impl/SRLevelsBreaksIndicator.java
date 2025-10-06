@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 
 /**
  * Support and Resistance Levels with Breaks Indicator
- * Based on LuxAlgo's indicator
  * 
  * Detects support and resistance levels using pivot points and identifies
  * breaks with volume confirmation. Shows different signals for:

@@ -13,9 +13,6 @@ import java.util.*;
 /**
  * Market Structure Trailing Stop Indicator
  * 
- * Based on LuxAlgo's Market Structure Trailing Stop indicator
- * License: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
- * 
  * This indicator:
  * - Detects pivot highs and lows to identify market structure
  * - Tracks bullish and bearish market structure breaks

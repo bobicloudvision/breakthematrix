@@ -18,7 +18,6 @@ import java.util.*;
 
 /**
  * Order Block Detector Strategy (Visualization Only)
- * Based on LuxAlgo's Order Block Detector
  * 
  * **PURPOSE**: This is a VISUALIZATION-ONLY strategy that displays institutional order blocks
  * on the chart. It does NOT generate trading signals or create orders. Traders use this as a
