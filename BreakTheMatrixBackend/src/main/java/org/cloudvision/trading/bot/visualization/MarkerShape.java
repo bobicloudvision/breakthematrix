@@ -16,6 +16,7 @@ public class MarkerShape implements Shape {
     private final String position;      // "above" or "below" the bar
     private final String text;          // Optional text label
     private final int size;             // Size in pixels
+    private final Double opacity;       // Opacity 0.0-1.0 (optional)
     
     private MarkerShape(Builder builder) {
         this.time = builder.time;
@@ -25,6 +26,7 @@ public class MarkerShape implements Shape {
         this.position = builder.position;
         this.text = builder.text;
         this.size = builder.size;
+        this.opacity = builder.opacity;
     }
     
     @Override
@@ -44,6 +46,9 @@ public class MarkerShape implements Shape {
         if (text != null) {
             map.put("text", text);
         }
+        if (opacity != null) {
+            map.put("opacity", opacity);
+        }
         return map;
     }
     
@@ -55,6 +60,7 @@ public class MarkerShape implements Shape {
     public String getPosition() { return position; }
     public String getText() { return text; }
     public int getSize() { return size; }
+    public Double getOpacity() { return opacity; }
     
     public static Builder builder() {
         return new Builder();
@@ -68,6 +74,7 @@ public class MarkerShape implements Shape {
         private String position = "above";
         private String text;
         private int size = 8;
+        private Double opacity;
         
         public Builder time(long time) {
             this.time = time;
@@ -101,6 +108,11 @@ public class MarkerShape implements Shape {
         
         public Builder size(int size) {
             this.size = size;
+            return this;
+        }
+        
+        public Builder opacity(double opacity) {
+            this.opacity = opacity;
             return this;
         }
         
