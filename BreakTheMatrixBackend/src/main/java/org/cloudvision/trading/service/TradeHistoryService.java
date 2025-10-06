@@ -34,7 +34,9 @@ public class TradeHistoryService {
     private final Map<String, List<TradeData>> tradeHistory = new ConcurrentHashMap<>();
     
     // Configuration: max trades to keep per symbol
-    private static final int DEFAULT_MAX_TRADES = 10000; // Last 10k trades (~10-30 minutes typically)
+    // Increased to support historical order flow indicators (BigTrades, CVD, Bookmap)
+    // For 5000 candles of 1m data (~3.5 days), busy markets can have 500k+ trades
+    private static final int DEFAULT_MAX_TRADES = 1000000; // Last 1M trades (sufficient for full history)
     private final Map<String, Integer> maxTradesConfig = new ConcurrentHashMap<>();
     
     /**

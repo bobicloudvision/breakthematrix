@@ -262,7 +262,7 @@ public class BigTradesIndicator extends AbstractIndicator {
             .displayName("Marker Opacity")
             .description("Opacity of markers (0.0 = transparent, 1.0 = opaque)")
             .type(IndicatorParameter.ParameterType.STRING)
-            .defaultValue("0.7")
+            .defaultValue("0.1")
             .required(false)
             .build());
         
@@ -289,7 +289,7 @@ public class BigTradesIndicator extends AbstractIndicator {
         boolean showLabels = Boolean.parseBoolean(getStringParameter(params, "showLabels", "false"));
         int minMarkerSize = getIntParameter(params, "minMarkerSize", 10);
         int maxMarkerSize = getIntParameter(params, "maxMarkerSize", 30);
-        double opacity = Double.parseDouble(getStringParameter(params, "opacity", "0.7"));
+        double opacity = Double.parseDouble(getStringParameter(params, "opacity", "0.1"));
         
         BigTradesState state = new BigTradesState(volumeThreshold, showLabels, minMarkerSize, maxMarkerSize, opacity);
         

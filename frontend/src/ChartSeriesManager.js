@@ -1245,11 +1245,28 @@ export class ChartSeriesManager {
         }
 
         try {
+            // Process markers to apply opacity to colors
+            const processedMarkers = markers.map(marker => {
+                const processed = { ...marker };
+                
+                // Apply opacity to main color if provided
+                if (marker.opacity !== undefined && marker.opacity < 1 && marker.color) {
+                    processed.color = this._applyOpacityToColor(marker.color, marker.opacity);
+                }
+                
+                // Apply opacity to border color if provided
+                if (marker.opacity !== undefined && marker.opacity < 1 && marker.borderColor) {
+                    processed.borderColor = this._applyOpacityToColor(marker.borderColor, marker.opacity);
+                }
+                
+                return processed;
+            });
+            
             // Create new marker primitive with all markers
             const markerPrimitive = new MarkerPrimitiveClass(
                 this.chart, 
                 this.mainSeries, 
-                markers, 
+                processedMarkers, 
                 this.chartData
             );
             
@@ -1259,7 +1276,7 @@ export class ChartSeriesManager {
             // Track primitive for cleanup
             this.markerPrimitives.push(markerPrimitive);
             
-            console.log(`Added ${markers.length} marker shapes to chart`);
+            console.log(`Added ${processedMarkers.length} marker shapes to chart`);
             return true;
         } catch (e) {
             console.error('Error adding marker shapes:', e);

@@ -141,8 +141,22 @@ public class IndicatorInstanceManager {
         
         // Check if already active
         if (activeInstances.containsKey(instanceKey)) {
-            System.out.println("ℹ️ Indicator already active: " + instanceKey);
-            return instanceKey;
+            IndicatorInstance existingInstance = activeInstances.get(instanceKey);
+            int historicalCount = existingInstance.getHistoricalResultCount();
+            
+            System.out.println("ℹ️ Indicator already active: " + instanceKey + 
+                             " (historical results: " + historicalCount + ")");
+            
+            // If historical results are suspiciously low, force recalculation
+            // This handles cases where live trading corrupted the historical buffer
+            if (historicalCount < 100) {
+                System.out.println("⚠️  Historical results too low (" + historicalCount + "), forcing recalculation...");
+                // Deactivate the instance so we can recreate it with fresh data
+                deactivateIndicator(instanceKey);
+                // Fall through to create new instance
+            } else {
+                return instanceKey;
+            }
         }
         
         // Get the indicator implementation
@@ -208,13 +222,82 @@ public class IndicatorInstanceManager {
             if (needsTrades) {
                 allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol);
                 
+                boolean needsFetch = false;
+                
                 if (!allHistoricalTrades.isEmpty()) {
                     java.time.Instant firstTradeTime = allHistoricalTrades.get(0).getTimestamp();
                     java.time.Instant lastTradeTime = allHistoricalTrades.get(allHistoricalTrades.size() - 1).getTimestamp();
-                    System.out.println("   ✅ Using cached trades: " + allHistoricalTrades.size() + " trades from " + 
-                                     firstTradeTime + " to " + lastTradeTime);
+                    
+                    // Check if cached trades cover the full candle time range
+                    java.time.Instant candlesStartTime = candles.get(0).getOpenTime();
+                    java.time.Instant candlesEndTime = candles.get(candles.size() - 1).getCloseTime();
+                    
+                    // Allow 1 minute tolerance
+                    java.time.Duration tolerance = java.time.Duration.ofMinutes(1);
+                    boolean coversStart = firstTradeTime.isBefore(candlesStartTime.plus(tolerance));
+                    boolean coversEnd = lastTradeTime.isAfter(candlesEndTime.minus(tolerance));
+                    
+                    if (coversStart && coversEnd) {
+                        System.out.println("   ✅ Using cached trades: " + allHistoricalTrades.size() + " trades from " + 
+                                         firstTradeTime + " to " + lastTradeTime + " (covers full range)");
+                    } else {
+                        System.out.println("   ⚠️ Cached trades incomplete: " + allHistoricalTrades.size() + " trades from " + 
+                                         firstTradeTime + " to " + lastTradeTime);
+                        System.out.println("      Required range: " + candlesStartTime + " to " + candlesEndTime);
+                        System.out.println("      Fetching missing trades...");
+                        needsFetch = true;
+                    }
                 } else {
-                    System.out.println("   ⚠️ No cached trades found for " + symbol + " - indicator will only work with live data");
+                    // Fetch historical trades from provider if cache is empty
+                    System.out.println("   ⚠️ No cached trades found, fetching from " + provider + "...");
+                    needsFetch = true;
+                }
+                
+                if (needsFetch) {
+                    try {
+                        org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
+                            getTradingProvider(provider);
+                        
+                        if (tradingProvider != null && !candles.isEmpty()) {
+                            // Fetch trades for the time range of historical candles
+                            java.time.Instant startTime = candles.get(0).getOpenTime();
+                            java.time.Instant endTime = candles.get(candles.size() - 1).getCloseTime();
+                            
+                            System.out.println("   📥 Fetching trades from " + startTime + " to " + endTime);
+                            
+                            // Fetch in chunks to respect API limits
+                            long minutes = java.time.Duration.between(startTime, endTime).toMinutes();
+                            int numChunks = Math.min((int)Math.ceil(minutes / 15.0), 100); // 15-min chunks, max 100
+                            
+                            for (int i = 0; i < numChunks; i++) {
+                                java.time.Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * 15));
+                                java.time.Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * 15));
+                                if (chunkEnd.isAfter(endTime)) chunkEnd = endTime;
+                                
+                                List<org.cloudvision.trading.model.TradeData> batch = 
+                                    tradingProvider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
+                                
+                                if (!batch.isEmpty()) {
+                                    allHistoricalTrades.addAll(batch);
+                                }
+                                
+                                // Rate limiting
+                                if (i < numChunks - 1 && numChunks > 5) {
+                                    try { Thread.sleep(50); } catch (InterruptedException e) { break; }
+                                }
+                            }
+                            
+                            if (!allHistoricalTrades.isEmpty()) {
+                                // Cache the fetched trades
+                                tradeHistoryService.addTrades(provider, symbol, allHistoricalTrades);
+                                System.out.println("   ✅ Fetched and cached " + allHistoricalTrades.size() + " historical trades");
+                            } else {
+                                System.out.println("   ⚠️ No trades found for time range");
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("   ❌ Failed to fetch historical trades: " + e.getMessage());
+                    }
                 }
             }
             
@@ -595,8 +678,76 @@ public class IndicatorInstanceManager {
             
             if (needsTrades) {
                 allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol);
+                
+                boolean needsFetch = false;
+                
                 if (!allHistoricalTrades.isEmpty()) {
-                    System.out.println("   ✅ Loaded " + allHistoricalTrades.size() + " historical trades (will match to candles)");
+                    java.time.Instant firstTradeTime = allHistoricalTrades.get(0).getTimestamp();
+                    java.time.Instant lastTradeTime = allHistoricalTrades.get(allHistoricalTrades.size() - 1).getTimestamp();
+                    
+                    // Check if cached trades cover the full candle time range
+                    java.time.Instant candlesStartTime = candles.get(0).getOpenTime();
+                    java.time.Instant candlesEndTime = candles.get(candles.size() - 1).getCloseTime();
+                    
+                    // Allow 1 minute tolerance
+                    java.time.Duration tolerance = java.time.Duration.ofMinutes(1);
+                    boolean coversStart = firstTradeTime.isBefore(candlesStartTime.plus(tolerance));
+                    boolean coversEnd = lastTradeTime.isAfter(candlesEndTime.minus(tolerance));
+                    
+                    if (coversStart && coversEnd) {
+                        System.out.println("   ✅ Loaded " + allHistoricalTrades.size() + " historical trades (covers full range)");
+                    } else {
+                        System.out.println("   ⚠️ Cached trades incomplete: " + allHistoricalTrades.size() + " trades from " + 
+                                         firstTradeTime + " to " + lastTradeTime);
+                        System.out.println("      Required range: " + candlesStartTime + " to " + candlesEndTime);
+                        System.out.println("      Fetching missing trades...");
+                        needsFetch = true;
+                    }
+                } else {
+                    // Fetch from provider if cache is empty
+                    System.out.println("   ⚠️ No cached trades found, fetching from " + provider + "...");
+                    needsFetch = true;
+                }
+                
+                if (needsFetch) {
+                    try {
+                        org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
+                            getTradingProvider(provider);
+                        
+                        if (tradingProvider != null && !candles.isEmpty()) {
+                            java.time.Instant startTime = candles.get(0).getOpenTime();
+                            java.time.Instant endTime = candles.get(candles.size() - 1).getCloseTime();
+                            
+                            System.out.println("   📥 Fetching trades from " + startTime + " to " + endTime);
+                            
+                            long minutes = java.time.Duration.between(startTime, endTime).toMinutes();
+                            int numChunks = Math.min((int)Math.ceil(minutes / 15.0), 100);
+                            
+                            for (int i = 0; i < numChunks; i++) {
+                                java.time.Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * 15));
+                                java.time.Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * 15));
+                                if (chunkEnd.isAfter(endTime)) chunkEnd = endTime;
+                                
+                                List<org.cloudvision.trading.model.TradeData> batch = 
+                                    tradingProvider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
+                                
+                                if (!batch.isEmpty()) {
+                                    allHistoricalTrades.addAll(batch);
+                                }
+                                
+                                if (i < numChunks - 1 && numChunks > 5) {
+                                    try { Thread.sleep(50); } catch (InterruptedException e) { break; }
+                                }
+                            }
+                            
+                            if (!allHistoricalTrades.isEmpty()) {
+                                tradeHistoryService.addTrades(provider, symbol, allHistoricalTrades);
+                                System.out.println("   ✅ Fetched and cached " + allHistoricalTrades.size() + " historical trades");
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("   ❌ Failed to fetch historical trades: " + e.getMessage());
+                    }
                 }
             }
             

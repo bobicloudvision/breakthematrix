@@ -526,6 +526,7 @@ export const ChartRenderer = props => {
                                 shape: marker.shape || marker.position || 'circle',
                                 color: marker.color || '#2196F3',
                                 size: marker.size || 6,
+                                opacity: marker.opacity,
                                 borderColor: marker.borderColor,
                                 borderWidth: marker.borderWidth,
                                 text: marker.text || marker.label,
