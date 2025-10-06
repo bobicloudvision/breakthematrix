@@ -782,16 +782,17 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
      * 
      * WHAT THIS DOES:
      * Sends indicator updates from trade data processing to WebSocket clients
+     * Uses the STANDARD indicatorTick format for consistency with other indicators
      * 
-     * MESSAGE FORMAT:
+     * MESSAGE FORMAT (Same as SMA, EMA, etc.):
      * {
-     *   "type": "indicatorTrade",
-     *   "trade": { ... trade data ... },
+     *   "type": "indicatorTick",
+     *   "price": 4597.3,
      *   "data": { ... indicator response ... }
      * }
      * 
      * TYPICAL USE:
-     * Order flow indicators like CVD, imbalance, volume profile
+     * Order flow indicators like Bookmap, CVD, imbalance, volume profile
      * Most accumulate trades and only output meaningful data periodically
      * 
      * @param instanceKey Indicator instance key
@@ -820,18 +821,12 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
                 .fromResult(result)
                 .build();
             
-            // Build update message wrapper
+            // Build update message wrapper - using STANDARD indicatorTick format
+            // This matches the format used by other indicators (SMA, EMA, etc.)
             Map<String, Object> updateMessage = new HashMap<>();
-            updateMessage.put("type", "indicatorTrade");
+            updateMessage.put("type", "indicatorTick");  // Standard format
             updateMessage.put("data", indicatorResponse);
-            
-            // Include trade information for context
-            Map<String, Object> tradeInfo = new HashMap<>();
-            tradeInfo.put("price", trade.getPrice());
-            tradeInfo.put("quantity", trade.getQuantity());
-            tradeInfo.put("isBuy", trade.isAggressiveBuy());
-            tradeInfo.put("timestamp", trade.getTimestamp().toString());
-            updateMessage.put("trade", tradeInfo);
+            updateMessage.put("price", trade.getPrice());  // Current price for context
             
             TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
             

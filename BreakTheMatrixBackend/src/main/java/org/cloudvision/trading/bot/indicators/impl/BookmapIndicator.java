@@ -414,11 +414,17 @@ public class BookmapIndicator extends AbstractIndicator {
     
     @Override
     public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
-        System.out.println("📊 BookmapIndicator.onNewCandle - Candle closed, outputting volume profile with shapes");
+        System.out.println("📊 BookmapIndicator.onNewCandle - Candle closed, outputting complete volume profile");
         
         BookmapState bookmapState = (BookmapState) state;
         
-        // Build heatmap data from accumulated volume profile
+        // Save candle reference for future live updates
+        bookmapState.setLastCandle(candle);
+        
+        // Reset broadcast timer so next live update will wait the full interval
+        bookmapState.setLastBroadcastTime(System.currentTimeMillis());
+        
+        // Build complete heatmap data
         Map<String, Object> heatmap = buildHeatmap(bookmapState);
         
         // Detect significant levels
@@ -452,7 +458,7 @@ public class BookmapIndicator extends AbstractIndicator {
         
         // Build result
         Map<String, Object> result = new HashMap<>();
-//        result.put("values", values);
+//        result.put("values", values);  // Now including values
         result.put("state", bookmapState);
         result.put("heatmap", heatmap);
         result.put("levels", levels);
@@ -473,11 +479,13 @@ public class BookmapIndicator extends AbstractIndicator {
      * Process each trade and accumulate volume at price levels
      * 
      * This is called VERY frequently (1000+ times per second)
-     * We accumulate in state and only output on candle close
+     * We accumulate in state and broadcast live updates periodically
      * 
-     * NOTE: We DON'T broadcast on every trade (too frequent)
-     * All accumulated data will be sent on candle close using the
-     * standard "indicatorUpdate" message format (same as other indicators)
+     * LIVE UPDATES:
+     * - Broadcasts every N seconds (configured by updateInterval parameter)
+     * - Shows real-time heatmap building up
+     * - Includes partial circles for current volume levels
+     * - Uses standard "indicatorUpdate" message format
      */
     @Override
     public Map<String, Object> onTradeUpdate(TradeData trade, Map<String, Object> params, Object state) {
@@ -490,8 +498,68 @@ public class BookmapIndicator extends AbstractIndicator {
             trade.isAggressiveBuy()
         );
         
-        // Return EMPTY values - don't broadcast trade updates
-        // The full data (with heatmap and circles) will be sent on candle close
+        // ============================================================
+        // LIVE UPDATE LOGIC
+        // ============================================================
+        // Check if enough time has passed for a live broadcast
+        // If updateInterval is 0, we only broadcast on candle close
+        if (bookmapState.getUpdateIntervalSeconds() > 0 && 
+            bookmapState.shouldBroadcastLiveUpdate() && 
+            bookmapState.getLastCandle() != null) {
+            
+            // Update broadcast timestamp
+            bookmapState.setLastBroadcastTime(System.currentTimeMillis());
+            
+            // Build live heatmap data (current state)
+            Map<String, Object> heatmap = buildHeatmap(bookmapState);
+            
+            // Detect significant levels (current)
+            List<Map<String, Object>> levels = detectSignificantLevels(bookmapState);
+            
+            // Create circles for live visualization
+            ShapeCollection shapes = createVolumeCircles(
+                bookmapState.getLastCandle(), 
+                bookmapState, 
+                levels
+            );
+            
+            // Calculate live values
+            Map<String, BigDecimal> values = new HashMap<>();
+            values.put("totalVolume", bookmapState.getTotalBuyVolume().add(bookmapState.getTotalSellVolume()));
+            values.put("delta", bookmapState.getTotalBuyVolume().subtract(bookmapState.getTotalSellVolume()));
+            
+            BigDecimal pocPrice = findPOC(bookmapState);
+            if (pocPrice != null) {
+                values.put("pocPrice", pocPrice);
+            }
+            
+            if (bookmapState.getCurrentOrderBook() != null) {
+                BigDecimal bidVolume = bookmapState.getCurrentOrderBook().getTotalBidVolume(10);
+                BigDecimal askVolume = bookmapState.getCurrentOrderBook().getTotalAskVolume(10);
+                if (askVolume.compareTo(BigDecimal.ZERO) > 0) {
+                    values.put("bidAskRatio", bidVolume.divide(askVolume, 4, RoundingMode.HALF_UP));
+                }
+            }
+            
+            // Build live update result
+            Map<String, Object> result = new HashMap<>();
+            result.put("values", values);
+            result.put("state", bookmapState);
+            result.put("heatmap", heatmap);
+            result.put("levels", levels);
+            result.put("isLiveUpdate", true);  // Flag to indicate this is a live update
+            
+            if (!shapes.isEmpty()) {
+                result.putAll(shapes.toMap());
+            }
+            
+            System.out.println("📡 Live Bookmap update (volume: " + 
+                             bookmapState.getTotalBuyVolume().add(bookmapState.getTotalSellVolume()) + ")");
+            
+            return result;
+        }
+        
+        // Not time for live update yet - return empty (silent accumulation)
         return Map.of(
             "values", Map.of(),  // Empty - no broadcast
             "state", bookmapState
