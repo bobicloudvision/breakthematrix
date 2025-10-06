@@ -356,7 +356,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         List<LineShape> lines = createExtendedLines(state, candle, params);
         
         Map<String, Object> output = new HashMap<>();
-        output.put("values", values);
+        // output.put("values", values);
         output.put("state", state);
         if (!markers.isEmpty()) {
             output.put("markers", markers.stream().map(MarkerShape::toMap).collect(java.util.stream.Collectors.toList()));
