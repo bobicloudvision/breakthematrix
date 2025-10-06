@@ -321,6 +321,31 @@ public interface Indicator {
     int getMinRequiredCandles(Map<String, Object> params);
     
     /**
+     * Should this indicator load historical order flow data (trades/order books)?
+     * 
+     * Some indicators like Bookmap require real-time trade-to-candle matching
+     * that isn't available during bulk historical data loading. These indicators
+     * should return false to skip historical order flow and only use live data.
+     * 
+     * WHEN TO RETURN FALSE:
+     * - Indicator requires precise trade-to-candle timestamp matching
+     * - Indicator is designed for real-time analysis only
+     * - Historical order flow data would be misleading or incorrect
+     * 
+     * WHEN TO RETURN TRUE (default):
+     * - Indicator can process trades/orderbooks in any order
+     * - Indicator aggregates data over longer periods
+     * - Historical order flow provides useful context
+     * 
+     * @return true to load historical trades/orderbooks, false to skip
+     * 
+     * Default implementation: Returns true (load historical data)
+     */
+    default boolean shouldLoadHistoricalOrderFlow() {
+        return true;
+    }
+    
+    /**
      * Validate parameters before calculation
      * Throws IllegalArgumentException if parameters are invalid
      */

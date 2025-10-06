@@ -185,38 +185,44 @@ public class IndicatorInstanceManager {
                              requiredTypes.contains(org.cloudvision.trading.model.TradingDataType.AGGREGATE_TRADE);
         boolean needsOrderBooks = requiredTypes.contains(org.cloudvision.trading.model.TradingDataType.ORDER_BOOK);
         
-        if (needsTrades || needsOrderBooks) {
+        // Check if indicator wants historical order flow data
+        boolean shouldLoadHistorical = indicator.shouldLoadHistoricalOrderFlow();
+        
+        if ((needsTrades || needsOrderBooks) && !shouldLoadHistorical) {
+            System.out.println("⏭️  Skipping historical order flow data for " + indicatorId + 
+                             " (indicator requires real-time data only)");
+        }
+        
+        // ============================================================
+        // LOAD AND PREPARE HISTORICAL ORDER FLOW DATA
+        // ============================================================
+        // Load trade and order book data that we'll match to candles
+        List<org.cloudvision.trading.model.TradeData> allHistoricalTrades = new ArrayList<>();
+        List<org.cloudvision.trading.model.OrderBookData> allHistoricalOrderBooks = new ArrayList<>();
+        
+        if ((needsTrades || needsOrderBooks) && shouldLoadHistorical) {
             System.out.println("📦 Loading historical order flow data for " + indicatorId + "...");
             
             // Load historical trades if needed
             if (needsTrades) {
-                List<org.cloudvision.trading.model.TradeData> historicalTrades = 
-                    tradeHistoryService.getTrades(provider, symbol);
+                allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol);
                 
-                // ============================================================
-                // FETCH FROM BINANCE IF NO HISTORY EXISTS
-                // ============================================================
-                // If we don't have any historical trades, fetch them from the provider
-                if (historicalTrades.isEmpty()) {
+                // Fetch from provider if no history exists
+                if (allHistoricalTrades.isEmpty()) {
                     System.out.println("   ⚠️ No historical trades found in cache, fetching from " + provider + "...");
                     
                     try {
-                        // Get the trading provider
                         org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
                             getTradingProvider(provider);
                         
                         if (tradingProvider != null) {
-                            // Fetch last 1000 trades from Binance REST API
                             List<org.cloudvision.trading.model.TradeData> fetchedTrades = 
                                 tradingProvider.getHistoricalAggregateTrades(symbol, 1000);
                             
                             if (!fetchedTrades.isEmpty()) {
-                                // Store in history service for future use
                                 tradeHistoryService.addTrades(provider, symbol, fetchedTrades);
-                                historicalTrades = fetchedTrades;
+                                allHistoricalTrades = fetchedTrades;
                                 System.out.println("   ✅ Fetched and stored " + fetchedTrades.size() + " historical trades");
-                            } else {
-                                System.out.println("   ⚠️ No historical trades available from provider");
                             }
                         }
                     } catch (Exception e) {
@@ -224,53 +230,31 @@ public class IndicatorInstanceManager {
                     }
                 }
                 
-                if (!historicalTrades.isEmpty()) {
-                    System.out.println("   ↳ Processing " + historicalTrades.size() + " historical trades...");
-                    for (org.cloudvision.trading.model.TradeData trade : historicalTrades) {
-                        // Process each historical trade through the indicator
-                        Map<String, Object> result = indicator.onTradeUpdate(
-                            trade, params, indicatorState.getState()
-                        );
-                        
-                        // Update state (trades accumulate internally)
-                        Object newState = result.get("state");
-                        if (newState != null) {
-                            indicatorState.setState(newState);
-                        }
-                    }
-                    System.out.println("   ✅ Processed " + historicalTrades.size() + " historical trades");
+                if (!allHistoricalTrades.isEmpty()) {
+                    System.out.println("   ✅ Loaded " + allHistoricalTrades.size() + " historical trades (will match to candles)");
                 }
             }
             
             // Load historical order books if needed
             if (needsOrderBooks) {
-                List<org.cloudvision.trading.model.OrderBookData> historicalOrderBooks = 
-                    orderBookHistoryService.getOrderBooks(provider, symbol);
+                allHistoricalOrderBooks = orderBookHistoryService.getOrderBooks(provider, symbol);
                 
-                // ============================================================
-                // FETCH FROM BINANCE IF NO HISTORY EXISTS
-                // ============================================================
-                // If we don't have any order book history, fetch a snapshot from the provider
-                if (historicalOrderBooks.isEmpty()) {
+                // Fetch from provider if no history exists
+                if (allHistoricalOrderBooks.isEmpty()) {
                     System.out.println("   ⚠️ No historical order books found in cache, fetching snapshot from " + provider + "...");
                     
                     try {
-                        // Get the trading provider
                         org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
                             getTradingProvider(provider);
                         
                         if (tradingProvider != null) {
-                            // Fetch current order book snapshot from Binance REST API
                             org.cloudvision.trading.model.OrderBookData snapshot = 
                                 tradingProvider.getOrderBookSnapshot(symbol, 100);
                             
                             if (snapshot != null) {
-                                // Store in history service for future use
                                 orderBookHistoryService.addOrderBook(snapshot);
-                                historicalOrderBooks = List.of(snapshot);
+                                allHistoricalOrderBooks = List.of(snapshot);
                                 System.out.println("   ✅ Fetched and stored order book snapshot");
-                            } else {
-                                System.out.println("   ⚠️ No order book snapshot available from provider");
                             }
                         }
                     } catch (Exception e) {
@@ -278,35 +262,84 @@ public class IndicatorInstanceManager {
                     }
                 }
                 
-                if (!historicalOrderBooks.isEmpty()) {
-                    System.out.println("   ↳ Processing " + historicalOrderBooks.size() + " historical order book snapshots...");
-                    for (org.cloudvision.trading.model.OrderBookData orderBook : historicalOrderBooks) {
-                        // Process each historical order book through the indicator
-                        Map<String, Object> result = indicator.onOrderBookUpdate(
-                            orderBook, params, indicatorState.getState()
-                        );
-                        
-                        // Update state (order books update depth info)
-                        Object newState = result.get("state");
-                        if (newState != null) {
-                            indicatorState.setState(newState);
-                        }
-                    }
-                    System.out.println("   ✅ Processed " + historicalOrderBooks.size() + " historical order book snapshots");
+                if (!allHistoricalOrderBooks.isEmpty()) {
+                    System.out.println("   ✅ Loaded " + allHistoricalOrderBooks.size() + " historical order book snapshots (will match to candles)");
                 }
             }
         }
         
         // ============================================================
-        // PROCESS HISTORICAL CANDLES
+        // PROCESS HISTORICAL CANDLES WITH MATCHED ORDER FLOW DATA
         // ============================================================
-        // Now process all historical candles to populate the historical results buffer
-        // This ensures /api/indicators/historical returns the same data
+        // Process each candle along with its matching trades and order books
+        // This ensures trades are properly associated with their candles
         System.out.println("📊 Populating historical buffer with " + candles.size() + " candles...");
+        
         for (int i = minRequired; i < candles.size(); i++) {
             CandlestickData candle = candles.get(i);
             
-            // Process the candle with current state
+            // ============================================================
+            // MATCH TRADES TO THIS CANDLE'S TIME WINDOW
+            // ============================================================
+            if (!allHistoricalTrades.isEmpty()) {
+                // Get candle time boundaries
+                java.time.Instant candleStart = candle.getOpenTime();
+                java.time.Instant candleEnd = candle.getCloseTime();
+                
+                // Filter trades that fall within this candle's time window
+                List<org.cloudvision.trading.model.TradeData> candleTrades = allHistoricalTrades.stream()
+                    .filter(trade -> {
+                        java.time.Instant tradeTime = trade.getTimestamp();
+                        return !tradeTime.isBefore(candleStart) && tradeTime.isBefore(candleEnd);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+                
+                // Process trades for this candle
+                for (org.cloudvision.trading.model.TradeData trade : candleTrades) {
+                    Map<String, Object> tradeResult = indicator.onTradeUpdate(
+                        trade, params, indicatorState.getState()
+                    );
+                    
+                    Object newState = tradeResult.get("state");
+                    if (newState != null) {
+                        indicatorState.setState(newState);
+                    }
+                }
+            }
+            
+            // ============================================================
+            // MATCH ORDER BOOK TO THIS CANDLE'S TIME
+            // ============================================================
+            if (!allHistoricalOrderBooks.isEmpty()) {
+                // Find order book closest to this candle's time
+                java.time.Instant candleTime = candle.getOpenTime();
+                org.cloudvision.trading.model.OrderBookData closestOrderBook = null;
+                long minTimeDiff = Long.MAX_VALUE;
+                
+                for (org.cloudvision.trading.model.OrderBookData ob : allHistoricalOrderBooks) {
+                    long timeDiff = Math.abs(java.time.Duration.between(candleTime, ob.getTimestamp()).toMillis());
+                    if (timeDiff < minTimeDiff) {
+                        minTimeDiff = timeDiff;
+                        closestOrderBook = ob;
+                    }
+                }
+                
+                // Process order book for this candle
+                if (closestOrderBook != null) {
+                    Map<String, Object> obResult = indicator.onOrderBookUpdate(
+                        closestOrderBook, params, indicatorState.getState()
+                    );
+                    
+                    Object newState = obResult.get("state");
+                    if (newState != null) {
+                        indicatorState.setState(newState);
+                    }
+                }
+            }
+            
+            // ============================================================
+            // PROCESS THE CANDLE (after trades/orderbooks are loaded)
+            // ============================================================
             Map<String, Object> result = indicator.onNewCandle(candle, params, indicatorState.getState());
             
             // Extract values and new state
@@ -552,7 +585,7 @@ public class IndicatorInstanceManager {
         // ============================================================
         // RELOAD HISTORICAL ORDER FLOW DATA (TRADES & ORDER BOOKS)
         // ============================================================
-        // Check if this indicator needs trade or order book data
+        // Check if this indicator needs trade or order book data and wants historical loading
         java.util.Set<org.cloudvision.trading.model.TradingDataType> requiredTypes = 
             indicator.getRequiredDataTypes();
         
@@ -560,54 +593,93 @@ public class IndicatorInstanceManager {
                              requiredTypes.contains(org.cloudvision.trading.model.TradingDataType.AGGREGATE_TRADE);
         boolean needsOrderBooks = requiredTypes.contains(org.cloudvision.trading.model.TradingDataType.ORDER_BOOK);
         
-        if (needsTrades || needsOrderBooks) {
+        // Check if indicator wants historical order flow data
+        boolean shouldLoadHistorical = indicator.shouldLoadHistoricalOrderFlow();
+        
+        if ((needsTrades || needsOrderBooks) && !shouldLoadHistorical) {
+            System.out.println("⏭️  Skipping historical order flow data for " + indicatorId + 
+                             " (indicator requires real-time data only)");
+        }
+        
+        // ============================================================
+        // LOAD AND PREPARE HISTORICAL ORDER FLOW DATA FOR RECALCULATION
+        // ============================================================
+        List<org.cloudvision.trading.model.TradeData> allHistoricalTrades = new ArrayList<>();
+        List<org.cloudvision.trading.model.OrderBookData> allHistoricalOrderBooks = new ArrayList<>();
+        
+        if ((needsTrades || needsOrderBooks) && shouldLoadHistorical) {
             System.out.println("📦 Reloading historical order flow data for " + indicatorId + "...");
             
-            // Load historical trades if needed
             if (needsTrades) {
-                List<org.cloudvision.trading.model.TradeData> historicalTrades = 
-                    tradeHistoryService.getTrades(provider, symbol);
-                
-                if (!historicalTrades.isEmpty()) {
-                    System.out.println("   ↳ Processing " + historicalTrades.size() + " historical trades...");
-                    for (org.cloudvision.trading.model.TradeData trade : historicalTrades) {
-                        Map<String, Object> result = indicator.onTradeUpdate(
-                            trade, newParams, instance.getState().getState()
-                        );
-                        Object newState = result.get("state");
-                        if (newState != null) {
-                            instance.getState().setState(newState);
-                        }
-                    }
-                    System.out.println("   ✅ Processed " + historicalTrades.size() + " historical trades");
+                allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol);
+                if (!allHistoricalTrades.isEmpty()) {
+                    System.out.println("   ✅ Loaded " + allHistoricalTrades.size() + " historical trades (will match to candles)");
                 }
             }
             
-            // Load historical order books if needed
             if (needsOrderBooks) {
-                List<org.cloudvision.trading.model.OrderBookData> historicalOrderBooks = 
-                    orderBookHistoryService.getOrderBooks(provider, symbol);
-                
-                if (!historicalOrderBooks.isEmpty()) {
-                    System.out.println("   ↳ Processing " + historicalOrderBooks.size() + " historical order book snapshots...");
-                    for (org.cloudvision.trading.model.OrderBookData orderBook : historicalOrderBooks) {
-                        Map<String, Object> result = indicator.onOrderBookUpdate(
-                            orderBook, newParams, instance.getState().getState()
-                        );
-                        Object newState = result.get("state");
-                        if (newState != null) {
-                            instance.getState().setState(newState);
-                        }
-                    }
-                    System.out.println("   ✅ Processed " + historicalOrderBooks.size() + " historical order book snapshots");
+                allHistoricalOrderBooks = orderBookHistoryService.getOrderBooks(provider, symbol);
+                if (!allHistoricalOrderBooks.isEmpty()) {
+                    System.out.println("   ✅ Loaded " + allHistoricalOrderBooks.size() + " historical order book snapshots (will match to candles)");
                 }
             }
         }
         
-        // Recalculate all historical data with new parameters
+        // ============================================================
+        // RECALCULATE HISTORICAL DATA WITH MATCHED ORDER FLOW
+        // ============================================================
         System.out.println("📊 Recalculating historical buffer with " + candles.size() + " candles...");
+        
         for (int i = minRequired; i < candles.size(); i++) {
             CandlestickData candle = candles.get(i);
+            
+            // Match trades to this candle's time window
+            if (!allHistoricalTrades.isEmpty()) {
+                java.time.Instant candleStart = candle.getOpenTime();
+                java.time.Instant candleEnd = candle.getCloseTime();
+                
+                List<org.cloudvision.trading.model.TradeData> candleTrades = allHistoricalTrades.stream()
+                    .filter(trade -> {
+                        java.time.Instant tradeTime = trade.getTimestamp();
+                        return !tradeTime.isBefore(candleStart) && tradeTime.isBefore(candleEnd);
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+                
+                for (org.cloudvision.trading.model.TradeData trade : candleTrades) {
+                    Map<String, Object> tradeResult = indicator.onTradeUpdate(
+                        trade, newParams, instance.getState().getState()
+                    );
+                    Object newState = tradeResult.get("state");
+                    if (newState != null) {
+                        instance.getState().setState(newState);
+                    }
+                }
+            }
+            
+            // Match order book to this candle's time
+            if (!allHistoricalOrderBooks.isEmpty()) {
+                java.time.Instant candleTime = candle.getOpenTime();
+                org.cloudvision.trading.model.OrderBookData closestOrderBook = null;
+                long minTimeDiff = Long.MAX_VALUE;
+                
+                for (org.cloudvision.trading.model.OrderBookData ob : allHistoricalOrderBooks) {
+                    long timeDiff = Math.abs(java.time.Duration.between(candleTime, ob.getTimestamp()).toMillis());
+                    if (timeDiff < minTimeDiff) {
+                        minTimeDiff = timeDiff;
+                        closestOrderBook = ob;
+                    }
+                }
+                
+                if (closestOrderBook != null) {
+                    Map<String, Object> obResult = indicator.onOrderBookUpdate(
+                        closestOrderBook, newParams, instance.getState().getState()
+                    );
+                    Object newState = obResult.get("state");
+                    if (newState != null) {
+                        instance.getState().setState(newState);
+                    }
+                }
+            }
             
             // Process the candle with new state
             Map<String, Object> result = indicator.onNewCandle(candle, newParams, instance.getState().getState());
