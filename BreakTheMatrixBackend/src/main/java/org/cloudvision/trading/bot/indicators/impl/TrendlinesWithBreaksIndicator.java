@@ -2,6 +2,8 @@ package org.cloudvision.trading.bot.indicators.impl;
 
 import org.cloudvision.trading.bot.indicators.*;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
+import org.cloudvision.trading.bot.visualization.LineShape;
+import org.cloudvision.trading.bot.visualization.MarkerShape;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
 
@@ -319,41 +321,49 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         values.put("upperBreakout", showUpperBreakout ? BigDecimal.ONE : BigDecimal.ZERO);
         values.put("lowerBreakout", showLowerBreakout ? BigDecimal.ONE : BigDecimal.ZERO);
         
-        // Create shapes for breakouts (only show confirmed breakouts)
-        List<Map<String, Object>> shapes = new ArrayList<>();
+        // Create markers for breakouts (only show confirmed breakouts)
+        List<MarkerShape> markers = new ArrayList<>();
         
         if (showUpperBreakout) {
             // Upward breakout (confirmed or immediate)
-            Map<String, Object> shape = new HashMap<>();
-            shape.put("type", "labelup");
-            shape.put("time", candle.getCloseTime().getEpochSecond());
-            shape.put("price", currentLow);
-            shape.put("text", requireConfirmation ? "B✓" : "B");
-            shape.put("color", getStringParameter(params, "upTrendlineColor", "#26a69a"));
-            shape.put("textColor", "#ffffff");
-            shapes.add(shape);
+            MarkerShape marker = MarkerShape.builder()
+                .time(candle.getCloseTime().getEpochSecond())
+                .price(currentLow)
+                .shape("triangle")
+                .position("below")
+                .color(getStringParameter(params, "upTrendlineColor", "#26a69a"))
+                .text(requireConfirmation ? "B✓" : "B")
+                .size(8)
+                .build();
+            markers.add(marker);
         }
         
         if (showLowerBreakout) {
             // Downward breakout (confirmed or immediate)
-            Map<String, Object> shape = new HashMap<>();
-            shape.put("type", "labeldown");
-            shape.put("time", candle.getCloseTime().getEpochSecond());
-            shape.put("price", currentHigh);
-            shape.put("text", requireConfirmation ? "B✓" : "B");
-            shape.put("color", getStringParameter(params, "downTrendlineColor", "#ef5350"));
-            shape.put("textColor", "#ffffff");
-            shapes.add(shape);
+            MarkerShape marker = MarkerShape.builder()
+                .time(candle.getCloseTime().getEpochSecond())
+                .price(currentHigh)
+                .shape("triangle")
+                .position("above")
+                .color(getStringParameter(params, "downTrendlineColor", "#ef5350"))
+                .text(requireConfirmation ? "B✓" : "B")
+                .size(8)
+                .build();
+            markers.add(marker);
         }
         
         // Create line objects for extended trendlines
-        List<Map<String, Object>> lines = createExtendedLines(state, candle, params);
+        List<LineShape> lines = createExtendedLines(state, candle, params);
         
         Map<String, Object> output = new HashMap<>();
-        // output.put("values", values);
+        output.put("values", values);
         output.put("state", state);
-        output.put("shapes", shapes);
-        output.put("lines", lines);
+        if (!markers.isEmpty()) {
+            output.put("markers", markers.stream().map(MarkerShape::toMap).collect(java.util.stream.Collectors.toList()));
+        }
+        if (!lines.isEmpty()) {
+            output.put("lines", lines.stream().map(LineShape::toMap).collect(java.util.stream.Collectors.toList()));
+        }
         
         return output;
     }
@@ -596,8 +606,8 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
     /**
      * Create extended line objects for visualization
      */
-    private List<Map<String, Object>> createExtendedLines(TrendlineState state, CandlestickData currentCandle, Map<String, Object> params) {
-        List<Map<String, Object>> lines = new ArrayList<>();
+    private List<LineShape> createExtendedLines(TrendlineState state, CandlestickData currentCandle, Map<String, Object> params) {
+        List<LineShape> lines = new ArrayList<>();
         
         boolean showExtended = getBooleanParameter(params, "showExtendedLines", true);
         boolean backpaint = getBooleanParameter(params, "backpaint", true);
@@ -629,28 +639,31 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
             // Calculate the price change based on number of bars since pivot
             BigDecimal totalPriceChange = state.slopePh.multiply(BigDecimal.valueOf(barsSincePivot));
             
-            Map<String, Object> upperLine = new HashMap<>();
-            upperLine.put("type", "trendline");
+            LineShape.Builder upperLineBuilder = LineShape.builder();
             
             if (backpaint) {
                 // Start from pivot point
-                upperLine.put("time1", pivotTime);
-                upperLine.put("price1", state.lastPivotHighPrice);
-                // End at current time with accumulated slope
-                upperLine.put("time2", currentTime);
-                upperLine.put("price2", state.lastPivotHighPrice.subtract(totalPriceChange));
+                upperLineBuilder
+                    .time1(pivotTime)
+                    .price1(state.lastPivotHighPrice)
+                    .time2(currentTime)
+                    .price2(state.lastPivotHighPrice.subtract(totalPriceChange));
             } else {
                 // Without backpaint, adjust by offset
-                upperLine.put("time1", pivotTime - offset);
-                upperLine.put("price1", state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length))));
-                upperLine.put("time2", currentTime - offset);
                 BigDecimal adjustedTotalChange = state.slopePh.multiply(BigDecimal.valueOf(barsSincePivot + length));
-                upperLine.put("price2", state.lastPivotHighPrice.subtract(adjustedTotalChange));
+                upperLineBuilder
+                    .time1(pivotTime - offset)
+                    .price1(state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length))))
+                    .time2(currentTime - offset)
+                    .price2(state.lastPivotHighPrice.subtract(adjustedTotalChange));
             }
             
-            upperLine.put("color", upColor);  // Upper line uses upColor (teal)
-            upperLine.put("style", "dashed");
-            upperLine.put("extend", "right");
+            LineShape upperLine = upperLineBuilder
+                .color(upColor)  // Upper line uses upColor (teal)
+                .lineWidth(2)
+                .lineStyle("dashed")
+                .build();
+            
             lines.add(upperLine);
         }
         
@@ -663,28 +676,31 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
             // Calculate the price change based on number of bars since pivot
             BigDecimal totalPriceChange = state.slopePl.multiply(BigDecimal.valueOf(barsSincePivot));
             
-            Map<String, Object> lowerLine = new HashMap<>();
-            lowerLine.put("type", "trendline");
+            LineShape.Builder lowerLineBuilder = LineShape.builder();
             
             if (backpaint) {
                 // Start from pivot point
-                lowerLine.put("time1", pivotTime);
-                lowerLine.put("price1", state.lastPivotLowPrice);
-                // End at current time with accumulated slope
-                lowerLine.put("time2", currentTime);
-                lowerLine.put("price2", state.lastPivotLowPrice.add(totalPriceChange));
+                lowerLineBuilder
+                    .time1(pivotTime)
+                    .price1(state.lastPivotLowPrice)
+                    .time2(currentTime)
+                    .price2(state.lastPivotLowPrice.add(totalPriceChange));
             } else {
                 // Without backpaint, adjust by offset
-                lowerLine.put("time1", pivotTime - offset);
-                lowerLine.put("price1", state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length))));
-                lowerLine.put("time2", currentTime - offset);
                 BigDecimal adjustedTotalChange = state.slopePl.multiply(BigDecimal.valueOf(barsSincePivot + length));
-                lowerLine.put("price2", state.lastPivotLowPrice.add(adjustedTotalChange));
+                lowerLineBuilder
+                    .time1(pivotTime - offset)
+                    .price1(state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length))))
+                    .time2(currentTime - offset)
+                    .price2(state.lastPivotLowPrice.add(adjustedTotalChange));
             }
             
-            lowerLine.put("color", downColor);  // Lower line uses downColor (red)
-            lowerLine.put("style", "dashed");
-            lowerLine.put("extend", "right");
+            LineShape lowerLine = lowerLineBuilder
+                .color(downColor)  // Lower line uses downColor (red)
+                .lineWidth(2)
+                .lineStyle("dashed")
+                .build();
+            
             lines.add(lowerLine);
         }
         
