@@ -618,6 +618,93 @@ public class BinanceTradingProvider implements TradingDataProvider {
     }
     
     /**
+     * Fetch historical aggregate trades with time range
+     * 
+     * Binance API: GET /api/v3/aggTrades?symbol=BTCUSDT&startTime=...&endTime=...&limit=1000
+     * 
+     * @param symbol Trading symbol (e.g., BTCUSDT)
+     * @param startTime Start time for trades
+     * @param endTime End time for trades
+     * @param limit Number of trades to fetch (max 1000)
+     * @return List of historical trades within the time range
+     */
+    @Override
+    public List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, Instant startTime, Instant endTime, int limit) {
+        try {
+            System.out.println("📊 Fetching aggregate trades for " + symbol + " from " + startTime + " to " + endTime + " (limit=" + limit + ")");
+            
+            // Validate limit
+            if (limit <= 0 || limit > 1000) {
+                limit = 1000; // Max limit
+            }
+            
+            String url = BINANCE_REST_API_URL + "/aggTrades?symbol=" + symbol + 
+                         "&startTime=" + startTime.toEpochMilli() +
+                         "&endTime=" + endTime.toEpochMilli() +
+                         "&limit=" + limit;
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(10))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                System.err.println("❌ Failed to fetch aggregate trades: HTTP " + response.statusCode());
+                System.err.println("   Response: " + response.body());
+                return new ArrayList<>();
+            }
+            
+            // Parse JSON array
+            JsonNode jsonArray = objectMapper.readTree(response.body());
+            
+            if (!jsonArray.isArray()) {
+                System.err.println("❌ Unexpected response format from Binance aggTrades");
+                return new ArrayList<>();
+            }
+            
+            List<org.cloudvision.trading.model.TradeData> trades = new ArrayList<>();
+            
+            for (JsonNode tradeJson : jsonArray) {
+                long aggTradeId = tradeJson.get("a").asLong();
+                BigDecimal price = new BigDecimal(tradeJson.get("p").asText());
+                BigDecimal quantity = new BigDecimal(tradeJson.get("q").asText());
+                long firstTradeId = tradeJson.get("f").asLong();
+                long lastTradeId = tradeJson.get("l").asLong();
+                Instant timestamp = Instant.ofEpochMilli(tradeJson.get("T").asLong());
+                boolean isBuyerMaker = tradeJson.get("m").asBoolean();
+                
+                BigDecimal quoteQuantity = price.multiply(quantity);
+                
+                org.cloudvision.trading.model.TradeData trade = new org.cloudvision.trading.model.TradeData(
+                    aggTradeId,
+                    symbol,
+                    price,
+                    quantity,
+                    quoteQuantity,
+                    timestamp,
+                    isBuyerMaker,
+                    getProviderName(),
+                    firstTradeId,
+                    lastTradeId
+                );
+                
+                trades.add(trade);
+            }
+            
+            System.out.println("✅ Fetched " + trades.size() + " trades for time range");
+            return trades;
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching historical aggregate trades: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
      * Fetch historical individual trades from Binance REST API
      * 
      * NOTE: This requires API key for historical trades beyond the most recent

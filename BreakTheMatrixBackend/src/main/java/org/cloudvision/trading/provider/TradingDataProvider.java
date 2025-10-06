@@ -34,6 +34,7 @@ public interface TradingDataProvider {
     // Historical order flow data
     List<org.cloudvision.trading.model.TradeData> getHistoricalTrades(String symbol, int limit);
     List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, int limit);
+    List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, Instant startTime, Instant endTime, int limit);
     org.cloudvision.trading.model.OrderBookData getOrderBookSnapshot(String symbol, int limit);
     
     void setDataHandler(Consumer<TradingData> handler);

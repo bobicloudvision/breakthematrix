@@ -21,6 +21,9 @@ public class UniversalTradingDataService {
     
     @Autowired(required = false)
     private CandlestickHistoryService candlestickHistoryService;
+    
+    @Autowired(required = false)
+    private TradeHistoryService tradeHistoryService;
 
     public void registerProvider(TradingDataProvider provider) {
         providers.put(provider.getProviderName(), provider);
@@ -45,15 +48,24 @@ public class UniversalTradingDataService {
     public void subscribeToKlines(String providerName, String symbol, TimeInterval interval) {
         TradingDataProvider provider = providers.get(providerName);
         if (provider != null && provider.isConnected()) {
-            // First, fetch and store historical data so strategies have immediate data
+            // First, fetch and store historical candlestick data
             if (candlestickHistoryService != null) {
                 try {
-                    System.out.println("📥 Fetching historical data for " + symbol + " before subscribing...");
+                    System.out.println("📥 Fetching historical candles for " + symbol + " before subscribing...");
                     List<CandlestickData> historicalData = provider.getHistoricalKlines(symbol, interval, 5000);
                     
                     if (!historicalData.isEmpty()) {
                         candlestickHistoryService.addCandlesticks(providerName, symbol, interval.getValue(), historicalData);
                         System.out.println("✅ Stored " + historicalData.size() + " historical candles for " + symbol);
+                        
+                        // Also fetch historical trades for the same time range
+                        if (tradeHistoryService != null) {
+                            try {
+                                fetchHistoricalTrades(provider, providerName, symbol, historicalData);
+                            } catch (Exception e) {
+                                System.err.println("⚠️ Failed to fetch historical trades for " + symbol + ": " + e.getMessage());
+                            }
+                        }
                     }
                 } catch (Exception e) {
                     System.err.println("⚠️ Failed to fetch historical data for " + symbol + ": " + e.getMessage());
@@ -62,6 +74,74 @@ public class UniversalTradingDataService {
             
             // Then subscribe to real-time updates
             provider.subscribeToKlines(symbol, interval);
+        }
+    }
+    
+    /**
+     * Fetch historical trades for the time range covered by candles
+     */
+    private void fetchHistoricalTrades(TradingDataProvider provider, String providerName, String symbol, List<CandlestickData> candles) {
+        if (candles.isEmpty()) {
+            return;
+        }
+        
+        Instant startTime = candles.get(0).getOpenTime();
+        Instant endTime = candles.get(candles.size() - 1).getCloseTime();
+        long timeRangeMinutes = java.time.Duration.between(startTime, endTime).toMinutes();
+        
+        System.out.println("📥 Fetching historical trades for " + symbol + " (" + timeRangeMinutes + " minutes)...");
+        
+        try {
+            List<org.cloudvision.trading.model.TradeData> allTrades = new java.util.ArrayList<>();
+            
+            // Split time range into 15-minute chunks
+            long chunkMinutes = 15;
+            int numChunks = (int) Math.ceil((double) timeRangeMinutes / chunkMinutes);
+            numChunks = Math.min(numChunks, 100); // Cap at 100 chunks
+            
+            if (numChunks > 5) {
+                System.out.println("   📊 Will fetch " + numChunks + " time chunks (" + chunkMinutes + " min each)");
+            }
+            
+            // Fetch chunks
+            for (int i = 0; i < numChunks; i++) {
+                Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * chunkMinutes));
+                Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * chunkMinutes));
+                
+                if (chunkEnd.isAfter(endTime)) {
+                    chunkEnd = endTime;
+                }
+                
+                List<org.cloudvision.trading.model.TradeData> batch = 
+                    provider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
+                
+                if (!batch.isEmpty()) {
+                    allTrades.addAll(batch);
+                }
+                
+                // Skip ahead if low volume period
+                if (batch.size() < 1000 && chunkEnd.isBefore(endTime)) {
+                    i += 2;
+                }
+                
+                // Rate limiting
+                if (i < numChunks - 1 && numChunks > 10) {
+                    try {
+                        Thread.sleep(50); // 50ms delay for background loading
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+            
+            if (!allTrades.isEmpty()) {
+                tradeHistoryService.addTrades(providerName, symbol, allTrades);
+                System.out.println("✅ Stored " + allTrades.size() + " historical trades for " + symbol);
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching historical trades: " + e.getMessage());
         }
     }
 

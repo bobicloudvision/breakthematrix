@@ -203,74 +203,18 @@ public class IndicatorInstanceManager {
         if ((needsTrades || needsOrderBooks) && shouldLoadHistorical) {
             System.out.println("📦 Loading historical order flow data for " + indicatorId + "...");
             
-            // Load historical trades if needed
+            // Load historical trades from cache
+            // Note: Trades are pre-loaded when subscribing to klines in UniversalTradingDataService
             if (needsTrades) {
                 allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol);
                 
-                // Fetch from provider if no history exists OR if we need more trades
-                // Calculate required time range from candles
-                java.time.Instant startTime = candles.isEmpty() ? java.time.Instant.now() : candles.get(0).getOpenTime();
-                java.time.Instant endTime = candles.isEmpty() ? java.time.Instant.now() : candles.get(candles.size() - 1).getCloseTime();
-                
-                // Check if we have trades covering the full time range
-                boolean needsMoreTrades = allHistoricalTrades.isEmpty();
                 if (!allHistoricalTrades.isEmpty()) {
-                    // Check if existing trades cover our time range
                     java.time.Instant firstTradeTime = allHistoricalTrades.get(0).getTimestamp();
                     java.time.Instant lastTradeTime = allHistoricalTrades.get(allHistoricalTrades.size() - 1).getTimestamp();
-                    
-                    // If trades don't cover the candle range, fetch more
-                    if (firstTradeTime.isAfter(startTime.plusSeconds(300))) { // 5 min tolerance
-                        needsMoreTrades = true;
-                        System.out.println("   ⚠️ Existing trades don't cover full time range, will fetch more...");
-                    }
-                }
-                
-                if (needsMoreTrades) {
-                    System.out.println("   📥 Fetching trades for time range: " + startTime + " to " + endTime + " (" + candles.size() + " candles)");
-                    
-                    try {
-                        org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
-                            getTradingProvider(provider);
-                        
-                        if (tradingProvider != null) {
-                            // Fetch maximum trades (Binance allows up to 1000 per call)
-                            // For better coverage, we'll make multiple calls if needed
-                            List<org.cloudvision.trading.model.TradeData> fetchedTrades = new ArrayList<>();
-                            
-                            // Calculate number of calls needed (rough estimate: 1000 trades per 10-30 minutes)
-                            long timeRangeMinutes = java.time.Duration.between(startTime, endTime).toMinutes();
-                            int estimatedCalls = Math.max(1, (int)(timeRangeMinutes / 15)); // ~1 call per 15 minutes
-                            estimatedCalls = Math.min(estimatedCalls, 5); // Cap at 5 calls to avoid rate limits
-                            
-                            System.out.println("   📊 Estimated " + estimatedCalls + " API calls needed for " + timeRangeMinutes + " minutes of data");
-                            
-                            // Fetch in batches, working backwards from endTime
-                            for (int i = 0; i < estimatedCalls; i++) {
-                                List<org.cloudvision.trading.model.TradeData> batch = 
-                                    tradingProvider.getHistoricalAggregateTrades(symbol, 1000);
-                                
-                                if (!batch.isEmpty()) {
-                                    fetchedTrades.addAll(batch);
-                                    System.out.println("   ✅ Batch " + (i+1) + ": Fetched " + batch.size() + " trades");
-                                } else {
-                                    break; // No more trades available
-                                }
-                            }
-                            
-                            if (!fetchedTrades.isEmpty()) {
-                                tradeHistoryService.addTrades(provider, symbol, fetchedTrades);
-                                allHistoricalTrades = tradeHistoryService.getTrades(provider, symbol); // Get merged list
-                                System.out.println("   ✅ Total fetched and stored: " + fetchedTrades.size() + " historical trades");
-                            }
-                        }
-                    } catch (Exception e) {
-                        System.err.println("   ❌ Failed to fetch historical trades: " + e.getMessage());
-                    }
-                }
-                
-                if (!allHistoricalTrades.isEmpty()) {
-                    System.out.println("   ✅ Loaded " + allHistoricalTrades.size() + " historical trades (will match to candles)");
+                    System.out.println("   ✅ Using cached trades: " + allHistoricalTrades.size() + " trades from " + 
+                                     firstTradeTime + " to " + lastTradeTime);
+                } else {
+                    System.out.println("   ⚠️ No cached trades found for " + symbol + " - indicator will only work with live data");
                 }
             }
             
