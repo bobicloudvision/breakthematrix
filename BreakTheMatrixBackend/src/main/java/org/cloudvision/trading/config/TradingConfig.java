@@ -32,8 +32,8 @@ public class TradingConfig {
     private static final String DEFAULT_SYMBOL = "ETHUSDT"; // Default trading symbol
 
     // Order Flow Configuration
-    private static final boolean ENABLE_ORDER_FLOW = false;
-    private static final boolean SUBSCRIBE_TO_TRADES = false; // Individual trades (high frequency)
+    private static final boolean ENABLE_ORDER_FLOW = true;
+    private static final boolean SUBSCRIBE_TO_TRADES = true; // Individual trades (high frequency)
     private static final boolean SUBSCRIBE_TO_AGGREGATE_TRADES = true; // Aggregate trades (recommended)
     private static final boolean SUBSCRIBE_TO_ORDER_BOOK = true; // Full order book depth
     private static final boolean SUBSCRIBE_TO_BOOK_TICKER = true; // Best bid/ask only (lightweight)

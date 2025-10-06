@@ -986,7 +986,7 @@ public class BinanceTradingProvider implements TradingDataProvider {
             }
             
             String side = isBuyerMaker ? "SELL" : "BUY";
-            System.out.println("💹 " + symbol + " TRADE: " + side + " " + quantity + " @ " + price);
+//            System.out.println("💹 " + symbol + " TRADE: " + side + " " + quantity + " @ " + price);
             
         } catch (Exception e) {
             System.err.println("❌ Error parsing trade data: " + e.getMessage());

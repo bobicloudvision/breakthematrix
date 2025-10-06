@@ -619,6 +619,271 @@ public class IndicatorInstanceManager {
         return results;
     }
     
+    // ============================================================
+    // EXTENDED DATA TYPE SUPPORT - ORDER BOOK AND TRADE DATA
+    // ============================================================
+    
+    /**
+     * Update a specific indicator instance with order book data
+     * 
+     * This method is called when:
+     * - Exchange sends order book snapshot or update
+     * - Indicator has declared it needs ORDER_BOOK data type
+     * 
+     * WHAT HAPPENS:
+     * 1. Check if indicator is active
+     * 2. Call indicator's onOrderBookUpdate() method
+     * 3. Extract values and state from result
+     * 4. Update internal state
+     * 5. Return result for broadcasting to WebSocket clients
+     * 
+     * TYPICAL FLOW:
+     * Exchange -> IndicatorWebSocketHandler -> updateWithOrderBook() -> Indicator.onOrderBookUpdate()
+     * 
+     * USE CASES:
+     * - Bookmap heatmap visualization
+     * - Bid/ask imbalance calculations
+     * - Liquidity wall detection
+     * - Order book depth analysis
+     * 
+     * @param instanceKey Instance key for the indicator
+     * @param orderBook Order book data with bid/ask levels
+     * @return IndicatorResult containing updated values, or null if instance not found
+     */
+    public IndicatorResult updateWithOrderBook(String instanceKey, 
+                                              org.cloudvision.trading.model.OrderBookData orderBook) {
+        // Get the active indicator instance
+        IndicatorInstance instance = activeInstances.get(instanceKey);
+        
+        if (instance == null) {
+            return null; // Instance not found
+        }
+        
+        // Get indicator state and implementation
+        IndicatorState state = instance.getState();
+        Indicator indicator = getIndicator(state.getIndicatorId());
+        
+        // Process the order book update
+        // This calls the indicator's onOrderBookUpdate() method
+        Map<String, Object> result = indicator.onOrderBookUpdate(
+            orderBook, 
+            state.getParams(), 
+            state.getState()
+        );
+        
+        // Extract values and new state
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+        Object newState = result.get("state");
+        
+        // Extract additional data (heatmap, levels, etc.)
+        Map<String, Object> additionalData = extractAdditionalData(result);
+        
+        // Update state if changed
+        if (newState != null) {
+            state.setState(newState);
+        }
+        
+        // NOTE: We don't store order book results in historical buffer
+        // Order book data is too high frequency and transient
+        // Only closed candle results are stored for historical queries
+        
+        // Create and return result
+        return new IndicatorResult(
+            orderBook.getTimestamp(),
+            values != null ? values : Map.of(),
+            null,  // No candle for order book updates
+            additionalData
+        );
+    }
+    
+    /**
+     * Update all indicators for a specific symbol that need order book data
+     * 
+     * This method:
+     * 1. Finds all active indicators for the symbol
+     * 2. Filters to only indicators that require ORDER_BOOK data type
+     * 3. Calls updateWithOrderBook() for each matching indicator
+     * 4. Returns all results for broadcasting
+     * 
+     * PERFORMANCE OPTIMIZATION:
+     * Order book updates are VERY frequent (100+ per second)
+     * We only update indicators that explicitly need this data
+     * Check indicator.getRequiredDataTypes() to filter
+     * 
+     * @param provider Provider name
+     * @param symbol Trading symbol
+     * @param orderBook Order book data
+     * @return Map of instanceKey -> IndicatorResult for all updated indicators
+     */
+    public Map<String, IndicatorResult> updateAllWithOrderBook(
+            String provider, 
+            String symbol, 
+            org.cloudvision.trading.model.OrderBookData orderBook) {
+        
+        Map<String, IndicatorResult> results = new HashMap<>();
+        
+        // Find all instances for this symbol (across all intervals)
+        // Order book data doesn't have interval, so we check all intervals
+        for (IndicatorInstance instance : getInstancesBySymbol(symbol)) {
+            // Only update if provider matches
+            if (!instance.getProvider().equals(provider)) {
+                continue;
+            }
+            
+            // Check if this indicator needs order book data
+            Indicator indicator = getIndicator(instance.getIndicatorId());
+            if (!indicator.getRequiredDataTypes().contains(
+                    org.cloudvision.trading.model.TradingDataType.ORDER_BOOK)) {
+                continue; // Skip indicators that don't need order book data
+            }
+            
+            // Update the indicator with order book data
+            IndicatorResult result = updateWithOrderBook(instance.getInstanceKey(), orderBook);
+            if (result != null) {
+                results.put(instance.getInstanceKey(), result);
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * Update a specific indicator instance with trade data
+     * 
+     * This method is called when:
+     * - Exchange sends individual or aggregate trade
+     * - Indicator has declared it needs TRADE or AGGREGATE_TRADE data type
+     * 
+     * WHAT HAPPENS:
+     * 1. Check if indicator is active
+     * 2. Call indicator's onTradeUpdate() method
+     * 3. Extract values and state from result
+     * 4. Update internal state (trades are accumulated)
+     * 5. Return result (may be empty until candle closes)
+     * 
+     * TYPICAL FLOW:
+     * Exchange -> IndicatorWebSocketHandler -> updateWithTrade() -> Indicator.onTradeUpdate()
+     * 
+     * USE CASES:
+     * - Cumulative Volume Delta (CVD)
+     * - Order flow imbalance detection
+     * - Volume profile building
+     * - Footprint candle construction
+     * 
+     * PERFORMANCE NOTE:
+     * This is called VERY frequently (1000+ times per second)
+     * Most indicators accumulate in state and only output on candle close
+     * 
+     * @param instanceKey Instance key for the indicator
+     * @param trade Trade data (individual or aggregate)
+     * @return IndicatorResult containing updated values, or null if instance not found
+     */
+    public IndicatorResult updateWithTrade(String instanceKey, 
+                                          org.cloudvision.trading.model.TradeData trade) {
+        // Get the active indicator instance
+        IndicatorInstance instance = activeInstances.get(instanceKey);
+        
+        if (instance == null) {
+            return null; // Instance not found
+        }
+        
+        // Get indicator state and implementation
+        IndicatorState state = instance.getState();
+        Indicator indicator = getIndicator(state.getIndicatorId());
+        
+        // Process the trade update
+        // This calls the indicator's onTradeUpdate() method
+        Map<String, Object> result = indicator.onTradeUpdate(
+            trade, 
+            state.getParams(), 
+            state.getState()
+        );
+        
+        // Extract values and new state
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> values = (Map<String, BigDecimal>) result.get("values");
+        Object newState = result.get("state");
+        
+        // Extract additional data (delta, volume profile, etc.)
+        Map<String, Object> additionalData = extractAdditionalData(result);
+        
+        // Update state (trades are accumulated in state)
+        if (newState != null) {
+            state.setState(newState);
+        }
+        
+        // NOTE: We don't store every trade result in historical buffer
+        // Trade data is extremely high frequency
+        // Indicators accumulate trades and output on candle close
+        
+        // Create and return result
+        return new IndicatorResult(
+            trade.getTimestamp(),
+            values != null ? values : Map.of(),
+            null,  // No candle for trade updates
+            additionalData
+        );
+    }
+    
+    /**
+     * Update all indicators for a specific symbol that need trade data
+     * 
+     * This method:
+     * 1. Finds all active indicators for the symbol
+     * 2. Filters to only indicators that require TRADE or AGGREGATE_TRADE data
+     * 3. Calls updateWithTrade() for each matching indicator
+     * 4. Returns all results for broadcasting
+     * 
+     * PERFORMANCE OPTIMIZATION:
+     * Trade updates are EXTREMELY frequent (1000+ per second)
+     * We only update indicators that explicitly need this data
+     * Most indicators accumulate and only output on candle close
+     * 
+     * @param provider Provider name
+     * @param symbol Trading symbol
+     * @param trade Trade data
+     * @return Map of instanceKey -> IndicatorResult for all updated indicators
+     */
+    public Map<String, IndicatorResult> updateAllWithTrade(
+            String provider, 
+            String symbol, 
+            org.cloudvision.trading.model.TradeData trade) {
+        
+        Map<String, IndicatorResult> results = new HashMap<>();
+        
+        // Find all instances for this symbol (across all intervals)
+        // Trade data doesn't have interval, so we check all intervals
+        for (IndicatorInstance instance : getInstancesBySymbol(symbol)) {
+            // Only update if provider matches
+            if (!instance.getProvider().equals(provider)) {
+                continue;
+            }
+            
+            // Check if this indicator needs trade data
+            Indicator indicator = getIndicator(instance.getIndicatorId());
+            java.util.Set<org.cloudvision.trading.model.TradingDataType> requiredTypes = 
+                indicator.getRequiredDataTypes();
+            
+            boolean needsTrades = requiredTypes.contains(
+                org.cloudvision.trading.model.TradingDataType.TRADE) ||
+                requiredTypes.contains(
+                org.cloudvision.trading.model.TradingDataType.AGGREGATE_TRADE);
+            
+            if (!needsTrades) {
+                continue; // Skip indicators that don't need trade data
+            }
+            
+            // Update the indicator with trade data
+            IndicatorResult result = updateWithTrade(instance.getInstanceKey(), trade);
+            if (result != null) {
+                results.put(instance.getInstanceKey(), result);
+            }
+        }
+        
+        return results;
+    }
+    
     /**
      * Get an active indicator instance
      * 

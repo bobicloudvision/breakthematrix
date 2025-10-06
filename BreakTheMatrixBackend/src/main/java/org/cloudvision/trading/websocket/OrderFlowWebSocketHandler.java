@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * {"action": "unsubscribe", "symbol": "BTCUSDT"}
  * {"action": "getStats"}
  */
-@Component
+//@Component
 public class OrderFlowWebSocketHandler extends TextWebSocketHandler {
     
     private final TradingBot tradingBot;

@@ -274,36 +274,94 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
     // Data Processing
     // ============================================================
     
+    // ============================================================
+    // DATA PROCESSING - ENTRY POINT FOR ALL TRADING DATA
+    // ============================================================
+    
     /**
      * Process incoming trading data and update indicators
+     * 
+     * This is the MAIN ENTRY POINT for all trading data from exchanges.
+     * The TradingBot calls this method whenever new data arrives.
+     * 
+     * DATA FLOW:
+     * Exchange -> TradingDataProvider -> TradingBot -> this.processData() -> Indicators
+     * 
+     * SUPPORTED DATA TYPES:
+     * 1. Candlestick Data (KLINE) - Most common, used by most indicators
+     * 2. Trade Data (TRADE/AGGREGATE_TRADE) - For order flow indicators
+     * 3. Order Book Data (ORDER_BOOK) - For Bookmap-style indicators
+     * 
+     * WHAT HAPPENS:
+     * - Checks data type using TradingData.hasCandlestickData(), hasTradeData(), etc.
+     * - Routes to appropriate processing method
+     * - Updates all indicators that need this data type
+     * - Broadcasts results to WebSocket clients
      */
     private void processData(TradingData data) {
-        // Process candlestick data (closed candles and real-time ticks)
+        // ============================================================
+        // 1. PROCESS CANDLESTICK DATA (MOST COMMON)
+        // ============================================================
+        // Candlestick/OHLC data is used by most indicators (SMA, RSI, etc.)
+        // Can be closed candle or real-time tick (forming candle)
         if (data.hasCandlestickData()) {
             CandlestickData candle = data.getCandlestickData();
             
             // Broadcast raw candle update to all sessions (for chart updates)
+            // This allows charts to display live price movement
             broadcastCandleUpdate(candle);
             
             if (candle.isClosed()) {
-                // Closed candle - full indicator update
+                // CLOSED CANDLE - Full indicator calculation with state update
+                // This is when the candle period completes (e.g., 1 minute passed for 1m candle)
+                // All indicators recalculate and store the result in history
                 processCandleClose(candle);
             } else {
-                // Real-time tick - update indicators with current price
+                // REAL-TIME TICK - Preview of indicator values with current price
+                // This shows what indicators would be if candle closed now
+                // State is NOT updated, just a preview calculation
                 processTick(candle.getProvider(), candle.getSymbol(), 
                            candle.getInterval(), candle.getClose());
             }
             return;
         }
         
-        // Process trade data for real-time price updates
+        // ============================================================
+        // 2. PROCESS TRADE DATA (FOR ORDER FLOW INDICATORS)
+        // ============================================================
+        // Individual or aggregate trades from the exchange
+        // Used for: CVD, order flow imbalance, footprint candles, volume profile
         if (data.hasTradeData()) {
             org.cloudvision.trading.model.TradeData trade = data.getTradeData();
+            
+            // Process trade for indicators that need trade-level data
+            // Examples: CVD indicator, order flow imbalance, volume profile
+            processTrade(trade);
+            
+            // Also update tick-based indicators with current price
+            // This gives real-time price updates for trailing stops, etc.
             processTick(data.getProvider(), data.getSymbol(), 
                        guessIntervalFromSubscriptions(data.getSymbol()), 
                        trade.getPrice());
             return;
         }
+        
+        // ============================================================
+        // 3. PROCESS ORDER BOOK DATA (FOR BOOKMAP-STYLE INDICATORS)
+        // ============================================================
+        // Order book snapshots/updates from the exchange
+        // Used for: Bookmap heatmap, bid/ask imbalance, liquidity detection
+        if (data.hasOrderBookData()) {
+            org.cloudvision.trading.model.OrderBookData orderBook = data.getOrderBookData();
+            
+            // Process order book for indicators that visualize market depth
+            // Examples: Bookmap heatmap, liquidity walls, bid/ask ratio
+            processOrderBook(orderBook);
+            return;
+        }
+        
+        // If we get here, the data type is not handled
+        // This is normal - we only process data types that indicators need
     }
     
     /**
@@ -348,6 +406,153 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
             if (result.getValues() != null && !result.getValues().isEmpty()) {
                 broadcastTickUpdate(instanceKey, result, provider, symbol, interval, price);
             }
+        }
+    }
+    
+    // ============================================================
+    // NEW: TRADE DATA PROCESSING FOR ORDER FLOW INDICATORS
+    // ============================================================
+    
+    /**
+     * Process trade data for order flow indicators
+     * 
+     * WHAT THIS DOES:
+     * 1. Receives individual or aggregate trade from exchange
+     * 2. Finds all indicators that need trade data (declared via getRequiredDataTypes())
+     * 3. Calls indicator.onTradeUpdate() for each matching indicator
+     * 4. Broadcasts results to WebSocket clients ONLY if indicator returns data
+     * 
+     * TYPICAL INDICATORS THAT USE THIS:
+     * - Cumulative Volume Delta (CVD)
+     * - Order Flow Imbalance
+     * - Volume Profile
+     * - Footprint Charts
+     * - Bookmap Heatmap
+     * 
+     * HOW TRADE DATA FLOWS:
+     * Exchange (Binance, etc.) 
+     *   -> TradingDataProvider 
+     *   -> TradingBot 
+     *   -> this.processTrade() 
+     *   -> IndicatorInstanceManager.updateAllWithTrade()
+     *   -> Indicator.onTradeUpdate()
+     *   -> WebSocket broadcast (only if values not empty)
+     * 
+     * PERFORMANCE NOTE:
+     * This method is called VERY frequently (1000+ times per second on active pairs)
+     * Most indicators accumulate trades in their state and only output on candle close
+     * We only broadcast if the indicator returns non-empty values or additional data
+     * This prevents flooding WebSocket with unnecessary messages
+     * 
+     * @param trade Individual or aggregate trade data
+     */
+    private void processTrade(org.cloudvision.trading.model.TradeData trade) {
+        // Update all indicators that need trade data for this symbol
+        // The IndicatorInstanceManager filters to only indicators that declared
+        // TRADE or AGGREGATE_TRADE in their getRequiredDataTypes()
+        Map<String, IndicatorInstanceManager.IndicatorResult> results = 
+            instanceManager.updateAllWithTrade(
+                trade.getProvider(), 
+                trade.getSymbol(), 
+                trade
+            );
+        
+        if (results.isEmpty()) {
+            return; // No active indicators need trade data for this symbol
+        }
+        
+        // Broadcast trade-based indicator updates to subscribed sessions
+        // ONLY if the indicator returns non-empty values or additional data
+        // Most indicators (like Bookmap) accumulate trades and only output on candle close
+        for (Map.Entry<String, IndicatorInstanceManager.IndicatorResult> entry : results.entrySet()) {
+            String instanceKey = entry.getKey();
+            IndicatorInstanceManager.IndicatorResult result = entry.getValue();
+            
+            // Only broadcast if indicator has values OR additional data
+            // If both are empty, the indicator is accumulating silently
+            boolean hasValues = result.getValues() != null && !result.getValues().isEmpty();
+            boolean hasAdditionalData = result.getAdditionalData() != null && !result.getAdditionalData().isEmpty();
+            
+            if (hasValues || hasAdditionalData) {
+                broadcastTradeIndicatorUpdate(instanceKey, result, trade);
+            }
+            // Otherwise skip - indicator is accumulating silently
+        }
+    }
+    
+    // ============================================================
+    // NEW: ORDER BOOK DATA PROCESSING FOR BOOKMAP-STYLE INDICATORS
+    // ============================================================
+    
+    /**
+     * Process order book data for Bookmap-style indicators
+     * 
+     * WHAT THIS DOES:
+     * 1. Receives order book snapshot/update from exchange
+     * 2. Finds all indicators that need order book data (declared via getRequiredDataTypes())
+     * 3. Calls indicator.onOrderBookUpdate() for each matching indicator
+     * 4. Broadcasts results to WebSocket clients ONLY if indicator returns data
+     * 
+     * TYPICAL INDICATORS THAT USE THIS:
+     * - Bookmap Heatmap (volume at each price level)
+     * - Bid/Ask Imbalance
+     * - Liquidity Wall Detection
+     * - Order Book Depth Analysis
+     * 
+     * HOW ORDER BOOK DATA FLOWS:
+     * Exchange (Binance, etc.) 
+     *   -> TradingDataProvider 
+     *   -> TradingBot 
+     *   -> this.processOrderBook() 
+     *   -> IndicatorInstanceManager.updateAllWithOrderBook()
+     *   -> Indicator.onOrderBookUpdate()
+     *   -> WebSocket broadcast (only if values not empty)
+     * 
+     * PERFORMANCE NOTE:
+     * Order book updates are EXTREMELY frequent (100+ per second)
+     * Many indicators (like Bookmap) accumulate silently and only output on candle close
+     * We only broadcast if the indicator returns non-empty values or additional data
+     * 
+     * WHAT ORDER BOOK CONTAINS:
+     * - List of bid levels (price + quantity)
+     * - List of ask levels (price + quantity)
+     * - Best bid/ask prices
+     * - Spread
+     * - Total volume at each level
+     * 
+     * @param orderBook Order book snapshot with bid/ask levels
+     */
+    private void processOrderBook(org.cloudvision.trading.model.OrderBookData orderBook) {
+        // Update all indicators that need order book data for this symbol
+        // The IndicatorInstanceManager filters to only indicators that declared
+        // ORDER_BOOK in their getRequiredDataTypes()
+        Map<String, IndicatorInstanceManager.IndicatorResult> results = 
+            instanceManager.updateAllWithOrderBook(
+                orderBook.getProvider(), 
+                orderBook.getSymbol(), 
+                orderBook
+            );
+        
+        if (results.isEmpty()) {
+            return; // No active indicators need order book data for this symbol
+        }
+        
+        // Broadcast order book indicator updates to subscribed sessions
+        // ONLY if the indicator returns non-empty values or additional data
+        // This allows indicators to accumulate silently and only broadcast on candle close
+        for (Map.Entry<String, IndicatorInstanceManager.IndicatorResult> entry : results.entrySet()) {
+            String instanceKey = entry.getKey();
+            IndicatorInstanceManager.IndicatorResult result = entry.getValue();
+            
+            // Only broadcast if indicator has values OR additional data
+            // If both are empty, the indicator is accumulating silently
+            boolean hasValues = result.getValues() != null && !result.getValues().isEmpty();
+            boolean hasAdditionalData = result.getAdditionalData() != null && !result.getAdditionalData().isEmpty();
+            
+            if (hasValues || hasAdditionalData) {
+                broadcastOrderBookIndicatorUpdate(instanceKey, result, orderBook);
+            }
+            // Otherwise skip - indicator is accumulating silently
         }
     }
     
@@ -566,6 +771,191 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
         }
         
         return false;
+    }
+    
+    // ============================================================
+    // NEW: BROADCAST METHODS FOR TRADE AND ORDER BOOK INDICATORS
+    // ============================================================
+    
+    /**
+     * Broadcast trade-based indicator update to subscribed sessions
+     * 
+     * WHAT THIS DOES:
+     * Sends indicator updates from trade data processing to WebSocket clients
+     * 
+     * MESSAGE FORMAT:
+     * {
+     *   "type": "indicatorTrade",
+     *   "trade": { ... trade data ... },
+     *   "data": { ... indicator response ... }
+     * }
+     * 
+     * TYPICAL USE:
+     * Order flow indicators like CVD, imbalance, volume profile
+     * Most accumulate trades and only output meaningful data periodically
+     * 
+     * @param instanceKey Indicator instance key
+     * @param result Indicator calculation result
+     * @param trade The trade that triggered this update
+     */
+    private void broadcastTradeIndicatorUpdate(String instanceKey, 
+                                              IndicatorInstanceManager.IndicatorResult result,
+                                              org.cloudvision.trading.model.TradeData trade) {
+        try {
+            // Get the indicator instance for context information
+            IndicatorInstanceManager.IndicatorInstance instance = 
+                instanceManager.getInstance(instanceKey);
+            
+            if (instance == null) {
+                return;
+            }
+            
+            // Generate context key for routing
+            String contextKey = String.format("%s:%s:%s", 
+                trade.getProvider(), trade.getSymbol(), instance.getInterval());
+            
+            // Create unified response for WebSocket update
+            IndicatorResponse indicatorResponse = IndicatorResponse.builder()
+                .fromInstance(instance)
+                .fromResult(result)
+                .build();
+            
+            // Build update message wrapper
+            Map<String, Object> updateMessage = new HashMap<>();
+            updateMessage.put("type", "indicatorTrade");
+            updateMessage.put("data", indicatorResponse);
+            
+            // Include trade information for context
+            Map<String, Object> tradeInfo = new HashMap<>();
+            tradeInfo.put("price", trade.getPrice());
+            tradeInfo.put("quantity", trade.getQuantity());
+            tradeInfo.put("isBuy", trade.isAggressiveBuy());
+            tradeInfo.put("timestamp", trade.getTimestamp().toString());
+            updateMessage.put("trade", tradeInfo);
+            
+            TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
+            
+            // Send to subscribed sessions
+            int sentCount = 0;
+            for (Map.Entry<String, WebSocketSession> sessionEntry : sessions.entrySet()) {
+                String sessionId = sessionEntry.getKey();
+                WebSocketSession session = sessionEntry.getValue();
+                
+                try {
+                    if (session.isOpen() && shouldSendToSession(sessionId, instanceKey, contextKey)) {
+                        session.sendMessage(message);
+                        sentCount++;
+                    }
+                } catch (IOException e) {
+                    System.err.println("❌ Failed to send trade indicator update to session " + 
+                                     sessionId + ": " + e.getMessage());
+                }
+            }
+            
+            // Log only occasionally to avoid spam (trade updates are very frequent)
+            if (sentCount > 0 && Math.random() < 0.001) { // Log ~0.1% of updates
+                System.out.println("📤 Trade indicator update (" + instance.getIndicatorId() + 
+                                 ") sent to " + sentCount + " session(s)");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to broadcast trade indicator update: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Broadcast order book indicator update to subscribed sessions
+     * 
+     * WHAT THIS DOES:
+     * Sends indicator updates from order book processing to WebSocket clients
+     * Typically includes heatmap data for Bookmap-style visualization
+     * 
+     * MESSAGE FORMAT:
+     * {
+     *   "type": "indicatorOrderBook",
+     *   "orderBook": { ... order book snapshot ... },
+     *   "data": { 
+     *     ... indicator response ...,
+     *     "heatmap": [ ... price level data ... ],
+     *     "levels": [ ... significant levels ... ]
+     *   }
+     * }
+     * 
+     * TYPICAL USE:
+     * Bookmap heatmap, bid/ask imbalance, liquidity walls
+     * Updates are very frequent (100+ per second)
+     * Frontend should throttle rendering for performance
+     * 
+     * @param instanceKey Indicator instance key
+     * @param result Indicator calculation result (includes heatmap data)
+     * @param orderBook The order book that triggered this update
+     */
+    private void broadcastOrderBookIndicatorUpdate(String instanceKey, 
+                                                   IndicatorInstanceManager.IndicatorResult result,
+                                                   org.cloudvision.trading.model.OrderBookData orderBook) {
+        try {
+            // Get the indicator instance for context information
+            IndicatorInstanceManager.IndicatorInstance instance = 
+                instanceManager.getInstance(instanceKey);
+            
+            if (instance == null) {
+                return;
+            }
+            
+            // Generate context key for routing
+            // Note: Order book doesn't have interval, so we use the instance's interval
+            String contextKey = String.format("%s:%s:%s", 
+                orderBook.getProvider(), orderBook.getSymbol(), instance.getInterval());
+            
+            // Create unified response for WebSocket update
+            IndicatorResponse indicatorResponse = IndicatorResponse.builder()
+                .fromInstance(instance)
+                .fromResult(result)
+                .build();
+            
+            // Build update message wrapper
+            Map<String, Object> updateMessage = new HashMap<>();
+            updateMessage.put("type", "indicatorOrderBook");
+            updateMessage.put("data", indicatorResponse);
+            
+            // Include order book summary for context (don't send full book every time)
+            Map<String, Object> orderBookInfo = new HashMap<>();
+            orderBookInfo.put("bestBid", orderBook.getBestBid());
+            orderBookInfo.put("bestAsk", orderBook.getBestAsk());
+            orderBookInfo.put("spread", orderBook.getSpread());
+            orderBookInfo.put("timestamp", orderBook.getTimestamp().toString());
+            orderBookInfo.put("bidLevels", orderBook.getBids().size());
+            orderBookInfo.put("askLevels", orderBook.getAsks().size());
+            updateMessage.put("orderBookSummary", orderBookInfo);
+            
+            TextMessage message = new TextMessage(objectMapper.writeValueAsString(updateMessage));
+            
+            // Send to subscribed sessions
+            int sentCount = 0;
+            for (Map.Entry<String, WebSocketSession> sessionEntry : sessions.entrySet()) {
+                String sessionId = sessionEntry.getKey();
+                WebSocketSession session = sessionEntry.getValue();
+                
+                try {
+                    if (session.isOpen() && shouldSendToSession(sessionId, instanceKey, contextKey)) {
+                        session.sendMessage(message);
+                        sentCount++;
+                    }
+                } catch (IOException e) {
+                    System.err.println("❌ Failed to send order book indicator update to session " + 
+                                     sessionId + ": " + e.getMessage());
+                }
+            }
+            
+            // Log only very occasionally to avoid spam (order book updates are extremely frequent)
+            if (sentCount > 0 && Math.random() < 0.0001) { // Log ~0.01% of updates
+                System.out.println("📤 Order book indicator update (" + instance.getIndicatorId() + 
+                                 ") sent to " + sentCount + " session(s)");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to broadcast order book indicator update: " + e.getMessage());
+        }
     }
     
     // ============================================================
