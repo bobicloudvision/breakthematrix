@@ -612,17 +612,42 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         long currentTime = currentCandle.getCloseTime().getEpochSecond();
         long offset = backpaint ? length * 60 : 0;  // Assume 1-minute candles
         
+        // Detect interval from candle buffer to calculate bars correctly
+        long intervalSeconds = 60; // Default to 1 minute
+        if (state.candleBuffer.size() >= 2) {
+            CandlestickData lastCandle = state.candleBuffer.get(state.candleBuffer.size() - 1);
+            CandlestickData prevCandle = state.candleBuffer.get(state.candleBuffer.size() - 2);
+            intervalSeconds = lastCandle.getCloseTime().getEpochSecond() - prevCandle.getCloseTime().getEpochSecond();
+        }
+        
         // Upper trendline (down-trending resistance)
         if (state.lastPivotHighTime != null && state.lastPivotHighPrice != null) {
+            long pivotTime = state.lastPivotHighTime.getEpochSecond();
+            long timeDiff = currentTime - pivotTime;
+            int barsSincePivot = (int) (timeDiff / intervalSeconds);
+            
+            // Calculate the price change based on number of bars since pivot
+            BigDecimal totalPriceChange = state.slopePh.multiply(BigDecimal.valueOf(barsSincePivot));
+            
             Map<String, Object> upperLine = new HashMap<>();
             upperLine.put("type", "trendline");
-            upperLine.put("time1", state.lastPivotHighTime.getEpochSecond() - offset);
-            upperLine.put("price1", backpaint ? state.lastPivotHighPrice : 
-                state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length))));
-            upperLine.put("time2", currentTime - offset + 60);
-            upperLine.put("price2", backpaint ? 
-                state.lastPivotHighPrice.subtract(state.slopePh) :
-                state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length + 1))));
+            
+            if (backpaint) {
+                // Start from pivot point
+                upperLine.put("time1", pivotTime);
+                upperLine.put("price1", state.lastPivotHighPrice);
+                // End at current time with accumulated slope
+                upperLine.put("time2", currentTime);
+                upperLine.put("price2", state.lastPivotHighPrice.subtract(totalPriceChange));
+            } else {
+                // Without backpaint, adjust by offset
+                upperLine.put("time1", pivotTime - offset);
+                upperLine.put("price1", state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length))));
+                upperLine.put("time2", currentTime - offset);
+                BigDecimal adjustedTotalChange = state.slopePh.multiply(BigDecimal.valueOf(barsSincePivot + length));
+                upperLine.put("price2", state.lastPivotHighPrice.subtract(adjustedTotalChange));
+            }
+            
             upperLine.put("color", downColor);
             upperLine.put("style", "dashed");
             upperLine.put("extend", "right");
@@ -631,15 +656,32 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         
         // Lower trendline (up-trending support)
         if (state.lastPivotLowTime != null && state.lastPivotLowPrice != null) {
+            long pivotTime = state.lastPivotLowTime.getEpochSecond();
+            long timeDiff = currentTime - pivotTime;
+            int barsSincePivot = (int) (timeDiff / intervalSeconds);
+            
+            // Calculate the price change based on number of bars since pivot
+            BigDecimal totalPriceChange = state.slopePl.multiply(BigDecimal.valueOf(barsSincePivot));
+            
             Map<String, Object> lowerLine = new HashMap<>();
             lowerLine.put("type", "trendline");
-            lowerLine.put("time1", state.lastPivotLowTime.getEpochSecond() - offset);
-            lowerLine.put("price1", backpaint ? state.lastPivotLowPrice :
-                state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length))));
-            lowerLine.put("time2", currentTime - offset + 60);
-            lowerLine.put("price2", backpaint ?
-                state.lastPivotLowPrice.add(state.slopePl) :
-                state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length + 1))));
+            
+            if (backpaint) {
+                // Start from pivot point
+                lowerLine.put("time1", pivotTime);
+                lowerLine.put("price1", state.lastPivotLowPrice);
+                // End at current time with accumulated slope
+                lowerLine.put("time2", currentTime);
+                lowerLine.put("price2", state.lastPivotLowPrice.add(totalPriceChange));
+            } else {
+                // Without backpaint, adjust by offset
+                lowerLine.put("time1", pivotTime - offset);
+                lowerLine.put("price1", state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length))));
+                lowerLine.put("time2", currentTime - offset);
+                BigDecimal adjustedTotalChange = state.slopePl.multiply(BigDecimal.valueOf(barsSincePivot + length));
+                lowerLine.put("price2", state.lastPivotLowPrice.add(adjustedTotalChange));
+            }
+            
             lowerLine.put("color", upColor);
             lowerLine.put("style", "dashed");
             lowerLine.put("extend", "right");
