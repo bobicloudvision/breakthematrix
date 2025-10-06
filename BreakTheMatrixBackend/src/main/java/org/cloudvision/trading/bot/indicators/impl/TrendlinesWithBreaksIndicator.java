@@ -71,6 +71,12 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         // Previous values for breakout detection
         public int prevUpos = 0;
         public int prevDnos = 0;
+        
+        // Confirmation tracking for breakouts
+        public boolean pendingUpperBreakout = false;  // Waiting for confirmation of upper breakout
+        public boolean pendingLowerBreakout = false;  // Waiting for confirmation of lower breakout
+        public BigDecimal pendingUpperBreakoutPrice = null;  // Price at which upper breakout occurred
+        public BigDecimal pendingLowerBreakoutPrice = null;  // Price at which lower breakout occurred
     }
     
     public TrendlinesWithBreaksIndicator() {
@@ -140,6 +146,14 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
             .description("Color for down trendline (resistance)")
             .type(IndicatorParameter.ParameterType.STRING)
             .defaultValue("#ef5350")
+            .required(false)
+            .build());
+        
+        params.put("requireConfirmation", IndicatorParameter.builder("requireConfirmation")
+            .displayName("Require Confirmation")
+            .description("Only show breakout signals after they're confirmed by the next candle close")
+            .type(IndicatorParameter.ParameterType.BOOLEAN)
+            .defaultValue(false)
             .required(false)
             .build());
         
@@ -223,17 +237,61 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
             state.lower = state.lower.add(state.slopePl);
         }
         
-        // Update breakout detection
-        // Upper breakout: price closes above the down-trendline (resistance)
-        BigDecimal upperThreshold = state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length)));
-        if (state.upos == 0 && currentClose.compareTo(upperThreshold) > 0) {
-            state.upos = 1;
-        }
+        // Get confirmation setting
+        boolean requireConfirmation = getBooleanParameter(params, "requireConfirmation", false);
         
-        // Lower breakout: price closes below the up-trendline (support)
+        // Update breakout detection with optional confirmation
+        BigDecimal upperThreshold = state.upper.subtract(state.slopePh.multiply(BigDecimal.valueOf(length)));
         BigDecimal lowerThreshold = state.lower.add(state.slopePl.multiply(BigDecimal.valueOf(length)));
-        if (state.dnos == 0 && currentClose.compareTo(lowerThreshold) < 0) {
-            state.dnos = 1;
+        
+        // Check for pending confirmations from previous candle
+        boolean confirmedUpperBreakout = false;
+        boolean confirmedLowerBreakout = false;
+        
+        if (requireConfirmation) {
+            // Check if we're confirming a pending upper breakout
+            if (state.pendingUpperBreakout && state.pendingUpperBreakoutPrice != null) {
+                // Confirm if current close stays above breakout price
+                if (currentClose.compareTo(state.pendingUpperBreakoutPrice) > 0) {
+                    confirmedUpperBreakout = true;
+                    state.upos = 1;
+                }
+                // Clear pending flag regardless
+                state.pendingUpperBreakout = false;
+                state.pendingUpperBreakoutPrice = null;
+            }
+            
+            // Check if we're confirming a pending lower breakout
+            if (state.pendingLowerBreakout && state.pendingLowerBreakoutPrice != null) {
+                // Confirm if current close stays below breakout price
+                if (currentClose.compareTo(state.pendingLowerBreakoutPrice) < 0) {
+                    confirmedLowerBreakout = true;
+                    state.dnos = 1;
+                }
+                // Clear pending flag regardless
+                state.pendingLowerBreakout = false;
+                state.pendingLowerBreakoutPrice = null;
+            }
+            
+            // Check for NEW breakouts (mark as pending)
+            if (state.upos == 0 && currentClose.compareTo(upperThreshold) > 0) {
+                state.pendingUpperBreakout = true;
+                state.pendingUpperBreakoutPrice = currentClose;
+            }
+            
+            if (state.dnos == 0 && currentClose.compareTo(lowerThreshold) < 0) {
+                state.pendingLowerBreakout = true;
+                state.pendingLowerBreakoutPrice = currentClose;
+            }
+        } else {
+            // No confirmation required - signal immediately
+            if (state.upos == 0 && currentClose.compareTo(upperThreshold) > 0) {
+                state.upos = 1;
+            }
+            
+            if (state.dnos == 0 && currentClose.compareTo(lowerThreshold) < 0) {
+                state.dnos = 1;
+            }
         }
         
         // Trim buffer
@@ -252,32 +310,37 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         values.put("lowerTrendline", displayLower);
         values.put("slope", slope);
         
-        // Breakout signals (new breakouts only)
-        values.put("upperBreakout", (state.upos > state.prevUpos) ? BigDecimal.ONE : BigDecimal.ZERO);
-        values.put("lowerBreakout", (state.dnos > state.prevDnos) ? BigDecimal.ONE : BigDecimal.ZERO);
+        // Breakout signals
+        // With confirmation: only signal when confirmed
+        // Without confirmation: signal immediately (new breakouts only)
+        boolean showUpperBreakout = requireConfirmation ? confirmedUpperBreakout : (state.upos > state.prevUpos);
+        boolean showLowerBreakout = requireConfirmation ? confirmedLowerBreakout : (state.dnos > state.prevDnos);
         
-        // Create shapes for breakouts
+        values.put("upperBreakout", showUpperBreakout ? BigDecimal.ONE : BigDecimal.ZERO);
+        values.put("lowerBreakout", showLowerBreakout ? BigDecimal.ONE : BigDecimal.ZERO);
+        
+        // Create shapes for breakouts (only show confirmed breakouts)
         List<Map<String, Object>> shapes = new ArrayList<>();
         
-        if (state.upos > state.prevUpos) {
-            // Upward breakout
+        if (showUpperBreakout) {
+            // Upward breakout (confirmed or immediate)
             Map<String, Object> shape = new HashMap<>();
             shape.put("type", "labelup");
             shape.put("time", candle.getCloseTime().getEpochSecond());
             shape.put("price", currentLow);
-            shape.put("text", "B");
+            shape.put("text", requireConfirmation ? "B✓" : "B");
             shape.put("color", getStringParameter(params, "upTrendlineColor", "#26a69a"));
             shape.put("textColor", "#ffffff");
             shapes.add(shape);
         }
         
-        if (state.dnos > state.prevDnos) {
-            // Downward breakout
+        if (showLowerBreakout) {
+            // Downward breakout (confirmed or immediate)
             Map<String, Object> shape = new HashMap<>();
             shape.put("type", "labeldown");
             shape.put("time", candle.getCloseTime().getEpochSecond());
             shape.put("price", currentHigh);
-            shape.put("text", "B");
+            shape.put("text", requireConfirmation ? "B✓" : "B");
             shape.put("color", getStringParameter(params, "downTrendlineColor", "#ef5350"));
             shape.put("textColor", "#ffffff");
             shapes.add(shape);
@@ -287,7 +350,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         List<Map<String, Object>> lines = createExtendedLines(state, candle, params);
         
         Map<String, Object> output = new HashMap<>();
-        output.put("values", values);
+        // output.put("values", values);
         output.put("state", state);
         output.put("shapes", shapes);
         output.put("lines", lines);
