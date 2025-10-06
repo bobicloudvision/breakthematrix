@@ -208,21 +208,6 @@ public class BookmapIndicator extends AbstractIndicator {
         }
         
         /**
-         * Update volume totals (used by synthetic profile generation)
-         */
-        public void setTotalBuyVolume(BigDecimal totalBuyVolume) {
-            this.totalBuyVolume = totalBuyVolume;
-        }
-        
-        public void setTotalSellVolume(BigDecimal totalSellVolume) {
-            this.totalSellVolume = totalSellVolume;
-        }
-        
-        public void setMaxVolumeAtLevel(BigDecimal maxVolumeAtLevel) {
-            this.maxVolumeAtLevel = maxVolumeAtLevel;
-        }
-        
-        /**
          * Check if enough time has passed for a live update
          * @return true if we should broadcast an update
          */
@@ -439,16 +424,6 @@ public class BookmapIndicator extends AbstractIndicator {
         // Reset broadcast timer so next live update will wait the full interval
         bookmapState.setLastBroadcastTime(System.currentTimeMillis());
         
-        // ============================================================
-        // SYNTHETIC HEATMAP FOR HISTORICAL CANDLES WITHOUT TRADES
-        // ============================================================
-        // If this candle has no trade data (volume = 0), create a synthetic profile
-        // using the candle's OHLCV data for visualization
-        if (bookmapState.getMaxVolumeAtLevel().compareTo(BigDecimal.ZERO) == 0 && 
-            candle.getVolume().compareTo(BigDecimal.ZERO) > 0) {
-            createSyntheticVolumeProfile(candle, bookmapState);
-        }
-        
         // Build complete heatmap data
         Map<String, Object> heatmap = buildHeatmap(bookmapState);
         
@@ -491,13 +466,6 @@ public class BookmapIndicator extends AbstractIndicator {
         // Add shapes to result if we have any
         if (!shapes.isEmpty()) {
             result.putAll(shapes.toMap());  // Adds "markers" key with list of circles
-            System.out.println("📍 Bookmap: Added " + shapes.getMarkers().size() + " markers for candle " + 
-                             candle.getOpenTime() + " (volume: " + 
-                             bookmapState.getTotalBuyVolume().add(bookmapState.getTotalSellVolume()) + ")");
-        } else {
-            System.out.println("⚠️ Bookmap: No markers created for candle " + candle.getOpenTime() + 
-                             " (volume: " + bookmapState.getTotalBuyVolume().add(bookmapState.getTotalSellVolume()) + 
-                             ", maxVolume: " + bookmapState.getMaxVolumeAtLevel() + ")");
         }
         
         // ============================================================
@@ -657,113 +625,6 @@ public class BookmapIndicator extends AbstractIndicator {
      * - Distribute volume based on proximity to open/close
      * - Assume higher volume near close price (where candle ended)
      */
-    private void createSyntheticVolumeProfile(CandlestickData candle, BookmapState state) {
-        BigDecimal volume = candle.getVolume();
-        BigDecimal open = candle.getOpen();
-        BigDecimal high = candle.getHigh();
-        BigDecimal low = candle.getLow();
-        BigDecimal close = candle.getClose();
-        BigDecimal tickSize = state.getTickSize();
-        
-        // Calculate number of price levels in candle range
-        BigDecimal priceRange = high.subtract(low);
-        if (priceRange.compareTo(BigDecimal.ZERO) == 0) {
-            // Flat candle - put all volume at one level
-            BigDecimal roundedPrice = roundToTickSize(close, tickSize);
-            PriceLevelData levelData = state.getVolumeProfile().computeIfAbsent(
-                roundedPrice, p -> new PriceLevelData(p)
-            );
-            
-            // Assume 50/50 buy/sell for flat candles
-            BigDecimal buyVol = volume.divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
-            BigDecimal sellVol = volume.divide(new BigDecimal("2"), 8, RoundingMode.HALF_UP);
-            levelData.addBuyVolume(buyVol);
-            levelData.addSellVolume(sellVol);
-            state.getVolumeProfile().put(roundedPrice, levelData);
-            
-            // Update state totals for flat candle
-            state.setTotalBuyVolume(buyVol);
-            state.setTotalSellVolume(sellVol);
-            state.setMaxVolumeAtLevel(volume);
-            
-            System.out.println("🔨 Created synthetic volume profile for flat candle " + candle.getOpenTime() + 
-                             " (volume: " + volume + ", levels: 1)");
-            return;
-        }
-        
-        // Determine if candle is bullish or bearish
-        boolean isBullish = close.compareTo(open) > 0;
-        
-        // Create 5-7 price levels across the candle range
-        int numLevels = 5;
-        BigDecimal levelStep = priceRange.divide(new BigDecimal(numLevels), 8, RoundingMode.HALF_UP);
-        
-        // Distribute volume with higher concentration near close
-        for (int i = 0; i <= numLevels; i++) {
-            BigDecimal price = low.add(levelStep.multiply(new BigDecimal(i)));
-            BigDecimal roundedPrice = roundToTickSize(price, tickSize);
-            
-            // Calculate weight - higher near close price
-            double distanceToClose = Math.abs(price.subtract(close).doubleValue());
-            double distanceToOpen = Math.abs(price.subtract(open).doubleValue());
-            double weight = 1.0 / (1.0 + distanceToClose); // Higher weight closer to close
-            
-            // Distribute volume based on weight
-            BigDecimal levelVolume = volume.multiply(new BigDecimal(weight / (numLevels + 1)))
-                                           .setScale(8, RoundingMode.HALF_UP);
-            
-            PriceLevelData levelData = state.getVolumeProfile().computeIfAbsent(
-                roundedPrice, p -> new PriceLevelData(p)
-            );
-            
-            // Split buy/sell based on candle direction and position
-            BigDecimal buyVolume, sellVolume;
-            if (isBullish) {
-                // Bullish candle - more buy volume at higher prices
-                double buyRatio = 0.3 + (0.4 * i / numLevels); // 30% to 70%
-                buyVolume = levelVolume.multiply(new BigDecimal(buyRatio)).setScale(8, RoundingMode.HALF_UP);
-                sellVolume = levelVolume.subtract(buyVolume);
-            } else {
-                // Bearish candle - more sell volume at lower prices
-                double sellRatio = 0.3 + (0.4 * (numLevels - i) / numLevels); // 70% to 30%
-                sellVolume = levelVolume.multiply(new BigDecimal(sellRatio)).setScale(8, RoundingMode.HALF_UP);
-                buyVolume = levelVolume.subtract(sellVolume);
-            }
-            
-            levelData.addBuyVolume(buyVolume);
-            levelData.addSellVolume(sellVolume);
-            
-            // Update state totals (IMPORTANT!)
-            BigDecimal currentTotal = levelData.getTotalVolume();
-            if (currentTotal.compareTo(state.getMaxVolumeAtLevel()) > 0) {
-                state.getVolumeProfile().put(roundedPrice, levelData); // Update in map
-            }
-        }
-        
-        // Recalculate state totals after adding synthetic volume
-        BigDecimal totalBuy = BigDecimal.ZERO;
-        BigDecimal totalSell = BigDecimal.ZERO;
-        BigDecimal maxVolume = BigDecimal.ZERO;
-        
-        for (PriceLevelData level : state.getVolumeProfile().values()) {
-            totalBuy = totalBuy.add(level.getBuyVolume());
-            totalSell = totalSell.add(level.getSellVolume());
-            BigDecimal levelTotal = level.getTotalVolume();
-            if (levelTotal.compareTo(maxVolume) > 0) {
-                maxVolume = levelTotal;
-            }
-        }
-        
-        // Update state with recalculated totals
-        state.setTotalBuyVolume(totalBuy);
-        state.setTotalSellVolume(totalSell);
-        state.setMaxVolumeAtLevel(maxVolume);
-        
-        System.out.println("🔨 Created synthetic volume profile for candle " + candle.getOpenTime() + 
-                         " (volume: " + volume + ", levels: " + (numLevels + 1) + 
-                         ", totalBuy: " + totalBuy + ", totalSell: " + totalSell + ", maxVolume: " + maxVolume + ")");
-    }
-    
     /**
      * Update volume profile with current order book bid/ask data
      */

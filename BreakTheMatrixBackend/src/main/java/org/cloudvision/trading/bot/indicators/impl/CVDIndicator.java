@@ -118,10 +118,6 @@ public class CVDIndicator extends AbstractIndicator {
             this.cumulativeDelta = cumulativeDelta;
         }
         
-        public void setCandleDelta(BigDecimal candleDelta) {
-            this.candleDelta = candleDelta;
-        }
-        
         public void setPreviousCandleDelta(BigDecimal previousCandleDelta) {
             this.previousCandleDelta = previousCandleDelta;
         }
@@ -234,11 +230,6 @@ public class CVDIndicator extends AbstractIndicator {
         // Save candle reference for live updates
         cvdState.setLastCandle(candle);
         
-        // Debug: Log before finalization
-        System.out.println("📊 CVD onNewCandle: " + candle.getOpenTime() + 
-                         " | candleDelta (pre-finalize): " + cvdState.getCandleDelta() + 
-                         " | cumulativeDelta: " + cvdState.getCumulativeDelta());
-        
         // Finalize the previous candle's delta and add to cumulative
         cvdState.finalizeCandle();
         
@@ -256,10 +247,6 @@ public class CVDIndicator extends AbstractIndicator {
         values.put("candleDelta", cvdState.getPreviousCandleDelta()); // Use finalized delta
         values.put("deltaChange", deltaChange);
         
-        System.out.println("📈 CVD output: cvd=" + cvdState.getCumulativeDelta() + 
-                         " | candleDelta=" + cvdState.getPreviousCandleDelta() + 
-                         " | color=" + color);
-        
         // Build result
         Map<String, Object> result = new HashMap<>();
         result.put("values", values);
@@ -275,14 +262,6 @@ public class CVDIndicator extends AbstractIndicator {
         
         // Add trade volume to current candle delta
         cvdState.addVolume(trade.getQuantity(), trade.isAggressiveBuy());
-        
-        // Debug: Log every 10th trade to avoid spam
-        if (Math.random() < 0.1) {
-            System.out.println("💱 CVD trade: " + trade.getTimestamp() + 
-                             " | qty=" + trade.getQuantity() + 
-                             " | buy=" + trade.isAggressiveBuy() + 
-                             " | current candleDelta=" + cvdState.getCandleDelta());
-        }
         
         // Return empty result - we'll output on candle close
         return Map.of(
