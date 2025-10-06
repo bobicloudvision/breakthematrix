@@ -401,6 +401,61 @@ export class ChartSeriesManager {
     }
 
     /**
+     * Apply opacity to a color (converts hex/rgb to rgba)
+     * @private
+     * @param {string} color - Color in hex, rgb, or rgba format
+     * @param {number} opacity - Opacity value between 0 and 1
+     * @returns {string} - Color in rgba format with applied opacity
+     */
+    _applyOpacityToColor(color, opacity) {
+        // If already rgba, extract and modify opacity
+        if (color.startsWith('rgba')) {
+            const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+            if (match) {
+                const [, r, g, b, a] = match;
+                // Multiply existing alpha with new opacity
+                const newAlpha = parseFloat(a) * opacity;
+                return `rgba(${r}, ${g}, ${b}, ${newAlpha.toFixed(2)})`;
+            }
+        }
+        
+        // If rgb format
+        if (color.startsWith('rgb(')) {
+            const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (match) {
+                const [, r, g, b] = match;
+                return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
+            }
+        }
+        
+        // If hex format
+        if (color.startsWith('#')) {
+            const hex = color.replace('#', '');
+            let r, g, b;
+            
+            if (hex.length === 3) {
+                // Short hex format (#RGB)
+                r = parseInt(hex[0] + hex[0], 16);
+                g = parseInt(hex[1] + hex[1], 16);
+                b = parseInt(hex[2] + hex[2], 16);
+            } else if (hex.length === 6) {
+                // Full hex format (#RRGGBB)
+                r = parseInt(hex.substring(0, 2), 16);
+                g = parseInt(hex.substring(2, 4), 16);
+                b = parseInt(hex.substring(4, 6), 16);
+            } else {
+                // Invalid hex, return original
+                return color;
+            }
+            
+            return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
+        }
+        
+        // Unknown format, return original
+        return color;
+    }
+
+    /**
      * Merge two series data arrays by time, combining their values
      * Used for markers that need data from multiple series (e.g., signal + trailingStop)
      * @private
@@ -552,11 +607,21 @@ export class ChartSeriesManager {
                     return null;
                 }
                 
+                // Get opacity from point or config
+                let opacity = point.opacity !== undefined ? point.opacity : 
+                             (config.opacity !== undefined ? config.opacity : 1);
+                
+                // Apply opacity to color if needed
+                let finalColor = color;
+                if (opacity < 1) {
+                    finalColor = this._applyOpacityToColor(color, opacity);
+                }
+
                 return {
                     time: time,
                     price: parseFloat(price),
                     shape: shape,
-                    color: color,
+                    color: finalColor,
                     size: size,
                     position: position,
                     text: text
@@ -1274,10 +1339,17 @@ export class ChartSeriesManager {
                     position = 'belowBar';
                 }
 
+                // Handle color with opacity
+                let color = marker.color || '#2196F3';
+                if (marker.opacity !== undefined && marker.opacity < 1) {
+                    // Convert hex/rgb color to rgba with opacity
+                    color = this._applyOpacityToColor(color, marker.opacity);
+                }
+
                 return {
                     time: marker.time,
                     position: position,
-                    color: marker.color || '#2196F3',
+                    color: color,
                     shape: shape,
                     text: marker.text || '',
                     size: marker.size || 1

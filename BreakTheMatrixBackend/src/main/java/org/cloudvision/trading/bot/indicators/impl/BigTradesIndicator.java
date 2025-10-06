@@ -234,7 +234,7 @@ public class BigTradesIndicator extends AbstractIndicator {
             .displayName("Show Volume Labels")
             .description("Display trade volume on markers")
             .type(IndicatorParameter.ParameterType.STRING)
-            .defaultValue("true")
+            .defaultValue("false")
             .required(false)
             .build());
         
@@ -286,7 +286,7 @@ public class BigTradesIndicator extends AbstractIndicator {
         
         // Parse parameters
         BigDecimal volumeThreshold = new BigDecimal(getStringParameter(params, "volumeThreshold", "10.0"));
-        boolean showLabels = Boolean.parseBoolean(getStringParameter(params, "showLabels", "true"));
+        boolean showLabels = Boolean.parseBoolean(getStringParameter(params, "showLabels", "false"));
         int minMarkerSize = getIntParameter(params, "minMarkerSize", 10);
         int maxMarkerSize = getIntParameter(params, "maxMarkerSize", 30);
         double opacity = Double.parseDouble(getStringParameter(params, "opacity", "0.7"));
@@ -371,7 +371,7 @@ public class BigTradesIndicator extends AbstractIndicator {
         
         values.put("largestTrade", state.getLargestTradeVolume());
         
-        result.put("values", values);
+//        result.put("values", values);
         result.put("state", state);
         
         // Create visualization markers
@@ -455,8 +455,8 @@ public class BigTradesIndicator extends AbstractIndicator {
         metadata.put("bigtrades", IndicatorMetadata.builder("bigtrades")
             .displayName("Big Trades")
             .seriesType("scatter")  // Scatter plot for discrete trade markers
-            .addConfig("buyColor", "#26a69a")   // Green for big buys
-            .addConfig("sellColor", "#ef5350")  // Red for big sells
+            .addConfig("buyColor", "#4caf6373")   // Green for big buys
+            .addConfig("sellColor", "#e91e6373")  // Red for big sells
             .separatePane(false)  // Overlay on main chart
             .paneOrder(0)
             .build());
