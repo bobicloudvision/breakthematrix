@@ -458,7 +458,7 @@ public class BookmapIndicator extends AbstractIndicator {
         
         // Build result
         Map<String, Object> result = new HashMap<>();
-//        result.put("values", values);  // Now including values
+        // result.put("values", values);  // Include values for chart display
         result.put("state", bookmapState);
         result.put("heatmap", heatmap);
         result.put("levels", levels);

@@ -530,6 +530,205 @@ public class BinanceTradingProvider implements TradingDataProvider {
         }
     }
 
+    // ============================================================
+    // HISTORICAL ORDER FLOW DATA METHODS
+    // ============================================================
+    
+    /**
+     * Fetch historical aggregate trades from Binance REST API
+     * 
+     * Binance API: GET /api/v3/aggTrades
+     * Docs: https://binance-docs.github.io/apidocs/spot/en/#compressed-aggregate-trades-list
+     * 
+     * @param symbol Trading symbol (e.g., BTCUSDT)
+     * @param limit Number of trades to fetch (max 1000, default 500)
+     * @return List of historical trades
+     */
+    @Override
+    public List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, int limit) {
+        try {
+            System.out.println("📊 Fetching last " + limit + " aggregate trades for " + symbol + " from Binance...");
+            
+            // Validate limit
+            if (limit <= 0 || limit > 1000) {
+                limit = 500; // Default to 500
+            }
+            
+            String url = BINANCE_REST_API_URL + "/aggTrades?symbol=" + symbol + "&limit=" + limit;
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(10))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                System.err.println("❌ Failed to fetch aggregate trades: HTTP " + response.statusCode());
+                System.err.println("   Response: " + response.body());
+                return new ArrayList<>();
+            }
+            
+            // Parse JSON array
+            JsonNode jsonArray = objectMapper.readTree(response.body());
+            
+            if (!jsonArray.isArray()) {
+                System.err.println("❌ Unexpected response format from Binance aggTrades");
+                return new ArrayList<>();
+            }
+            
+            List<org.cloudvision.trading.model.TradeData> trades = new ArrayList<>();
+            
+            for (JsonNode tradeJson : jsonArray) {
+                long aggTradeId = tradeJson.get("a").asLong();
+                BigDecimal price = new BigDecimal(tradeJson.get("p").asText());
+                BigDecimal quantity = new BigDecimal(tradeJson.get("q").asText());
+                long firstTradeId = tradeJson.get("f").asLong();
+                long lastTradeId = tradeJson.get("l").asLong();
+                Instant timestamp = Instant.ofEpochMilli(tradeJson.get("T").asLong());
+                boolean isBuyerMaker = tradeJson.get("m").asBoolean();
+                
+                BigDecimal quoteQuantity = price.multiply(quantity);
+                
+                org.cloudvision.trading.model.TradeData trade = new org.cloudvision.trading.model.TradeData(
+                    aggTradeId,
+                    symbol,
+                    price,
+                    quantity,
+                    quoteQuantity,
+                    timestamp,
+                    isBuyerMaker,
+                    getProviderName(),
+                    firstTradeId,
+                    lastTradeId
+                );
+                
+                trades.add(trade);
+            }
+            
+            System.out.println("✅ Fetched " + trades.size() + " historical aggregate trades for " + symbol);
+            return trades;
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching historical aggregate trades for " + symbol + ": " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Fetch historical individual trades from Binance REST API
+     * 
+     * NOTE: This requires API key for historical trades beyond the most recent
+     * For most use cases, use getHistoricalAggregateTrades() instead
+     * 
+     * @param symbol Trading symbol
+     * @param limit Number of trades to fetch (max 1000)
+     * @return List of historical trades
+     */
+    @Override
+    public List<org.cloudvision.trading.model.TradeData> getHistoricalTrades(String symbol, int limit) {
+        // For now, delegate to aggregate trades which doesn't require API key
+        // Individual trades API requires authentication
+        System.out.println("ℹ️ Using aggregate trades instead of individual trades (no API key required)");
+        return getHistoricalAggregateTrades(symbol, limit);
+    }
+    
+    /**
+     * Get current order book snapshot from Binance REST API
+     * 
+     * Binance API: GET /api/v3/depth
+     * Docs: https://binance-docs.github.io/apidocs/spot/en/#order-book
+     * 
+     * @param symbol Trading symbol (e.g., BTCUSDT)
+     * @param limit Depth limit (5, 10, 20, 50, 100, 500, 1000, 5000)
+     * @return Order book snapshot
+     */
+    @Override
+    public org.cloudvision.trading.model.OrderBookData getOrderBookSnapshot(String symbol, int limit) {
+        try {
+            System.out.println("📚 Fetching order book snapshot for " + symbol + " (limit: " + limit + ")...");
+            
+            // Validate limit (Binance accepts: 5, 10, 20, 50, 100, 500, 1000, 5000)
+            int[] validLimits = {5, 10, 20, 50, 100, 500, 1000, 5000};
+            boolean validLimit = false;
+            for (int valid : validLimits) {
+                if (limit == valid) {
+                    validLimit = true;
+                    break;
+                }
+            }
+            if (!validLimit) {
+                limit = 100; // Default to 100
+            }
+            
+            String url = BINANCE_REST_API_URL + "/depth?symbol=" + symbol + "&limit=" + limit;
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(10))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                System.err.println("❌ Failed to fetch order book: HTTP " + response.statusCode());
+                System.err.println("   Response: " + response.body());
+                return null;
+            }
+            
+            // Parse JSON
+            JsonNode json = objectMapper.readTree(response.body());
+            
+            long lastUpdateId = json.get("lastUpdateId").asLong();
+            Instant timestamp = Instant.now();
+            
+            // Parse bids
+            List<org.cloudvision.trading.model.OrderBookData.OrderBookLevel> bids = new ArrayList<>();
+            JsonNode bidsArray = json.get("bids");
+            if (bidsArray != null && bidsArray.isArray()) {
+                for (JsonNode bid : bidsArray) {
+                    BigDecimal price = new BigDecimal(bid.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(bid.get(1).asText());
+                    bids.add(new org.cloudvision.trading.model.OrderBookData.OrderBookLevel(price, quantity));
+                }
+            }
+            
+            // Parse asks
+            List<org.cloudvision.trading.model.OrderBookData.OrderBookLevel> asks = new ArrayList<>();
+            JsonNode asksArray = json.get("asks");
+            if (asksArray != null && asksArray.isArray()) {
+                for (JsonNode ask : asksArray) {
+                    BigDecimal price = new BigDecimal(ask.get(0).asText());
+                    BigDecimal quantity = new BigDecimal(ask.get(1).asText());
+                    asks.add(new org.cloudvision.trading.model.OrderBookData.OrderBookLevel(price, quantity));
+                }
+            }
+            
+            org.cloudvision.trading.model.OrderBookData orderBook = new org.cloudvision.trading.model.OrderBookData(
+                symbol,
+                lastUpdateId,
+                timestamp,
+                bids,
+                asks,
+                getProviderName()
+            );
+            
+            System.out.println("✅ Fetched order book snapshot: " + bids.size() + " bids, " + asks.size() + " asks");
+            System.out.println("   Best bid: " + orderBook.getBestBid() + ", Best ask: " + orderBook.getBestAsk() + 
+                             ", Spread: " + orderBook.getSpread());
+            
+            return orderBook;
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching order book snapshot for " + symbol + ": " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
     @Override
     public List<String> getSupportedSymbols() {
         return List.of("BTCUSDT", "ETHUSDT", "ADAUSDT", "DOTUSDT", "BNBUSDT", "SOLUSDT");

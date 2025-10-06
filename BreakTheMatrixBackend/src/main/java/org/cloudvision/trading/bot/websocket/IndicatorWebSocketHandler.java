@@ -64,6 +64,9 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
     private final TradingBot tradingBot;
     private final IndicatorInstanceManager instanceManager;
     private final ObjectMapper objectMapper;
+    private final org.cloudvision.trading.service.TradeHistoryService tradeHistoryService;
+    private final org.cloudvision.trading.service.OrderBookHistoryService orderBookHistoryService;
+    private final org.cloudvision.trading.service.BookTickerHistoryService bookTickerHistoryService;
     
     // Active WebSocket sessions
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
@@ -75,9 +78,15 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
     private final Map<String, Set<String>> sessionContextSubscriptions = new ConcurrentHashMap<>();
     
     public IndicatorWebSocketHandler(TradingBot tradingBot, 
-                                     IndicatorInstanceManager instanceManager) {
+                                     IndicatorInstanceManager instanceManager,
+                                     org.cloudvision.trading.service.TradeHistoryService tradeHistoryService,
+                                     org.cloudvision.trading.service.OrderBookHistoryService orderBookHistoryService,
+                                     org.cloudvision.trading.service.BookTickerHistoryService bookTickerHistoryService) {
         this.tradingBot = tradingBot;
         this.instanceManager = instanceManager;
+        this.tradeHistoryService = tradeHistoryService;
+        this.orderBookHistoryService = orderBookHistoryService;
+        this.bookTickerHistoryService = bookTickerHistoryService;
         
         // Configure ObjectMapper
         this.objectMapper = new ObjectMapper();
@@ -354,9 +363,18 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
         if (data.hasOrderBookData()) {
             org.cloudvision.trading.model.OrderBookData orderBook = data.getOrderBookData();
             
-            // Process order book for indicators that visualize market depth
-            // Examples: Bookmap heatmap, liquidity walls, bid/ask ratio
-            processOrderBook(orderBook);
+            // Check if this is a book ticker update (best bid/ask only)
+            // or full order book depth update (many levels)
+            if (data.getType() == org.cloudvision.trading.model.TradingDataType.BOOK_TICKER) {
+                // BOOK TICKER - High frequency best bid/ask (100ms updates)
+                // Store directly in book ticker service (with 1s throttling)
+                processBookTicker(orderBook);
+            } else {
+                // ORDER BOOK DEPTH - Full market depth (10-100+ levels)
+                // Process order book for indicators that visualize market depth
+                // Examples: Bookmap heatmap, liquidity walls, bid/ask ratio
+                processOrderBook(orderBook);
+            }
             return;
         }
         
@@ -447,6 +465,9 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
      * @param trade Individual or aggregate trade data
      */
     private void processTrade(org.cloudvision.trading.model.TradeData trade) {
+        // Store trade in history service for later retrieval
+        tradeHistoryService.addTrade(trade);
+        
         // Update all indicators that need trade data for this symbol
         // The IndicatorInstanceManager filters to only indicators that declared
         // TRADE or AGGREGATE_TRADE in their getRequiredDataTypes()
@@ -522,7 +543,26 @@ public class IndicatorWebSocketHandler extends TextWebSocketHandler {
      * 
      * @param orderBook Order book snapshot with bid/ask levels
      */
+    /**
+     * Process book ticker update (best bid/ask only, high frequency ~100ms)
+     */
+    private void processBookTicker(org.cloudvision.trading.model.OrderBookData orderBook) {
+        bookTickerHistoryService.addBookTicker(
+            orderBook.getProvider(),
+            orderBook.getSymbol(),
+            orderBook.getTimestamp(),
+            orderBook.getBestBid(),
+            orderBook.getBids().isEmpty() ? java.math.BigDecimal.ZERO : orderBook.getBids().get(0).getQuantity(),
+            orderBook.getBestAsk(),
+            orderBook.getAsks().isEmpty() ? java.math.BigDecimal.ZERO : orderBook.getAsks().get(0).getQuantity()
+        );
+    }
+    
     private void processOrderBook(org.cloudvision.trading.model.OrderBookData orderBook) {
+        // Store order book snapshot in history service (throttled automatically)
+        // Returns true if stored, false if throttled (too soon since last snapshot)
+        orderBookHistoryService.addOrderBook(orderBook);
+        
         // Update all indicators that need order book data for this symbol
         // The IndicatorInstanceManager filters to only indicators that declared
         // ORDER_BOOK in their getRequiredDataTypes()

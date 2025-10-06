@@ -269,6 +269,24 @@ public class MockTradingProvider implements TradingDataProvider {
     }
 
     @Override
+    public List<org.cloudvision.trading.model.TradeData> getHistoricalTrades(String symbol, int limit) {
+        // Mock provider doesn't support historical data
+        return new ArrayList<>();
+    }
+    
+    @Override
+    public List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, int limit) {
+        // Mock provider doesn't support historical data
+        return new ArrayList<>();
+    }
+    
+    @Override
+    public org.cloudvision.trading.model.OrderBookData getOrderBookSnapshot(String symbol, int limit) {
+        // Mock provider doesn't support order book snapshots
+        return null;
+    }
+    
+    @Override
     public List<String> getSupportedSymbols() {
         return List.of("BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "SOLUSDT");
     }

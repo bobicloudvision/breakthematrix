@@ -31,6 +31,11 @@ public interface TradingDataProvider {
     List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, int limit);
     List<CandlestickData> getHistoricalKlines(String symbol, TimeInterval interval, Instant startTime, Instant endTime);
     
+    // Historical order flow data
+    List<org.cloudvision.trading.model.TradeData> getHistoricalTrades(String symbol, int limit);
+    List<org.cloudvision.trading.model.TradeData> getHistoricalAggregateTrades(String symbol, int limit);
+    org.cloudvision.trading.model.OrderBookData getOrderBookSnapshot(String symbol, int limit);
+    
     void setDataHandler(Consumer<TradingData> handler);
     List<String> getSupportedSymbols();
     List<TimeInterval> getSupportedIntervals();
