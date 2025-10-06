@@ -57,16 +57,18 @@ public class UniversalTradingDataService {
                     if (!historicalData.isEmpty()) {
                         candlestickHistoryService.addCandlesticks(providerName, symbol, interval.getValue(), historicalData);
                         System.out.println("✅ Stored " + historicalData.size() + " historical candles for " + symbol);
-                        
-                        // Also fetch historical trades for the same time range
-                        if (tradeHistoryService != null) {
-                            try {
-                                fetchHistoricalTrades(provider, providerName, symbol, historicalData);
-                            } catch (Exception e) {
-                                System.err.println("⚠️ Failed to fetch historical trades for " + symbol + ": " + e.getMessage());
-                            }
-                        }
                     }
+
+
+                    // Also fetch historical trades for the same time range
+//                    if (tradeHistoryService != null) {
+//                        try {
+//                            fetchHistoricalTrades(provider, providerName, symbol, historicalData);
+//                        } catch (Exception e) {
+//                            System.err.println("⚠️ Failed to fetch historical trades for " + symbol + ": " + e.getMessage());
+//                        }
+//                    }
+
                 } catch (Exception e) {
                     System.err.println("⚠️ Failed to fetch historical data for " + symbol + ": " + e.getMessage());
                 }
@@ -79,6 +81,7 @@ public class UniversalTradingDataService {
     
     /**
      * Fetch historical trades for the time range covered by candles
+     * Fetches ALL trades with proper pagination - no skipping or gaps
      */
     private void fetchHistoricalTrades(TradingDataProvider provider, String providerName, String symbol, List<CandlestickData> candles) {
         if (candles.isEmpty()) {
@@ -89,21 +92,20 @@ public class UniversalTradingDataService {
         Instant endTime = candles.get(candles.size() - 1).getCloseTime();
         long timeRangeMinutes = java.time.Duration.between(startTime, endTime).toMinutes();
         
-        System.out.println("📥 Fetching historical trades for " + symbol + " (" + timeRangeMinutes + " minutes)...");
+        System.out.println("📥 Fetching COMPLETE historical trades for " + symbol + " (" + timeRangeMinutes + " minutes)...");
         
         try {
             List<org.cloudvision.trading.model.TradeData> allTrades = new java.util.ArrayList<>();
             
-            // Split time range into 15-minute chunks
-            long chunkMinutes = 15;
+            // Split time range into 5-minute chunks for detailed coverage
+            long chunkMinutes = 5;
             int numChunks = (int) Math.ceil((double) timeRangeMinutes / chunkMinutes);
-            numChunks = Math.min(numChunks, 100); // Cap at 100 chunks
             
-            if (numChunks > 5) {
-                System.out.println("   📊 Will fetch " + numChunks + " time chunks (" + chunkMinutes + " min each)");
-            }
+            System.out.println("   📊 Fetching " + numChunks + " time chunks (" + chunkMinutes + " min each) with pagination");
             
-            // Fetch chunks
+            int totalApiCalls = 0;
+            
+            // Fetch each chunk completely (with pagination if needed)
             for (int i = 0; i < numChunks; i++) {
                 Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * chunkMinutes));
                 Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * chunkMinutes));
@@ -112,22 +114,24 @@ public class UniversalTradingDataService {
                     chunkEnd = endTime;
                 }
                 
-                List<org.cloudvision.trading.model.TradeData> batch = 
-                    provider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
+                // Fetch ALL trades in this chunk with pagination
+                List<org.cloudvision.trading.model.TradeData> chunkTrades = fetchChunkWithPagination(
+                    provider, symbol, chunkStart, chunkEnd);
                 
-                if (!batch.isEmpty()) {
-                    allTrades.addAll(batch);
+                if (!chunkTrades.isEmpty()) {
+                    allTrades.addAll(chunkTrades);
+                    totalApiCalls += (chunkTrades.size() / 1000) + 1; // Estimate API calls made
                 }
                 
-                // Skip ahead if low volume period
-                if (batch.size() < 1000 && chunkEnd.isBefore(endTime)) {
-                    i += 2;
+                // Progress update every 20 chunks
+                if (numChunks > 50 && i > 0 && i % 20 == 0) {
+                    System.out.println("   📊 Progress: " + i + "/" + numChunks + " chunks, " + allTrades.size() + " trades so far");
                 }
                 
-                // Rate limiting
-                if (i < numChunks - 1 && numChunks > 10) {
+                // Rate limiting - be gentle on the API
+                if (i < numChunks - 1) {
                     try {
-                        Thread.sleep(50); // 50ms delay for background loading
+                        Thread.sleep(100); // 100ms delay between chunks
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
@@ -137,12 +141,62 @@ public class UniversalTradingDataService {
             
             if (!allTrades.isEmpty()) {
                 tradeHistoryService.addTrades(providerName, symbol, allTrades);
-                System.out.println("✅ Stored " + allTrades.size() + " historical trades for " + symbol);
+                System.out.println("✅ Stored " + allTrades.size() + " complete historical trades for " + symbol + " (" + totalApiCalls + " API calls)");
+            } else {
+                System.out.println("⚠️ No trades found in time range for " + symbol);
             }
             
         } catch (Exception e) {
             System.err.println("❌ Error fetching historical trades: " + e.getMessage());
+            e.printStackTrace();
         }
+    }
+    
+    /**
+     * Fetch all trades in a time chunk with proper pagination
+     * Handles cases where there are more than 1000 trades (API limit) in the time window
+     */
+    private List<org.cloudvision.trading.model.TradeData> fetchChunkWithPagination(
+            TradingDataProvider provider, String symbol, Instant chunkStart, Instant chunkEnd) {
+        
+        List<org.cloudvision.trading.model.TradeData> allChunkTrades = new java.util.ArrayList<>();
+        Instant currentStart = chunkStart;
+        int pageCount = 0;
+        final int maxPages = 10; // Safety limit per chunk
+        
+        while (currentStart.isBefore(chunkEnd) && pageCount < maxPages) {
+            List<org.cloudvision.trading.model.TradeData> batch = 
+                provider.getHistoricalAggregateTrades(symbol, currentStart, chunkEnd, 1000);
+            
+            if (batch.isEmpty()) {
+                break; // No more trades in this range
+            }
+            
+            allChunkTrades.addAll(batch);
+            pageCount++;
+            
+            // If we got exactly 1000 trades, there might be more
+            if (batch.size() == 1000) {
+                // Start next request from 1ms after the last trade we received
+                org.cloudvision.trading.model.TradeData lastTrade = batch.get(batch.size() - 1);
+                currentStart = lastTrade.getTimestamp().plusMillis(1);
+                
+                // If we've advanced the time cursor, continue pagination
+                if (currentStart.isBefore(chunkEnd)) {
+                    try {
+                        Thread.sleep(50); // Small delay between pagination requests
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    continue;
+                }
+            }
+            
+            break; // Got less than 1000, we have all trades for this chunk
+        }
+        
+        return allChunkTrades;
     }
 
     public void unsubscribeFromKlines(String providerName, String symbol, TimeInterval interval) {

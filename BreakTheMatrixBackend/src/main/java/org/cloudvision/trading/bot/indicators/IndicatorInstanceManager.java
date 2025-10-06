@@ -252,53 +252,53 @@ public class IndicatorInstanceManager {
                     System.out.println("   ⚠️ No cached trades found, fetching from " + provider + "...");
                     needsFetch = true;
                 }
-                
-                if (needsFetch) {
-                    try {
-                        org.cloudvision.trading.provider.TradingDataProvider tradingProvider = 
-                            getTradingProvider(provider);
-                        
-                        if (tradingProvider != null && !candles.isEmpty()) {
-                            // Fetch trades for the time range of historical candles
-                            java.time.Instant startTime = candles.get(0).getOpenTime();
-                            java.time.Instant endTime = candles.get(candles.size() - 1).getCloseTime();
-                            
-                            System.out.println("   📥 Fetching trades from " + startTime + " to " + endTime);
-                            
-                            // Fetch in chunks to respect API limits
-                            long minutes = java.time.Duration.between(startTime, endTime).toMinutes();
-                            int numChunks = Math.min((int)Math.ceil(minutes / 15.0), 100); // 15-min chunks, max 100
-                            
-                            for (int i = 0; i < numChunks; i++) {
-                                java.time.Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * 15));
-                                java.time.Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * 15));
-                                if (chunkEnd.isAfter(endTime)) chunkEnd = endTime;
-                                
-                                List<org.cloudvision.trading.model.TradeData> batch = 
-                                    tradingProvider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
-                                
-                                if (!batch.isEmpty()) {
-                                    allHistoricalTrades.addAll(batch);
-                                }
-                                
-                                // Rate limiting
-                                if (i < numChunks - 1 && numChunks > 5) {
-                                    try { Thread.sleep(50); } catch (InterruptedException e) { break; }
-                                }
-                            }
-                            
-                            if (!allHistoricalTrades.isEmpty()) {
-                                // Cache the fetched trades
-                                tradeHistoryService.addTrades(provider, symbol, allHistoricalTrades);
-                                System.out.println("   ✅ Fetched and cached " + allHistoricalTrades.size() + " historical trades");
-                            } else {
-                                System.out.println("   ⚠️ No trades found for time range");
-                            }
-                        }
-                    } catch (Exception e) {
-                        System.err.println("   ❌ Failed to fetch historical trades: " + e.getMessage());
-                    }
-                }
+                // Fetch missing trades from provider if needed
+//                if (needsFetch) {
+//                    try {
+//                        org.cloudvision.trading.provider.TradingDataProvider tradingProvider =
+//                            getTradingProvider(provider);
+//
+//                        if (tradingProvider != null && !candles.isEmpty()) {
+//                            // Fetch trades for the time range of historical candles
+//                            java.time.Instant startTime = candles.get(0).getOpenTime();
+//                            java.time.Instant endTime = candles.get(candles.size() - 1).getCloseTime();
+//
+//                            System.out.println("   📥 Fetching trades from " + startTime + " to " + endTime);
+//
+//                            // Fetch in chunks to respect API limits
+//                            long minutes = java.time.Duration.between(startTime, endTime).toMinutes();
+//                            int numChunks = Math.min((int)Math.ceil(minutes / 15.0), 100); // 15-min chunks, max 100
+//
+//                            for (int i = 0; i < numChunks; i++) {
+//                                java.time.Instant chunkStart = startTime.plus(java.time.Duration.ofMinutes(i * 15));
+//                                java.time.Instant chunkEnd = startTime.plus(java.time.Duration.ofMinutes((i + 1) * 15));
+//                                if (chunkEnd.isAfter(endTime)) chunkEnd = endTime;
+//
+//                                List<org.cloudvision.trading.model.TradeData> batch =
+//                                    tradingProvider.getHistoricalAggregateTrades(symbol, chunkStart, chunkEnd, 1000);
+//
+//                                if (!batch.isEmpty()) {
+//                                    allHistoricalTrades.addAll(batch);
+//                                }
+//
+//                                // Rate limiting
+//                                if (i < numChunks - 1 && numChunks > 5) {
+//                                    try { Thread.sleep(50); } catch (InterruptedException e) { break; }
+//                                }
+//                            }
+//
+//                            if (!allHistoricalTrades.isEmpty()) {
+//                                // Cache the fetched trades
+//                                tradeHistoryService.addTrades(provider, symbol, allHistoricalTrades);
+//                                System.out.println("   ✅ Fetched and cached " + allHistoricalTrades.size() + " historical trades");
+//                            } else {
+//                                System.out.println("   ⚠️ No trades found for time range");
+//                            }
+//                        }
+//                    } catch (Exception e) {
+//                        System.err.println("   ❌ Failed to fetch historical trades: " + e.getMessage());
+//                    }
+//                }
             }
             
             // Load historical order books if needed
