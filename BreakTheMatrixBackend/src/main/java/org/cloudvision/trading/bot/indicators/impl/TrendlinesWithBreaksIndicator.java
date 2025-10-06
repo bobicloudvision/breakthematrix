@@ -135,7 +135,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         
         params.put("upTrendlineColor", IndicatorParameter.builder("upTrendlineColor")
             .displayName("Up Trendline Color")
-            .description("Color for up trendline (support)")
+            .description("Color for upper trendline on chart (resistance, from pivot highs)")
             .type(IndicatorParameter.ParameterType.STRING)
             .defaultValue("#26a69a")
             .required(false)
@@ -143,7 +143,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         
         params.put("downTrendlineColor", IndicatorParameter.builder("downTrendlineColor")
             .displayName("Down Trendline Color")
-            .description("Color for down trendline (resistance)")
+            .description("Color for lower trendline on chart (support, from pivot lows)")
             .type(IndicatorParameter.ParameterType.STRING)
             .defaultValue("#ef5350")
             .required(false)
@@ -648,7 +648,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
                 upperLine.put("price2", state.lastPivotHighPrice.subtract(adjustedTotalChange));
             }
             
-            upperLine.put("color", downColor);
+            upperLine.put("color", upColor);  // Upper line uses upColor (teal)
             upperLine.put("style", "dashed");
             upperLine.put("extend", "right");
             lines.add(upperLine);
@@ -682,7 +682,7 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
                 lowerLine.put("price2", state.lastPivotLowPrice.add(adjustedTotalChange));
             }
             
-            lowerLine.put("color", upColor);
+            lowerLine.put("color", downColor);  // Lower line uses downColor (red)
             lowerLine.put("style", "dashed");
             lowerLine.put("extend", "right");
             lines.add(lowerLine);
@@ -710,18 +710,18 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         
         Map<String, IndicatorMetadata> metadata = new HashMap<>();
         
-        // Upper trendline (resistance)
+        // Upper trendline (resistance, from pivot highs)
         metadata.put("upperTrendline", IndicatorMetadata.builder("upperTrendline")
-            .displayName("Down Trendline")
-            .asLine(downColor, 2)
+            .displayName("Upper Trendline")
+            .asLine(upColor, 2)  // Upper line uses upColor
             .separatePane(false)
             .paneOrder(0)
             .build());
         
-        // Lower trendline (support)
+        // Lower trendline (support, from pivot lows)
         metadata.put("lowerTrendline", IndicatorMetadata.builder("lowerTrendline")
-            .displayName("Up Trendline")
-            .asLine(upColor, 2)
+            .displayName("Lower Trendline")
+            .asLine(downColor, 2)  // Lower line uses downColor
             .separatePane(false)
             .paneOrder(0)
             .build());
