@@ -340,7 +340,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                   ? 'bg-green-500/20 text-green-300 border border-green-500/50'
                   : sessionStatus.state === 'PAUSED'
                   ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50'
-                  : 'bg-slate-500/20 text-slate-300 border border-slate-500/50'
+                  : 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/50'
               }`}>
                 {sessionStatus.state}
               </div>
@@ -547,7 +547,7 @@ export function ReplayTab({ provider, symbol, interval }) {
         ) : null}
 
         {/* Time Range Selection */}
-        <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
+        <div className="mb-6 p-4 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-lg border border-zinc-500/30">
           <h3 className="text-sm font-medium text-zinc-300 mb-4">Time Range</h3>
           
           {/* Quick Time Range Buttons */}
@@ -589,7 +589,7 @@ export function ReplayTab({ provider, symbol, interval }) {
         </div>
 
         {/* Speed Control */}
-        <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
+        <div className="mb-6 p-4 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-lg border border-zinc-500/30">
           <h3 className="text-sm font-medium text-zinc-300 mb-4">Playback Speed</h3>
           <div className="flex items-center gap-4">
             <input
