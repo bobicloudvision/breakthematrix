@@ -102,6 +102,45 @@ public class TradingConfig {
             System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
         }
 
+        try {
+            tradingService.subscribeToKlines(DEFAULT_PROVIDER, this.DEFAULT_SYMBOL, TimeInterval.FIVE_MINUTES);
+            System.out.println("  ✅ Subscribed to " + this.DEFAULT_SYMBOL + " (" + TimeInterval.FIVE_MINUTES.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
+        }
+
+        try {
+            tradingService.subscribeToKlines(DEFAULT_PROVIDER, this.DEFAULT_SYMBOL, TimeInterval.FIFTEEN_MINUTES);
+            System.out.println("  ✅ Subscribed to " + this.DEFAULT_SYMBOL + " (" + TimeInterval.FIFTEEN_MINUTES.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
+        }
+
+
+        try {
+            tradingService.subscribeToKlines(DEFAULT_PROVIDER, this.DEFAULT_SYMBOL, TimeInterval.ONE_HOUR);
+            System.out.println("  ✅ Subscribed to " + this.DEFAULT_SYMBOL + " (" + TimeInterval.ONE_HOUR.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
+        }
+
+        try {
+            tradingService.subscribeToKlines(DEFAULT_PROVIDER, this.DEFAULT_SYMBOL, TimeInterval.FOUR_HOURS);
+            System.out.println("  ✅ Subscribed to " + this.DEFAULT_SYMBOL + " (" + TimeInterval.FOUR_HOURS.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
+        }
+
+        try {
+            tradingService.subscribeToKlines(DEFAULT_PROVIDER, this.DEFAULT_SYMBOL, TimeInterval.ONE_DAY);
+            System.out.println("  ✅ Subscribed to " + this.DEFAULT_SYMBOL + " (" + TimeInterval.ONE_DAY.getValue() + ")");
+        } catch (Exception e) {
+            System.err.println("  ❌ Failed to subscribe to " + this.DEFAULT_SYMBOL + ": " + e.getMessage());
+        }
+
+
+
+
     }
 
     /**

@@ -430,7 +430,7 @@ public class TradingBot {
                 }
                 break;
             default:
-                System.err.println("Unknown trading type " + data.getType());
+//                System.err.println("Unknown trading type " + data.getType());
                 return; // Unknown data type
         }
         
