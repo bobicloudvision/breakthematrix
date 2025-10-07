@@ -10,16 +10,31 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
     takeProfit: ''
   });
 
+  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState(null);
+  const [error, setError] = useState(null);
+  const [isManualPriceEdit, setIsManualPriceEdit] = useState(false);
+  const [isManualStopLossEdit, setIsManualStopLossEdit] = useState(false);
+  const [isManualTakeProfitEdit, setIsManualTakeProfitEdit] = useState(false);
+
+  // Configuration for default stop loss and take profit percentages
+  const STOP_LOSS_PERCENTAGE = 1; // 1% stop loss
+  const TAKE_PROFIT_PERCENTAGE = 2; // 2% take profit
+
   // Update symbol when it changes
   useEffect(() => {
     // Reset form when symbol changes (optional)
     setResponse(null);
     setError(null);
+    // Reset manual edit flags when symbol changes - allow auto-fill for new symbol
+    setIsManualPriceEdit(false);
+    setIsManualStopLossEdit(false);
+    setIsManualTakeProfitEdit(false);
   }, [symbol]);
 
-  // Auto-fill price when currentPrice changes (for LIMIT orders) or when symbol changes
+  // Auto-fill price when currentPrice changes (for LIMIT orders) - only if not manually edited
   useEffect(() => {
-    if (currentPrice) {
+    if (currentPrice && !isManualPriceEdit) {
       setFormData(prev => {
         // Only update if it's a LIMIT order
         if (prev.orderType === 'LIMIT') {
@@ -31,13 +46,13 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
         return prev;
       });
     }
-  }, [currentPrice, symbol]);
+  }, [currentPrice, isManualPriceEdit]);
 
-  // Update price when switching to LIMIT order type
+  // Update price when switching to LIMIT order type - only if not manually edited
   useEffect(() => {
     setFormData(prev => {
       // When switching to LIMIT and we have a current price but no price set
-      if (prev.orderType === 'LIMIT' && currentPrice && !prev.price) {
+      if (prev.orderType === 'LIMIT' && currentPrice && !prev.price && !isManualPriceEdit) {
         return {
           ...prev,
           price: currentPrice.toString()
@@ -45,19 +60,56 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
       }
       return prev;
     });
-  }, [formData.orderType, currentPrice]);
+  }, [formData.orderType, currentPrice, isManualPriceEdit]);
 
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState(null);
-  const [error, setError] = useState(null);
-  const [isManualPriceEdit, setIsManualPriceEdit] = useState(false);
+  // Auto-calculate stop loss and take profit based on price and position side
+  useEffect(() => {
+    const price = parseFloat(formData.price);
+    if (!price || isNaN(price)) return;
+
+    setFormData(prev => {
+      const updates = {};
+      
+      // Calculate stop loss if not manually edited
+      if (!isManualStopLossEdit) {
+        if (prev.positionSide === 'LONG') {
+          // For LONG: stop loss below entry price
+          const stopLoss = price * (1 - STOP_LOSS_PERCENTAGE / 100);
+          updates.stopLoss = stopLoss.toFixed(2);
+        } else {
+          // For SHORT: stop loss above entry price
+          const stopLoss = price * (1 + STOP_LOSS_PERCENTAGE / 100);
+          updates.stopLoss = stopLoss.toFixed(2);
+        }
+      }
+      
+      // Calculate take profit if not manually edited
+      if (!isManualTakeProfitEdit) {
+        if (prev.positionSide === 'LONG') {
+          // For LONG: take profit above entry price
+          const takeProfit = price * (1 + TAKE_PROFIT_PERCENTAGE / 100);
+          updates.takeProfit = takeProfit.toFixed(2);
+        } else {
+          // For SHORT: take profit below entry price
+          const takeProfit = price * (1 - TAKE_PROFIT_PERCENTAGE / 100);
+          updates.takeProfit = takeProfit.toFixed(2);
+        }
+      }
+      
+      return { ...prev, ...updates };
+    });
+  }, [formData.price, formData.positionSide, isManualStopLossEdit, isManualTakeProfitEdit, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    // Track manual price edits
+    // Track manual edits
     if (name === 'price') {
       setIsManualPriceEdit(true);
+    } else if (name === 'stopLoss') {
+      setIsManualStopLossEdit(true);
+    } else if (name === 'takeProfit') {
+      setIsManualTakeProfitEdit(true);
     }
     
     setFormData(prev => ({
@@ -128,6 +180,26 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
     });
     setResponse(null);
     setError(null);
+    // Reset manual edit flags to allow auto-fill again
+    setIsManualPriceEdit(false);
+    setIsManualStopLossEdit(false);
+    setIsManualTakeProfitEdit(false);
+  };
+
+  const handleOrderTypeChange = (newOrderType) => {
+    setFormData(prev => ({ ...prev, orderType: newOrderType }));
+    // Reset manual edit flags when switching order types to allow auto-fill
+    setIsManualPriceEdit(false);
+    setIsManualStopLossEdit(false);
+    setIsManualTakeProfitEdit(false);
+  };
+
+  const handlePositionSideChange = (newSide) => {
+    setFormData(prev => ({ ...prev, positionSide: newSide }));
+    // Reset stop loss and take profit flags when changing position side
+    // so they recalculate based on the new direction
+    setIsManualStopLossEdit(false);
+    setIsManualTakeProfitEdit(false);
   };
 
   const formatCurrency = (value) => {
@@ -168,7 +240,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, positionSide: 'LONG' }))}
+                  onClick={() => handlePositionSideChange('LONG')}
                   className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
                     formData.positionSide === 'LONG'
                       ? 'bg-green-500/30 text-green-100 border border-green-400/50 shadow-lg shadow-green-500/20'
@@ -179,7 +251,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, positionSide: 'SHORT' }))}
+                  onClick={() => handlePositionSideChange('SHORT')}
                   className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
                     formData.positionSide === 'SHORT'
                       ? 'bg-red-500/30 text-red-100 border border-red-400/50 shadow-lg shadow-red-500/20'
@@ -197,7 +269,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, orderType: 'LIMIT' }))}
+                  onClick={() => handleOrderTypeChange('LIMIT')}
                   className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
                     formData.orderType === 'LIMIT'
                       ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
@@ -208,7 +280,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, orderType: 'MARKET' }))}
+                  onClick={() => handleOrderTypeChange('MARKET')}
                   className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
                     formData.orderType === 'MARKET'
                       ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
@@ -225,8 +297,11 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Price (USD)
                 {formData.orderType === 'MARKET' && <span className="text-slate-500 text-xs ml-1">(Market)</span>}
-                {formData.orderType === 'LIMIT' && currentPrice && (
+                {formData.orderType === 'LIMIT' && currentPrice && !isManualPriceEdit && (
                   <span className="text-cyan-400 text-xs ml-1">🔄 Live</span>
+                )}
+                {formData.orderType === 'LIMIT' && isManualPriceEdit && (
+                  <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
                 )}
               </label>
               <input
@@ -262,6 +337,12 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Stop Loss (USD)
                 <span className="text-slate-500 text-xs ml-1">(Optional)</span>
+                {!isManualStopLossEdit && formData.stopLoss && (
+                  <span className="text-cyan-400 text-xs ml-1">🔄 Auto {STOP_LOSS_PERCENTAGE}%</span>
+                )}
+                {isManualStopLossEdit && (
+                  <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
+                )}
               </label>
               <input
                 type="number"
@@ -279,6 +360,12 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Take Profit (USD)
                 <span className="text-slate-500 text-xs ml-1">(Optional)</span>
+                {!isManualTakeProfitEdit && formData.takeProfit && (
+                  <span className="text-cyan-400 text-xs ml-1">🔄 Auto {TAKE_PROFIT_PERCENTAGE}%</span>
+                )}
+                {isManualTakeProfitEdit && (
+                  <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
+                )}
               </label>
               <input
                 type="number"
