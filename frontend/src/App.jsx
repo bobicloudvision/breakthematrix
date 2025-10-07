@@ -11,6 +11,7 @@ import { IndicatorsTab } from "./IndicatorsTab";
 import { IndicatorConfigModal } from "./IndicatorConfigModal";
 import { ReplayTab } from "./ReplayTab";
 import { ManualTradingTab } from "./ManualTradingTab";
+import { Button } from "./Button";
 import SVGLogo from "./logo.jsx";
 
 export default function App() {
@@ -358,26 +359,20 @@ export default function App() {
 
                 {/* Main View Tabs */}
                 <div className="flex gap-2 ml-6">
-                  <button
+                  <Button
+                    variant={mainView === 'chart' ? 'primary' : 'secondary'}
+                    size="md"
                     onClick={() => setMainView('chart')}
-                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      mainView === 'chart'
-                        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                        : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                    }`}
                   >
                     Chart
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant={mainView === 'orderflow' ? 'primary' : 'secondary'}
+                    size="md"
                     onClick={() => setMainView('orderflow')}
-                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      mainView === 'orderflow'
-                        ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                        : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                    }`}
                   >
                     OrderFlow
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Controls - compact inline */}
@@ -427,17 +422,14 @@ export default function App() {
                   {/* Interval */}
                   <div className="flex gap-2">
                     {intervalOptions.map((option) => (
-                      <button
+                      <Button
                         key={option.value}
+                        variant={interval === option.value ? 'primary' : 'secondary'}
+                        size="md"
                         onClick={() => setInterval(option.value)}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all duration-200 ${
-                          interval === option.value
-                            ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                            : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                        }`}
                       >
                         {option.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -499,66 +491,48 @@ export default function App() {
               </div>
               
               <div className="h-12 flex items-center gap-3 px-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
-                <button  
+                <Button
+                  variant={activeTab === 'orders' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('orders')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'orders' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Orders
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant={activeTab === 'strategies' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('strategies')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'strategies' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Strategies
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant={activeTab === 'accounts' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('accounts')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'accounts' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Accounts
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant={activeTab === 'positions' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('positions')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'positions' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Positions
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant={activeTab === 'indicators' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('indicators')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'indicators' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Indicators
-                </button>
-                <button 
+                </Button>
+                <Button
+                  variant={activeTab === 'replay' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setActiveTab('replay')}
-                  className={`px-4 h-9 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    activeTab === 'replay' 
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20' 
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
                 >
                   Replay
-                </button>
+                </Button>
                 {/* Future tabs: Alerts, Console, etc. */}
               </div>
               <div className="h-[calc(100%-3.25rem)]">
@@ -612,27 +586,23 @@ export default function App() {
           ) : (
             <div className="flex flex-col h-full">
               {/* Right Sidebar Tabs */}
-              <div className="flex border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 px-4 py-3">
-                <button
+              <div className="flex gap-2 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 px-4 py-3">
+                <Button
+                  variant={rightSidebarView === 'bot' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setRightSidebarView('bot')}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    rightSidebarView === 'bot'
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
+                  className="flex-1"
                 >
                   Bot Control
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant={rightSidebarView === 'manual' ? 'primary' : 'secondary'}
+                  size="md"
                   onClick={() => setRightSidebarView('manual')}
-                  className={`flex-1 ml-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    rightSidebarView === 'manual'
-                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
-                  }`}
+                  className="flex-1"
                 >
                   Manual Trading
-                </button>
+                </Button>
               </div>
 
               {/* Right Sidebar Content */}
