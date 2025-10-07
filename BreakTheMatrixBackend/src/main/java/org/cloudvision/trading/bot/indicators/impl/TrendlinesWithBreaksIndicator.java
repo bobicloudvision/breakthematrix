@@ -627,7 +627,15 @@ public class TrendlinesWithBreaksIndicator extends AbstractIndicator {
         if (state.candleBuffer.size() >= 2) {
             CandlestickData lastCandle = state.candleBuffer.get(state.candleBuffer.size() - 1);
             CandlestickData prevCandle = state.candleBuffer.get(state.candleBuffer.size() - 2);
-            intervalSeconds = lastCandle.getCloseTime().getEpochSecond() - prevCandle.getCloseTime().getEpochSecond();
+            long detectedInterval = lastCandle.getCloseTime().getEpochSecond() - prevCandle.getCloseTime().getEpochSecond();
+            if (detectedInterval > 0) {
+                intervalSeconds = detectedInterval;
+            }
+        }
+        
+        // Safety check: ensure intervalSeconds is never 0
+        if (intervalSeconds <= 0) {
+            intervalSeconds = 60; // Fallback to 1 minute
         }
         
         // Upper trendline (down-trending resistance)
