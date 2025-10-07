@@ -299,11 +299,11 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
       {/* Browse Indicators Modal */}
       {showBrowseModal && createPortal(
         <div 
-          className="fixed inset-0 bg-black/5 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
           onClick={handleCloseBrowseModal}
         >
           <div 
-            className="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-slideUp"
+            className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 rounded-2xl border border-white/10 shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-slideUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -318,7 +318,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
               </div>
               <button
                 onClick={handleCloseBrowseModal}
-                className="text-white/40 hover:text-white hover:bg-white/10 transition-all rounded-full w-8 h-8 flex items-center justify-center text-xl font-light"
+                className="text-white/40 hover:text-white hover:bg-white/10 transition-all rounded-full w-8 h-8 flex items-center justify-center text-2xl font-light"
                 title="Close"
               >
                 ×

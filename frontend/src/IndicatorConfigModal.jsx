@@ -109,13 +109,13 @@ export function IndicatorConfigModal({
   // Sidebar version - no portal, full height
   if (isSidebar) {
     return (
-      <div className="h-full w-full bg-gradient-to-br from-slate-900 via-gray-900 to-slate-900 flex flex-col overflow-hidden">
+      <div className="h-full w-full bg-gradient-to-br from-zinc-900 via-gray-900 to-zinc-900 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/50 to-slate-700/50 flex-shrink-0">
+        <div className="px-6 py-4 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 flex-shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text">
+                <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-zinc-400 to-zinc-500 bg-clip-text">
                   {isEditing ? 'Edit' : 'Add'} {indicator.name}
                 </h2>
               </div>
@@ -144,7 +144,7 @@ export function IndicatorConfigModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-3 border-zinc-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="ml-3 text-white/60">Loading configuration...</span>
             </div>
           ) : (
@@ -183,7 +183,7 @@ export function IndicatorConfigModal({
                                     param.name, 
                                     param.type === 'DOUBLE' ? parseFloat(e.target.value) : parseInt(e.target.value)
                                   )}
-                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                                 />
                                 {(param.minValue !== undefined || param.maxValue !== undefined) && (
                                   <span className="text-xs text-white/40 min-w-[100px]">
@@ -201,7 +201,7 @@ export function IndicatorConfigModal({
                                   type="checkbox"
                                   checked={currentValue === true}
                                   onChange={(e) => handleIndicatorParamChange(param.name, e.target.checked)}
-                                  className="w-5 h-5 bg-white/5 border border-white/10 rounded focus:ring-2 focus:ring-cyan-500/50"
+                                  className="w-5 h-5 bg-white/5 border border-white/10 rounded focus:ring-2 focus:ring-zinc-500/50"
                                 />
                                 <span className="text-sm text-white/70">
                                   {currentValue ? 'Enabled' : 'Disabled'}
@@ -219,7 +219,7 @@ export function IndicatorConfigModal({
                                   type="text"
                                   value={currentValue}
                                   onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 font-mono"
+                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20 font-mono"
                                   placeholder="#2962FF"
                                 />
                               </div>
@@ -227,7 +227,7 @@ export function IndicatorConfigModal({
                               <select
                                 value={currentValue}
                                 onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                               >
                                 <option value="open">Open</option>
                                 <option value="high">High</option>
@@ -242,7 +242,7 @@ export function IndicatorConfigModal({
                                 type="text"
                                 value={currentValue}
                                 onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                               />
                             )}
                           </div>
@@ -262,7 +262,7 @@ export function IndicatorConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30 flex items-center justify-between gap-3 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium rounded-lg bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 hover:text-white transition-all"
@@ -273,8 +273,8 @@ export function IndicatorConfigModal({
             <div className="flex items-center gap-2 px-4 py-2">
               {autoSaving ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-sm text-cyan-400">Saving...</span>
+                  <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm text-zinc-400">Saving...</span>
                 </>
               ) : (
                 <>
@@ -292,7 +292,7 @@ export function IndicatorConfigModal({
               className={`px-6 py-2 text-sm font-medium rounded-lg transition-all ${
                 loading
                   ? 'bg-white/10 text-white/50 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-cyan-500/40 to-blue-500/40 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/60 hover:to-blue-500/60 shadow-lg shadow-cyan-500/20'
+                  : 'bg-gradient-to-r from-zinc-500/40 to-zinc-600/40 text-zinc-100 border border-zinc-400/50 hover:from-zinc-500/60 hover:to-zinc-600/60 shadow-lg shadow-zinc-500/20'
               }`}
             >
               Apply to Chart
@@ -310,21 +310,21 @@ export function IndicatorConfigModal({
       onClick={onClose}
     >
       <div 
-        className="bg-gradient-to-br from-slate-900 via-gray-900 to-slate-900 border border-cyan-500/30 rounded-xl shadow-2xl shadow-cyan-500/20 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col m-auto"
+        className="bg-gradient-to-br from-zinc-900 via-gray-900 to-zinc-900 border border-zinc-500/30 rounded-xl shadow-2xl shadow-zinc-500/20 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col m-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/50 to-slate-700/50">
+        <div className="px-6 py-4 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text">
+                <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-zinc-400 to-zinc-500 bg-clip-text">
                   {isEditing ? 'Edit' : 'Add'} {indicator.name}
                 </h2>
               </div>
               <p className="text-sm text-white/60 mt-1">{indicator.description}</p>
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30">
+                <span className="text-xs px-2 py-1 rounded bg-gradient-to-r from-zinc-500/20 to-zinc-600/20 text-zinc-300 border border-zinc-500/30">
                   {indicator.category}
                 </span>
                 <span className="text-xs text-white/50 font-mono">
@@ -365,7 +365,7 @@ export function IndicatorConfigModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-3 border-zinc-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="ml-3 text-white/60">Loading configuration...</span>
             </div>
           ) : (
@@ -404,7 +404,7 @@ export function IndicatorConfigModal({
                                     param.name, 
                                     param.type === 'DOUBLE' ? parseFloat(e.target.value) : parseInt(e.target.value)
                                   )}
-                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                                 />
                                 {(param.minValue !== undefined || param.maxValue !== undefined) && (
                                   <span className="text-xs text-white/40 min-w-[100px]">
@@ -422,7 +422,7 @@ export function IndicatorConfigModal({
                                   type="checkbox"
                                   checked={currentValue === true}
                                   onChange={(e) => handleIndicatorParamChange(param.name, e.target.checked)}
-                                  className="w-5 h-5 bg-white/5 border border-white/10 rounded focus:ring-2 focus:ring-cyan-500/50"
+                                  className="w-5 h-5 bg-white/5 border border-white/10 rounded focus:ring-2 focus:ring-zinc-500/50"
                                 />
                                 <span className="text-sm text-white/70">
                                   {currentValue ? 'Enabled' : 'Disabled'}
@@ -440,7 +440,7 @@ export function IndicatorConfigModal({
                                   type="text"
                                   value={currentValue}
                                   onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 font-mono"
+                                  className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20 font-mono"
                                   placeholder="#2962FF"
                                 />
                               </div>
@@ -448,7 +448,7 @@ export function IndicatorConfigModal({
                               <select
                                 value={currentValue}
                                 onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                               >
                                 <option value="open">Open</option>
                                 <option value="high">High</option>
@@ -463,7 +463,7 @@ export function IndicatorConfigModal({
                                 type="text"
                                 value={currentValue}
                                 onChange={(e) => handleIndicatorParamChange(param.name, e.target.value)}
-                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                                className="flex-1 px-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white focus:border-zinc-500/50 focus:outline-none focus:ring-2 focus:ring-zinc-500/20"
                               />
                             )}
                           </div>
@@ -484,7 +484,7 @@ export function IndicatorConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 flex items-center justify-between gap-3">
+        <div className="px-6 py-4 border-t border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30 flex items-center justify-between gap-3">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium rounded-lg bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 hover:text-white transition-all"
@@ -495,8 +495,8 @@ export function IndicatorConfigModal({
             <div className="flex items-center gap-2 px-4 py-2">
               {autoSaving ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-sm text-cyan-400">Saving...</span>
+                  <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm text-zinc-400">Saving...</span>
                 </>
               ) : (
                 <>
@@ -514,7 +514,7 @@ export function IndicatorConfigModal({
               className={`px-6 py-2 text-sm font-medium rounded-lg transition-all ${
                 loading
                   ? 'bg-white/10 text-white/50 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-cyan-500/40 to-blue-500/40 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/60 hover:to-blue-500/60 shadow-lg shadow-cyan-500/20'
+                  : 'bg-gradient-to-r from-zinc-500/40 to-zinc-600/40 text-zinc-100 border border-zinc-400/50 hover:from-zinc-500/60 hover:to-zinc-600/60 shadow-lg shadow-zinc-500/20'
               }`}
             >
               Apply to Chart
