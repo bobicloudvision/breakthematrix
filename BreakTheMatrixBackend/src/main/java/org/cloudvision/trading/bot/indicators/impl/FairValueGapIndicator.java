@@ -46,15 +46,17 @@ public class FairValueGapIndicator extends AbstractIndicator {
         public BigDecimal max;      // Top of the gap
         public BigDecimal min;      // Bottom of the gap
         public boolean isBullish;   // Bullish or bearish gap
-        public Instant time;        // Time when gap was created
+        public Instant time;        // Time when gap was created (for tracking)
+        public Instant boxStartTime; // Time where box should start (2 bars ago in original)
         public int barIndex;        // Bar index when created
         public boolean mitigated;   // Has it been filled/mitigated?
         
-        public FVG(BigDecimal max, BigDecimal min, boolean isBullish, Instant time, int barIndex) {
+        public FVG(BigDecimal max, BigDecimal min, boolean isBullish, Instant time, Instant boxStartTime, int barIndex) {
             this.max = max;
             this.min = min;
             this.isBullish = isBullish;
             this.time = time;
+            this.boxStartTime = boxStartTime;
             this.barIndex = barIndex;
             this.mitigated = false;
         }
@@ -258,8 +260,8 @@ public class FairValueGapIndicator extends AbstractIndicator {
         BigDecimal oldHigh = old.getHigh();
         BigDecimal oldLow = old.getLow();
         
-        // Calculate threshold
-        BigDecimal threshold = calculateThreshold(state, params, old);
+        // Calculate threshold using CURRENT candle (as in original PineScript: threshold uses current bar's high/low)
+        BigDecimal threshold = calculateThreshold(state, params, current);
         
         // Bullish FVG: low > high[2] AND close[1] > high[2] AND gap size > threshold
         boolean bullFvg = currentLow.compareTo(oldHigh) > 0 && 
@@ -273,7 +275,8 @@ public class FairValueGapIndicator extends AbstractIndicator {
             if (gapSize.compareTo(threshold) > 0) {
                 // Don't create duplicate if same timestamp
                 if (state.lastBullFvgTime == null || !middle.getCloseTime().equals(state.lastBullFvgTime)) {
-                    FVG fvg = new FVG(currentLow, oldHigh, true, middle.getCloseTime(), state.barIndex);
+                    // In original PineScript: box starts at n-2 (2 bars ago where gap begins)
+                    FVG fvg = new FVG(currentLow, oldHigh, true, middle.getCloseTime(), old.getCloseTime(), state.barIndex);
                     state.fvgRecords.add(0, fvg); // Add to beginning
                     state.bullCount++;
                     state.lastBullFvgTime = middle.getCloseTime();
@@ -300,7 +303,8 @@ public class FairValueGapIndicator extends AbstractIndicator {
             if (gapSize.compareTo(threshold) > 0) {
                 // Don't create duplicate if same timestamp
                 if (state.lastBearFvgTime == null || !middle.getCloseTime().equals(state.lastBearFvgTime)) {
-                    FVG fvg = new FVG(oldLow, currentHigh, false, middle.getCloseTime(), state.barIndex);
+                    // In original PineScript: box starts at n-2 (2 bars ago where gap begins)
+                    FVG fvg = new FVG(oldLow, currentHigh, false, middle.getCloseTime(), old.getCloseTime(), state.barIndex);
                     state.fvgRecords.add(0, fvg); // Add to beginning
                     state.bearCount++;
                     state.lastBearFvgTime = middle.getCloseTime();
@@ -440,7 +444,7 @@ public class FairValueGapIndicator extends AbstractIndicator {
             values.put("bearMitigationRate", new BigDecimal(bearMitigationRate).setScale(2, RoundingMode.HALF_UP));
         }
         
-        result.put("values", values);
+//        result.put("values", values);  
         result.put("state", state);
         
         // Add boxes for unmitigated FVGs (static mode only)
@@ -458,9 +462,11 @@ public class FairValueGapIndicator extends AbstractIndicator {
                     
                     // Calculate box end time based on extend parameter
                     // Box width = extend bars * average candle duration
+                    // In original: box.new(n-2, max, n+extend, min) - starts at n-2, ends at n+extend
                     long boxEndTime;
                     if (state.averageCandleDuration > 0) {
-                        boxEndTime = fvg.time.getEpochSecond() + (extendBars * state.averageCandleDuration);
+                        // Box starts at boxStartTime (2 bars ago) and extends forward
+                        boxEndTime = fvg.boxStartTime.getEpochSecond() + (extendBars * state.averageCandleDuration);
                         // Don't extend beyond current time
                         boxEndTime = Math.min(boxEndTime, candle.getCloseTime().getEpochSecond());
                     } else {
@@ -469,7 +475,7 @@ public class FairValueGapIndicator extends AbstractIndicator {
                     }
                     
                     BoxShape box = BoxShape.builder()
-                        .time1(fvg.time.getEpochSecond())
+                        .time1(fvg.boxStartTime.getEpochSecond())
                         .time2(boxEndTime)
                         .price1(fvg.max)
                         .price2(fvg.min)
@@ -502,7 +508,7 @@ public class FairValueGapIndicator extends AbstractIndicator {
                     String color = fvg.isBullish ? bullishColor : bearishColor;
                     
                     LineShape line = LineShape.builder()
-                        .time1(fvg.time.getEpochSecond())
+                        .time1(fvg.boxStartTime.getEpochSecond())  // Start from where gap begins (2 bars ago)
                         .price1(price)
                         .time2(candle.getCloseTime().getEpochSecond())
                         .price2(price)
