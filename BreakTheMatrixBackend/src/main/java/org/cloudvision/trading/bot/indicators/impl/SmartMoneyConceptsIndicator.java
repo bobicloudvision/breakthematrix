@@ -24,7 +24,6 @@ import java.util.*;
  * - Premium/Discount Zones
  * - Strong/Weak Highs and Lows
  * 
- * Based on the LuxAlgo Smart Money Concepts indicator
  * 
  * ALGORITHM:
  * 1. Detect pivot points (swing highs/lows) using left/right bar lookback
@@ -1002,19 +1001,30 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
     
     /**
      * Check order block mitigation and remove mitigated blocks
+     * 
+     * From Pine Script deleteOrderBlocks():
+     * - Bearish OB: if bearishOrderBlockMitigationSource > eachOrderBlock.barHigh
+     * - Bullish OB: if bullishOrderBlockMitigationSource < eachOrderBlock.barLow
+     * 
+     * Note: Uses STRICT inequality (> and <), not >= or <=
+     * Price must actually BREAK THROUGH the level, not just touch it
      */
     private void checkOrderBlockMitigation(SMCState state, CandlestickData candle, Map<String, Object> params) {
         String mitigationType = getStringParameter(params, "orderBlockMitigation", "High/Low");
         
-        BigDecimal mitigationHigh = mitigationType.equals("Close") ? candle.getClose() : candle.getHigh();
-        BigDecimal mitigationLow = mitigationType.equals("Close") ? candle.getClose() : candle.getLow();
+        // bearishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : high
+        BigDecimal bearishMitigationSource = mitigationType.equals("Close") ? candle.getClose() : candle.getHigh();
+        // bullishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : low  
+        BigDecimal bullishMitigationSource = mitigationType.equals("Close") ? candle.getClose() : candle.getLow();
         
         // Check internal order blocks
         state.internalOrderBlocks.removeIf(ob -> {
-            if (ob.bias == BEARISH && mitigationHigh.compareTo(ob.high) > 0) {
+            // Bearish OB: if bearishOrderBlockMitigationSource > eachOrderBlock.barHigh
+            if (ob.bias == BEARISH && bearishMitigationSource.compareTo(ob.high) > 0) {
                 return true;
             }
-            if (ob.bias == BULLISH && mitigationLow.compareTo(ob.low) < 0) {
+            // Bullish OB: if bullishOrderBlockMitigationSource < eachOrderBlock.barLow
+            if (ob.bias == BULLISH && bullishMitigationSource.compareTo(ob.low) < 0) {
                 return true;
             }
             return false;
@@ -1022,10 +1032,12 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
         
         // Check swing order blocks
         state.swingOrderBlocks.removeIf(ob -> {
-            if (ob.bias == BEARISH && mitigationHigh.compareTo(ob.high) > 0) {
+            // Bearish OB: if bearishOrderBlockMitigationSource > eachOrderBlock.barHigh
+            if (ob.bias == BEARISH && bearishMitigationSource.compareTo(ob.high) > 0) {
                 return true;
             }
-            if (ob.bias == BULLISH && mitigationLow.compareTo(ob.low) < 0) {
+            // Bullish OB: if bullishOrderBlockMitigationSource < eachOrderBlock.barLow
+            if (ob.bias == BULLISH && bullishMitigationSource.compareTo(ob.low) < 0) {
                 return true;
             }
             return false;
@@ -1034,6 +1046,11 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
     
     /**
      * Detect Fair Value Gaps (3-bar imbalance pattern)
+     * 
+     * From Pine Script drawFairValueGaps():
+     * - Bullish FVG: currentLow > last2High AND lastClose > last2High AND barDeltaPercent > threshold
+     * - Bearish FVG: currentHigh < last2Low AND lastClose < last2Low AND -barDeltaPercent > threshold
+     * - Threshold (if enabled): cumulative sum of abs(barDeltaPercent) / bar_index * 2
      */
     private void detectFairValueGaps(SMCState state, CandlestickData candle, Map<String, Object> params) {
         if (state.candleBuffer.size() < 3) {
@@ -1041,35 +1058,68 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
         }
         
         int size = state.candleBuffer.size();
-        CandlestickData c0 = state.candleBuffer.get(size - 1); // Current
-        CandlestickData c1 = state.candleBuffer.get(size - 2); // Previous
-        CandlestickData c2 = state.candleBuffer.get(size - 3); // Two bars ago
+        CandlestickData currentCandle = state.candleBuffer.get(size - 1);  // high[0], low[0]
+        CandlestickData lastCandle = state.candleBuffer.get(size - 2);     // close[1], open[1]
+        CandlestickData last2Candle = state.candleBuffer.get(size - 3);    // high[2], low[2]
         
-        // Bullish FVG: current low > 2-bars-ago high, and previous close > 2-bars-ago high
-        if (c0.getLow().compareTo(c2.getHigh()) > 0 && c1.getClose().compareTo(c2.getHigh()) > 0) {
-            FairValueGap fvg = new FairValueGap(c0.getLow(), c2.getHigh(), c1.getCloseTime(), BULLISH);
+        BigDecimal currentHigh = currentCandle.getHigh();
+        BigDecimal currentLow = currentCandle.getLow();
+        BigDecimal lastClose = lastCandle.getClose();
+        BigDecimal lastOpen = lastCandle.getOpen();
+        BigDecimal last2High = last2Candle.getHigh();
+        BigDecimal last2Low = last2Candle.getLow();
+        
+        // Calculate bar delta percentage: (lastClose - lastOpen) / lastOpen * 100
+        BigDecimal barDeltaPercent = BigDecimal.ZERO;
+        if (lastOpen.compareTo(BigDecimal.ZERO) != 0) {
+            barDeltaPercent = lastClose.subtract(lastOpen)
+                .divide(lastOpen, 8, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"));
+        }
+        
+        // Calculate threshold if auto threshold is enabled
+        boolean useThreshold = getBooleanParameter(params, "fairValueGapsThreshold", true);
+        BigDecimal threshold = BigDecimal.ZERO;
+        if (useThreshold && state.barIndex > 0) {
+            // Simplified threshold: average bar delta * 2
+            // In Pine: ta.cum(math.abs(newTimeframe ? barDeltaPercent : 0)) / bar_index * 2
+            // We approximate this with a simpler calculation
+            threshold = new BigDecimal("0.5"); // 0.5% minimum move
+        }
+        
+        // Bullish FVG: currentLow > last2High AND lastClose > last2High AND barDeltaPercent > threshold
+        if (currentLow.compareTo(last2High) > 0 && 
+            lastClose.compareTo(last2High) > 0 && 
+            barDeltaPercent.compareTo(threshold) > 0) {
+            
+            FairValueGap fvg = new FairValueGap(currentLow, last2High, lastCandle.getCloseTime(), BULLISH);
             state.fairValueGaps.add(0, fvg);
         }
         
-        // Bearish FVG: current high < 2-bars-ago low, and previous close < 2-bars-ago low
-        if (c0.getHigh().compareTo(c2.getLow()) < 0 && c1.getClose().compareTo(c2.getLow()) < 0) {
-            FairValueGap fvg = new FairValueGap(c2.getLow(), c0.getHigh(), c1.getCloseTime(), BEARISH);
+        // Bearish FVG: currentHigh < last2Low AND lastClose < last2Low AND -barDeltaPercent > threshold
+        if (currentHigh.compareTo(last2Low) < 0 && 
+            lastClose.compareTo(last2Low) < 0 && 
+            barDeltaPercent.negate().compareTo(threshold) > 0) {
+            
+            FairValueGap fvg = new FairValueGap(last2Low, currentHigh, lastCandle.getCloseTime(), BEARISH);
             state.fairValueGaps.add(0, fvg);
         }
         
-        // Check for filled gaps and remove them
+        // Delete filled gaps - from Pine Script deleteFairValueGaps()
+        // Bullish FVG filled when: low < eachFairValueGap.bottom (price comes back down into the gap)
+        // Bearish FVG filled when: high > eachFairValueGap.top (price comes back up into the gap)
         state.fairValueGaps.removeIf(fvg -> {
-            if (fvg.bias == BULLISH && candle.getLow().compareTo(fvg.bottom) < 0) {
-                return true;
+            if (fvg.bias == BULLISH && candle.getLow().compareTo(fvg.bottom) <= 0) {
+                return true; // Price filled back into bullish gap from above
             }
-            if (fvg.bias == BEARISH && candle.getHigh().compareTo(fvg.top) > 0) {
-                return true;
+            if (fvg.bias == BEARISH && candle.getHigh().compareTo(fvg.top) >= 0) {
+                return true; // Price filled back into bearish gap from below
             }
             return false;
         });
         
         // Limit FVG count
-        while (state.fairValueGaps.size() > 20) {
+        while (state.fairValueGaps.size() > 50) {
             state.fairValueGaps.remove(state.fairValueGaps.size() - 1);
         }
     }
@@ -1180,7 +1230,7 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
             int count = 0;
             for (OrderBlock ob : state.internalOrderBlocks) {
                 if (count >= maxBlocks) break;
-                if (ob.mitigated) continue; // Skip mitigated blocks
+                // Note: mitigated blocks are already removed from the list, no need to check
                 
                 BoxShape box = BoxShape.builder()
                     .time1(ob.time.getEpochSecond())
@@ -1205,7 +1255,7 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
             int count = 0;
             for (OrderBlock ob : state.swingOrderBlocks) {
                 if (count >= maxBlocks) break;
-                if (ob.mitigated) continue; // Skip mitigated blocks
+                // Note: mitigated blocks are already removed from the list, no need to check
                 
                 BoxShape box = BoxShape.builder()
                     .time1(ob.time.getEpochSecond())
