@@ -41,27 +41,27 @@ public class TradingBotConfig {
     // @Autowired(required = false)
     // private List<TradingStrategy> allStrategies;
 
-//    @PostConstruct
+    @PostConstruct
     public void setupTradingBot() {
         System.out.println("🔧 Configuring Trading Bot strategies...");
         
         // Option 1: Manual registration (more control)
-        configureMovingAverageStrategy();
+//        configureMovingAverageStrategy();
         configureRSIStrategy();
         
-        // Configure SuperTrend strategies with different parameters
-        configureSuperTrendStrategy1(); // Conservative (10, 3)
-        configureSuperTrendStrategy2(); // Moderate (10, 2)
-        configureSuperTrendStrategy3(); // Aggressive (7, 3)
-        
-        // Configure Order Block strategies with different parameters
-        configureOrderBlockStrategy1(); // Standard (pivot: 5)
-        configureOrderBlockStrategy2(); // Scalping (pivot: 3)
-        
-        // Configure Order Flow strategies with different parameters
-        configureOrderFlowStrategy1(); // Balanced (5m, recommended)
-        configureOrderFlowStrategy2(); // Scalping (1m, aggressive)
-        configureOrderFlowStrategy3(); // Swing (15m, conservative)
+//        // Configure SuperTrend strategies with different parameters
+//        configureSuperTrendStrategy1(); // Conservative (10, 3)
+//        configureSuperTrendStrategy2(); // Moderate (10, 2)
+//        configureSuperTrendStrategy3(); // Aggressive (7, 3)
+//
+//        // Configure Order Block strategies with different parameters
+//        configureOrderBlockStrategy1(); // Standard (pivot: 5)
+//        configureOrderBlockStrategy2(); // Scalping (pivot: 3)
+//
+//        // Configure Order Flow strategies with different parameters
+//        configureOrderFlowStrategy1(); // Balanced (5m, recommended)
+//        configureOrderFlowStrategy2(); // Scalping (1m, aggressive)
+//        configureOrderFlowStrategy3(); // Swing (15m, conservative)
         
         // Option 2: Auto-register all strategies (uncomment to use)
         // autoRegisterAllStrategies();
@@ -104,7 +104,7 @@ public class TradingBotConfig {
     private void configureRSIStrategy() {
         StrategyConfig config = new StrategyConfig(
             "rsi-strategy",
-            List.of("BTCUSDT")  // Trade only BTC with RSI
+            List.of("ETHUSDT")  // Trade only BTC with RSI
         );
         
         // Position sizing and risk parameters
