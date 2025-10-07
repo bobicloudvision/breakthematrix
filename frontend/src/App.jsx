@@ -156,7 +156,7 @@ export default function App() {
       const newHeight = windowHeight - e.clientY;
       
       // Set min and max height constraints
-      const minHeight = 200;
+      const minHeight = 60;
       const maxHeight = windowHeight - 200; // Leave at least 200px for chart
       
       if (newHeight >= minHeight && newHeight <= maxHeight) {
