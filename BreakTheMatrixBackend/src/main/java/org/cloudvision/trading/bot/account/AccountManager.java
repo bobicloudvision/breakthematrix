@@ -83,6 +83,7 @@ public class AccountManager {
             throw new IllegalArgumentException("Account not found: " + accountId);
         }
         this.activeAccountId = accountId;
+        accounts.get(accountId).setEnabled(true);
         System.out.println("🎯 Active account set to: " + accounts.get(accountId).getAccountName());
     }
     

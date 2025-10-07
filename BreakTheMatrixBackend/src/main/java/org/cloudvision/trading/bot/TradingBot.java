@@ -1,6 +1,7 @@
 package org.cloudvision.trading.bot;
 
 import org.cloudvision.trading.bot.model.Order;
+import org.cloudvision.trading.bot.model.OrderStatus;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
 import org.cloudvision.trading.model.CandlestickData;
 import org.cloudvision.trading.model.TimeInterval;
@@ -120,7 +121,13 @@ public class TradingBot {
                                     
                                     String accountName = accountManager.getActiveAccount().getAccountName();
                                     System.out.println("🤖 Bot executed order on [" + accountName + "]: " + executedOrder);
-                                } else {
+                                }
+                                else if (executedOrder.getStatus() == org.cloudvision.trading.bot.model.OrderStatus.REJECTED) {
+                                    System.out.println("❌ Order was rejected by the exchange: " + executedOrder);
+                                } else if (executedOrder.getStatus() == OrderStatus.SUBMITTED) {
+                                    System.out.println("⏳ Order submitted but not yet filled: " + executedOrder);
+                                }
+                                else {
                                     System.out.println("❌ Order execution failed: " + executedOrder.getStatus());
                                 }
                             } else {

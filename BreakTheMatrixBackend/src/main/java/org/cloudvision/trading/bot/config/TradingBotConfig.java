@@ -109,7 +109,7 @@ public class TradingBotConfig {
     private void configureRSIStrategy() {
          StrategyConfig config = new StrategyConfig(
              "rsi-strategy",
-             List.of("ETHUSDT")  // Trade only BTC with RSI
+             List.of("BTCUSDT")  // Trade only BTC with RSI
          );
         
          // Position sizing and risk parameters
@@ -134,7 +134,7 @@ public class TradingBotConfig {
 
         StrategyConfig config = new StrategyConfig(
             "instant-strategy",
-            List.of("ETHUSDT")  // Trade only ETH with Instant Strategy
+            List.of("BTCUSDT")  // Trade only ETH with Instant Strategy
         );
 
         // Position sizing and risk parameters

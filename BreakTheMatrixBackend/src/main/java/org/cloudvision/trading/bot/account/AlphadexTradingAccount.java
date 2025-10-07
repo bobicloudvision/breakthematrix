@@ -47,7 +47,7 @@ public class AlphadexTradingAccount implements TradingAccount {
         this.baseURL = baseURL;
         this.positionManager = new PositionManager();
         this.orders = new HashMap<>();
-        this.enabled = false; // Disabled by default for safety
+        this.enabled = true; // Disabled by default for safety
         this.createdAt = Instant.now();
         this.http = new RestTemplate();
 

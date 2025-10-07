@@ -54,7 +54,7 @@ public class InstantStrategy extends AbstractTradingStrategy {
 
         // Open a position
         Order order = new Order(UUID.randomUUID().toString(), symbol, OrderType.MARKET, OrderSide.BUY,
-                new BigDecimal("0.5"), currentPrice, getStrategyId());
+                new BigDecimal("0.01"), currentPrice, getStrategyId());
 //        account.executeOrder(order);
 
         // Get the position ID (in real implementation, this would be returned from executeOrder)

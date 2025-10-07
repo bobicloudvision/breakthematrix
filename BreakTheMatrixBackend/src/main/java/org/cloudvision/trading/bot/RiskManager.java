@@ -17,10 +17,10 @@ public class RiskManager {
     private final AccountManager accountManager;
     
     // Risk parameters - Position limits
-    private BigDecimal maxPositionSize = new BigDecimal("10000"); // $10,000 max per position
-    private BigDecimal maxTotalExposure = new BigDecimal("50000"); // $50,000 max total exposure
-    private BigDecimal maxSymbolExposure = new BigDecimal("20000"); // $20,000 max per symbol
-    private BigDecimal maxDailyLoss = new BigDecimal("500000"); // $5,000 max daily loss
+    private BigDecimal maxPositionSize = new BigDecimal("50000"); // $5,000 max per position
+    private BigDecimal maxTotalExposure = new BigDecimal("50000"); // $5,000 max total exposure
+    private BigDecimal maxSymbolExposure = new BigDecimal("50000"); // $5,000 max per symbol
+    private BigDecimal maxDailyLoss = new BigDecimal("50000"); // $500 max daily loss
     
     // Trade frequency limits
     private int maxDailyTrades = 50; // Max 50 trades per day
@@ -99,6 +99,7 @@ public class RiskManager {
             BigDecimal availableBalance = activeAccount.getAvailableBalance();
             if (order.getSide() == OrderSide.BUY && orderValue.compareTo(availableBalance) > 0) {
                 System.out.println("❌ Risk: Insufficient balance for order");
+                System.out.println("   Available: " + availableBalance + ", Required: " + orderValue);
                 return false;
             }
 
