@@ -104,6 +104,9 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
             System.out.println("✅ Initialized state for " + symbol + " with " + candles.size() + " candles");
         }
         
+        // Mark strategy as bootstrapped
+        bootstrapped = true;
+        
         // For strategies that need a single global state, they can override this
         // Most strategies will use per-symbol state
         return null;

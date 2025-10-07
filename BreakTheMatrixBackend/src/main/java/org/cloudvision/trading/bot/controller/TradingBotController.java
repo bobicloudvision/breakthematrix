@@ -1,7 +1,6 @@
 package org.cloudvision.trading.bot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,9 +9,7 @@ import org.cloudvision.trading.bot.RiskManager;
 import org.cloudvision.trading.bot.TradingBot;
 import org.cloudvision.trading.bot.account.AccountStats;
 import org.cloudvision.trading.bot.model.Order;
-import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.bot.strategy.TradingStrategy;
-import org.cloudvision.trading.model.TimeInterval;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,66 +36,23 @@ public class TradingBotController {
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @PostMapping("/enable")
-    public ResponseEntity<Map<String, Object>> enable(
-            @RequestParam(required = false, defaultValue = "false") boolean bootstrap,
-            @RequestParam(required = false, defaultValue = "1m") String interval,
-            @RequestParam(required = false, defaultValue = "100") int historicalLimit) {
+    public ResponseEntity<Map<String, Object>> enable() {
         try {
-            if (bootstrap) {
-                TimeInterval timeInterval = TimeInterval.fromString(interval);
-                tradingBot.enable(true, timeInterval, historicalLimit);
-                return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Bot enabled with historical bootstrapping",
-                    "mode", "analysis",
-                    "bootstrap", true,
-                    "historicalLimit", historicalLimit,
-                    "interval", interval
-                ));
-            } else {
-                tradingBot.enable();
-                return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Bot enabled - Analysis mode active",
-                    "mode", "analysis",
-                    "bootstrap", false
-                ));
-            }
-        } catch (IllegalArgumentException e) {
+            tradingBot.enable();
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Bot enabled in analysis mode",
+                "mode", "analysis",
+                "note", "Historical data will be loaded automatically when strategies are enabled"
+            ));
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                 "success", false,
-                "error", "Invalid interval: " + interval
+                "error", "Failed to enable bot: " + e.getMessage()
             ));
         }
     }
     
-    @Operation(summary = "Bootstrap Strategies", description = "Bootstrap strategies with historical data before starting real-time analysis")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Strategies bootstrapped successfully"),
-        @ApiResponse(responseCode = "400", description = "Invalid parameters")
-    })
-    @PostMapping("/bootstrap")
-    public ResponseEntity<Map<String, Object>> bootstrapStrategies(
-            @RequestParam(defaultValue = "Binance") String provider,
-            @RequestParam(defaultValue = "1m") String interval,
-            @RequestParam(defaultValue = "100") int limit) {
-        try {
-            TimeInterval timeInterval = TimeInterval.fromString(interval);
-            tradingBot.bootstrapStrategies(provider, timeInterval, limit);
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Strategies bootstrapped successfully",
-                "provider", provider,
-                "interval", interval,
-                "historicalCandles", limit
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", "Invalid interval: " + interval
-            ));
-        }
-    }
 
     @Operation(summary = "Disable Bot", description = "Completely disable the trading bot. Stops all analysis and trading activities.")
     @ApiResponses(value = {
