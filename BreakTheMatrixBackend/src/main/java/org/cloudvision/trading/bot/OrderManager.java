@@ -84,7 +84,7 @@ public class OrderManager {
      */
     public List<Order> getOrdersByStrategy(String strategyId) {
         return orderHistory.stream()
-                .filter(order -> strategyId.equals(order.getStrategyId()))
+//                .filter(order -> strategyId.equals(order.getStrategyId()))
                 .toList();
     }
 

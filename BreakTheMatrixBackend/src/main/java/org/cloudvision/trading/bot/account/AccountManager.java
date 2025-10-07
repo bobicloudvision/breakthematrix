@@ -30,9 +30,9 @@ public class AccountManager {
         AlpacaTradingAccount alpacaAccount = new AlpacaTradingAccount(
             "live-alpaca-001",
             "Alpaca Live Account",
-            System.getenv("ALPACA_API_KEY"),
-            System.getenv("ALPACA_API_SECRET"),
-            "https://paper-api.alpaca.markets"
+            "PKXPLINRD5ABM788429X",
+            "T0lMfFzkeHcnrnJdnTmy6BXLNFmqsehTPOEWBlas",
+            "https://paper-api.alpaca.markets/v2"
         );
         registerAccount(alpacaAccount);
         setActiveAccount(alpacaAccount.getAccountId());

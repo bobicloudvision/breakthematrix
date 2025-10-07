@@ -9,7 +9,7 @@ export function OrdersTab() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('http://localhost:8080/api/bot/orders/history', {
+      const res = await fetch('http://localhost:8080/api/positions/orders', {
         method: 'GET',
         headers: { accept: '*/*' },
       });

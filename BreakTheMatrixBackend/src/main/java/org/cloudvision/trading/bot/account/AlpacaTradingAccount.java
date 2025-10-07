@@ -1,5 +1,7 @@
 package org.cloudvision.trading.bot.account;
 
+import net.jacobpeterson.alpaca.AlpacaAPI;
+import net.jacobpeterson.alpaca.model.util.apitype.TraderAPIEndpointType;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.model.OrderStatus;
 
@@ -39,31 +41,10 @@ public class AlpacaTradingAccount implements TradingAccount {
         this.orders = new HashMap<>();
         this.enabled = false; // Disabled by default for safety
         this.createdAt = Instant.now();
-        this.alpacaAPI = null; // Not configured in this constructor
+        this.alpacaAPI = new AlpacaAPI(apiKey, apiSecret, TraderAPIEndpointType.PAPER, null,  null);
 
         System.out.println("🔗 Alpaca Trading Account created: " + accountName +
                 " (Base URL: " + baseURL + ")");
-        System.out.println("⚠️ LIVE/PAPER TRADING - VERIFY KEYS AND SETTINGS BEFORE ENABLING");
-    }
-
-    /**
-     * Preferred constructor: provide a configured AlpacaAPI instance.
-     */
-    public AlpacaTradingAccount(String accountId,
-                                String accountName,
-                                net.jacobpeterson.alpaca.AlpacaAPI alpacaAPI) {
-        this.accountId = accountId;
-        this.accountName = accountName;
-        this.apiKey = null;
-        this.apiSecret = null;
-        this.baseURL = null;
-        this.positionManager = new PositionManager();
-        this.orders = new HashMap<>();
-        this.enabled = false; // Disabled by default for safety
-        this.createdAt = Instant.now();
-        this.alpacaAPI = alpacaAPI;
-
-        System.out.println("🔗 Alpaca Trading Account created (API provided): " + accountName);
         System.out.println("⚠️ LIVE/PAPER TRADING - VERIFY KEYS AND SETTINGS BEFORE ENABLING");
     }
 
@@ -190,7 +171,23 @@ public class AlpacaTradingAccount implements TradingAccount {
 
     @Override
     public List<Order> getAllOrders() {
-        return new ArrayList<>(orders.values());
+
+        if (alpacaAPI == null) {
+            return new ArrayList<>(orders.values());
+        }
+        try {
+            java.util.List<net.jacobpeterson.alpaca.openapi.trader.model.Order> alpacaOrders =
+                    alpacaAPI.trader().orders().getAllOrders(null, 100, null, null, null, null, null, null);
+            List<Order> result = new ArrayList<>();
+            for (net.jacobpeterson.alpaca.openapi.trader.model.Order a : alpacaOrders) {
+                result.add(mapAlpacaOrderToInternal(a));
+            }
+            System.out.println("AlpacaTradingAccount.getAllOrders(): " + result);
+            return result;
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to fetch Alpaca orders: " + e.getMessage());
+            return new ArrayList<>(orders.values());
+        }
     }
 
     @Override
@@ -207,6 +204,45 @@ public class AlpacaTradingAccount implements TradingAccount {
         return orders.values().stream()
                 .filter(o -> o.getStatus() == OrderStatus.FILLED)
                 .toList();
+    }
+
+    private Order mapAlpacaOrderToInternal(net.jacobpeterson.alpaca.openapi.trader.model.Order alpacaOrder) {
+        String id = alpacaOrder.getId();
+        String symbol = alpacaOrder.getSymbol();
+        org.cloudvision.trading.bot.model.OrderType type = switch (alpacaOrder.getType()) {
+            case MARKET -> org.cloudvision.trading.bot.model.OrderType.MARKET;
+            case LIMIT -> org.cloudvision.trading.bot.model.OrderType.LIMIT;
+            case STOP, STOP_LIMIT -> org.cloudvision.trading.bot.model.OrderType.STOP_LIMIT;
+            default -> org.cloudvision.trading.bot.model.OrderType.MARKET;
+        };
+        org.cloudvision.trading.bot.model.OrderSide side = alpacaOrder.getSide() ==
+                net.jacobpeterson.alpaca.openapi.trader.model.OrderSide.BUY
+                ? org.cloudvision.trading.bot.model.OrderSide.BUY
+                : org.cloudvision.trading.bot.model.OrderSide.SELL;
+
+        BigDecimal qty = new BigDecimal(alpacaOrder.getQty());
+        BigDecimal price = alpacaOrder.getLimitPrice() != null ? new BigDecimal(alpacaOrder.getLimitPrice()) : BigDecimal.ZERO;
+
+        Order o = new Order(id, symbol, type, side, qty, price, "alpaca");
+
+        OrderStatus status = switch (alpacaOrder.getStatus()) {
+            case NEW, ACCEPTED -> OrderStatus.SUBMITTED;
+            case PARTIALLY_FILLED -> OrderStatus.PARTIALLY_FILLED;
+            case FILLED -> OrderStatus.FILLED;
+            case CANCELED -> OrderStatus.CANCELLED;
+            case REJECTED -> OrderStatus.REJECTED;
+            case EXPIRED -> OrderStatus.EXPIRED;
+            default -> OrderStatus.PENDING;
+        };
+        o.setStatus(status);
+
+        String filledAvgPrice = alpacaOrder.getFilledAvgPrice();
+        if (filledAvgPrice != null) {
+            o.setExecutedPrice(new BigDecimal(filledAvgPrice));
+            o.setExecutedQuantity(qty);
+            o.setExecutedAt(Instant.now());
+        }
+        return o;
     }
 
     @Override
@@ -259,7 +295,21 @@ public class AlpacaTradingAccount implements TradingAccount {
 
     @Override
     public List<Position> getOpenPositions() {
-        return positionManager.getOpenPositions();
+        if (alpacaAPI == null) {
+            return positionManager.getOpenPositions();
+        }
+        try {
+            java.util.List<net.jacobpeterson.alpaca.openapi.trader.model.Position> alpacaPositions =
+                    alpacaAPI.trader().positions().getAllOpenPositions();
+            List<Position> result = new ArrayList<>();
+            for (net.jacobpeterson.alpaca.openapi.trader.model.Position p : alpacaPositions) {
+                result.add(mapAlpacaPositionToInternal(p));
+            }
+            return result;
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to fetch Alpaca open positions: " + e.getMessage());
+            return positionManager.getOpenPositions();
+        }
     }
 
     @Override
@@ -274,12 +324,31 @@ public class AlpacaTradingAccount implements TradingAccount {
 
     @Override
     public List<Position> getPositionHistory() {
+        // Alpaca API does not directly expose closed positions history via Positions API.
+        // We return local position history; extend later via AccountActivities if needed.
         return positionManager.getPositionHistory();
     }
 
     @Override
     public PositionManager getPositionManager() {
         return positionManager;
+    }
+
+    private Position mapAlpacaPositionToInternal(net.jacobpeterson.alpaca.openapi.trader.model.Position alpacaPosition) {
+        String symbol = alpacaPosition.getSymbol();
+        PositionSide side =
+                "long".equalsIgnoreCase(alpacaPosition.getSide()) ? PositionSide.LONG : PositionSide.SHORT;
+
+        BigDecimal entryPrice = alpacaPosition.getAvgEntryPrice() != null
+                ? new BigDecimal(alpacaPosition.getAvgEntryPrice())
+                : BigDecimal.ZERO;
+        BigDecimal qty = alpacaPosition.getQty() != null
+                ? new BigDecimal(alpacaPosition.getQty())
+                : BigDecimal.ZERO;
+
+        Position pos = new Position(symbol, side, entryPrice, qty);
+        // Best-effort: if market value provided, we can derive a rough current price, but we skip here.
+        return pos;
     }
 
     @Override
