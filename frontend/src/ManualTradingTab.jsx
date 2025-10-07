@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
+export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
   const [formData, setFormData] = useState({
     positionSide: 'LONG',
     orderType: 'LIMIT',
@@ -17,12 +17,49 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
     setError(null);
   }, [symbol]);
 
+  // Auto-fill price when currentPrice changes (for LIMIT orders) or when symbol changes
+  useEffect(() => {
+    if (currentPrice) {
+      setFormData(prev => {
+        // Only update if it's a LIMIT order
+        if (prev.orderType === 'LIMIT') {
+          return {
+            ...prev,
+            price: currentPrice.toString()
+          };
+        }
+        return prev;
+      });
+    }
+  }, [currentPrice, symbol]);
+
+  // Update price when switching to LIMIT order type
+  useEffect(() => {
+    setFormData(prev => {
+      // When switching to LIMIT and we have a current price but no price set
+      if (prev.orderType === 'LIMIT' && currentPrice && !prev.price) {
+        return {
+          ...prev,
+          price: currentPrice.toString()
+        };
+      }
+      return prev;
+    });
+  }, [formData.orderType, currentPrice]);
+
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState(null);
+  const [isManualPriceEdit, setIsManualPriceEdit] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Track manual price edits
+    if (name === 'price') {
+      setIsManualPriceEdit(true);
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -38,7 +75,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
     try {
       // Prepare request body
       const requestBody = {
-        symbol: formData.symbol,
+        symbol: symbol,
         positionSide: formData.positionSide,
         orderType: formData.orderType,
         price: parseFloat(formData.price),
@@ -82,7 +119,6 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
 
   const handleReset = () => {
     setFormData({
-      symbol: 'BTCUSDT',
       positionSide: 'LONG',
       orderType: 'LIMIT',
       price: '',
@@ -103,11 +139,6 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
     }).format(value);
   };
 
-  const symbolOptions = [
-    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 
-    'SOLUSDT', 'DOTUSDT', 'DOGEUSDT', 'AVAXUSDT', 'MATICUSDT'
-  ];
-
   return (
     <div className="h-full flex flex-col overflow-y-auto">
       {/* Form Section */}
@@ -123,20 +154,12 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            {/* Symbol Selection */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            {/* Symbol Display */}
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30 hidden">
               <label className="block text-slate-300 text-sm font-medium mb-2">Symbol</label>
-              <select
-                name="symbol"
-                value={formData.symbol}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:border-cyan-400/50 transition-all"
-                required
-              >
-                {symbolOptions.map(sym => (
-                  <option key={sym} value={sym}>{sym}</option>
-                ))}
-              </select>
+              <div className="w-full px-3 py-2 text-sm bg-slate-900/50 text-cyan-300 rounded-lg border border-cyan-500/30 font-semibold">
+                {symbol}
+              </div>
             </div>
 
             {/* Position Side */}
@@ -171,16 +194,30 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
             {/* Order Type */}
             <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
               <label className="block text-slate-300 text-sm font-medium mb-2">Order Type</label>
-              <select
-                name="orderType"
-                value={formData.orderType}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:border-cyan-400/50 transition-all"
-                required
-              >
-                <option value="LIMIT">LIMIT</option>
-                <option value="MARKET">MARKET</option>
-              </select>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, orderType: 'LIMIT' }))}
+                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
+                    formData.orderType === 'LIMIT'
+                      ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-cyan-500/40'
+                  }`}
+                >
+                  LIMIT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, orderType: 'MARKET' }))}
+                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
+                    formData.orderType === 'MARKET'
+                      ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-cyan-500/40'
+                  }`}
+                >
+                  MARKET
+                </button>
+              </div>
             </div>
 
             {/* Price */}
@@ -188,6 +225,9 @@ export function ManualTradingTab({ symbol = 'BTCUSDT' }) {
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Price (USD)
                 {formData.orderType === 'MARKET' && <span className="text-slate-500 text-xs ml-1">(Market)</span>}
+                {formData.orderType === 'LIMIT' && currentPrice && (
+                  <span className="text-cyan-400 text-xs ml-1">🔄 Live</span>
+                )}
               </label>
               <input
                 type="number"

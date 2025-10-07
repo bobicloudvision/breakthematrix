@@ -33,6 +33,9 @@ export default function App() {
   
   // Right sidebar view state: 'bot' or 'manual'
   const [rightSidebarView, setRightSidebarView] = useState('bot');
+  
+  // Current price from chart for manual trading
+  const [currentPrice, setCurrentPrice] = useState(null);
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -453,6 +456,7 @@ export default function App() {
                       interval={interval}
                       activeStrategies={activeStrategies}
                       enabledIndicators={enabledIndicators}
+                      onPriceUpdate={setCurrentPrice}
                     />
                   ) : (
                     <OrderFlow 
@@ -635,7 +639,7 @@ export default function App() {
                 {rightSidebarView === 'bot' ? (
                   <BotControl interval={interval} historicalLimit={1000} />
                 ) : (
-                  <ManualTradingTab />
+                  <ManualTradingTab symbol={symbol} currentPrice={currentPrice} />
                 )}
               </div>
             </div>

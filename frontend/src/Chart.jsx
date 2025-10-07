@@ -15,7 +15,7 @@ import { fetchHistoricalData, fetchAllStrategyData, fetchIndicators } from './Ch
 import { useChartWebSocket, getWebSocketStatusColors } from './useChartWebSocket';
 
 
-export function Chart({ provider, symbol, interval, activeStrategies = [], enabledIndicators = [] }) {
+export function Chart({ provider, symbol, interval, activeStrategies = [], enabledIndicators = [], onPriceUpdate }) {
     const [data, setData] = useState([]);
     const [realCount, setRealCount] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -39,6 +39,14 @@ export function Chart({ provider, symbol, interval, activeStrategies = [], enabl
         enabled: true, // Set to false for replay mode
         reconnectTrigger: wsReconnectTrigger
     });
+
+    // Report latest price to parent component
+    useEffect(() => {
+        if (data.length > 0 && onPriceUpdate) {
+            const latestCandle = data[data.length - 1];
+            onPriceUpdate(latestCandle.close);
+        }
+    }, [data, onPriceUpdate]);
 
     // Fetch historical data when provider/symbol/interval changes
     useEffect(() => {
