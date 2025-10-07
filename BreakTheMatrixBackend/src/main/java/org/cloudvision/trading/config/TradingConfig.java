@@ -29,7 +29,7 @@ public class TradingConfig {
     // Configuration
     private static final String DEFAULT_PROVIDER = "Binance";
     private static final TimeInterval DEFAULT_INTERVAL = TimeInterval.ONE_MINUTE;
-    private static final String DEFAULT_SYMBOL = "ETHUSDT"; // Default trading symbol
+    private static final String DEFAULT_SYMBOL = "BTCUSDT"; // Default trading symbol
 
     // Order Flow Configuration
     private static final boolean ENABLE_ORDER_FLOW = false;

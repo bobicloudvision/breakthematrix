@@ -84,6 +84,8 @@ public class AlphadexTradingAccount implements TradingAccount {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
             Map<String, Object> payload = buildPlaceOrderRequest(order);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
@@ -127,7 +129,11 @@ public class AlphadexTradingAccount implements TradingAccount {
     public boolean cancelOrder(String orderId) {
         try {
             String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/orders/" + orderId;
-            http.delete(url);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            http.exchange(url, HttpMethod.DELETE, entity, Void.class);
             Order o = orders.get(orderId);
             if (o != null) {
                 o.setStatus(OrderStatus.CANCELLED);
@@ -166,13 +172,35 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public BigDecimal getAvailableBalance() {
-        // TODO: Fetch available balance from Alphadex
-        return BigDecimal.ZERO;
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/summary";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map<String, Object>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            if (resp.getBody() != null && resp.getBody().get("freeBalance") != null) {
+                return new BigDecimal(String.valueOf(resp.getBody().get("freeBalance")));
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch available balance: " + e.getMessage());
+            return BigDecimal.ZERO;
+        }
     }
 
     @Override
     public BigDecimal getAssetBalance(String asset) {
-        // TODO: Query specific asset balance from Alphadex
+        if (asset == null) return BigDecimal.ZERO;
+        if ("USDT".equalsIgnoreCase(asset)) {
+            return getBalance();
+        }
+        // If the API exposes per-asset balances later, wire them here.
         return BigDecimal.ZERO;
     }
 
@@ -214,14 +242,59 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public BigDecimal getTotalExposure() {
-        // TODO: Sum value of all open positions
-        return BigDecimal.ZERO;
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/summary";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map<String, Object>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            if (resp.getBody() != null && resp.getBody().get("lockedMargin") != null) {
+                return new BigDecimal(String.valueOf(resp.getBody().get("lockedMargin")));
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch exposure: " + e.getMessage());
+            return BigDecimal.ZERO;
+        }
     }
 
     @Override
     public BigDecimal getDailyPnL() {
-        // TODO: Derive from trade history/positions
-        return BigDecimal.ZERO;
+        // Approximate daily PnL as equity - balance from summary
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/summary";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map<String, Object>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            if (resp.getBody() != null) {
+                BigDecimal equity = resp.getBody().get("equity") != null
+                        ? new BigDecimal(String.valueOf(resp.getBody().get("equity")))
+                        : null;
+                BigDecimal balance = resp.getBody().get("balance") != null
+                        ? new BigDecimal(String.valueOf(resp.getBody().get("balance")))
+                        : null;
+                if (equity != null && balance != null) {
+                    return equity.subtract(balance);
+                }
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch daily PnL: " + e.getMessage());
+            return BigDecimal.ZERO;
+        }
     }
 
     @Override
@@ -231,7 +304,33 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public List<Order> getAllOrders() {
-        return new ArrayList<>(orders.values());
+        // Combine local tracked orders with active orders from Alphadex when possible
+        List<Order> result = new ArrayList<>(orders.values());
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/orders";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Object> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    Object.class
+            );
+            Object body = resp.getBody();
+            if (body instanceof List<?> list) {
+                result.addAll(mapRemoteOrdersList(list));
+            } else if (body instanceof Map<?, ?> map) {
+                Object maybeList = ((Map<?, ?>) map).get("orders");
+                if (maybeList instanceof List<?> ml) {
+                    result.addAll(mapRemoteOrdersList(ml));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch remote orders: " + e.getMessage());
+        }
+        return result;
     }
 
     @Override
@@ -252,8 +351,69 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public BigDecimal getTotalPnL() {
-        // TODO: Calculate from realized and unrealized P&L
-        return BigDecimal.ZERO;
+        // Approximate total PnL as equity - balance from summary
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/summary";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map<String, Object>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            if (resp.getBody() != null) {
+                BigDecimal equity = resp.getBody().get("equity") != null
+                        ? new BigDecimal(String.valueOf(resp.getBody().get("equity")))
+                        : null;
+                BigDecimal balance = resp.getBody().get("balance") != null
+                        ? new BigDecimal(String.valueOf(resp.getBody().get("balance")))
+                        : null;
+                if (equity != null && balance != null) {
+                    return equity.subtract(balance);
+                }
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch total PnL: " + e.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private List<Order> mapRemoteOrdersList(List<?> list) {
+        List<Order> mapped = new ArrayList<>();
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                try {
+                    Object idObj = m.get("orderId");
+                    String id = idObj != null ? String.valueOf(idObj) : UUID.randomUUID().toString();
+                    String symbol = m.get("symbol") != null ? String.valueOf(m.get("symbol")) : "";
+                    String typeStr = m.get("type") != null ? String.valueOf(m.get("type")) : "MARKET";
+                    String sideStr = m.get("side") != null ? String.valueOf(m.get("side")) : "LONG";
+                    BigDecimal qty = m.get("quantity") != null ? new BigDecimal(String.valueOf(m.get("quantity"))) : BigDecimal.ZERO;
+                    BigDecimal price = m.get("price") != null ? new BigDecimal(String.valueOf(m.get("price"))) : BigDecimal.ZERO;
+
+                    OrderType type = switch (typeStr.toUpperCase()) {
+                        case "LIMIT" -> OrderType.LIMIT;
+                        case "STOP_LOSS" -> OrderType.STOP_LOSS;
+                        case "STOP_LIMIT" -> OrderType.STOP_LIMIT;
+                        case "TAKE_PROFIT" -> OrderType.TAKE_PROFIT;
+                        default -> OrderType.MARKET;
+                    };
+                    OrderSide side = switch (sideStr.toUpperCase()) {
+                        case "SHORT", "SELL" -> OrderSide.SELL;
+                        default -> OrderSide.BUY;
+                    };
+
+                    Order order = new Order(id, symbol, type, side, qty, price, "alphadex");
+                    mapped.add(order);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return mapped;
     }
 
     @Override
