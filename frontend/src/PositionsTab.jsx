@@ -265,114 +265,103 @@ export function PositionsTab() {
     return 'text-slate-400';
   };
 
-  const renderPosition = (position) => (
-    <div key={position.positionId} className="bg-slate-800/50 rounded-lg p-4 border border-slate-600/30 hover:border-cyan-500/30 transition-all duration-200">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <span className="text-cyan-300 font-semibold text-lg">{position.symbol}</span>
-          <span className={`px-2 py-1 rounded text-xs font-medium ${
-            position.side === 'LONG' 
-              ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-              : 'bg-red-500/20 text-red-400 border border-red-500/30'
-          }`}>
-            {position.side}
-          </span>
-          {position.isOpen ? (
-            <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              OPEN
-            </span>
-          ) : (
-            <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400 border border-slate-500/30">
-              CLOSED
+  const renderPositionRow = (position) => (
+    <tr key={position.positionId} className="border-b border-slate-600/30 hover:bg-slate-700/30 transition-all duration-200">
+      <td className="px-3 py-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-cyan-300 font-semibold">{position.symbol}</span>
+          {position.strategyId && (
+            <span className="text-slate-500 font-mono text-xs truncate max-w-[100px]" title={position.strategyId}>
+              {position.strategyId}
             </span>
           )}
         </div>
-        <div className={`text-right ${getPnLColorClass(position.totalPnL)}`}>
-          <div className="text-lg font-semibold">{formatCurrency(position.totalPnL)}</div>
-          <div className="text-sm">{formatPercentage(position.pnLPercentage)}</div>
+      </td>
+      <td className="px-3 py-3 text-center">
+        <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
+          position.side === 'LONG' 
+            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+        }`}>
+          {position.side}
+        </span>
+      </td>
+      <td className="px-3 py-3 text-center">
+        {position.isOpen ? (
+          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
+            OPEN
+          </span>
+        ) : (
+          <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400 border border-slate-500/30">
+            CLOSED
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+        {position.quantity > 0 ? position.quantity.toFixed(8) : 'N/A'}
+      </td>
+      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+        {formatCurrency(position.entryPrice)}
+      </td>
+      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+        {position.exitPrice ? formatCurrency(position.exitPrice) : '-'}
+      </td>
+      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+        {position.entryValue > 0 ? formatCurrency(position.entryValue) : 'N/A'}
+      </td>
+      <td className="px-3 py-3 text-right">
+        <div className={`font-semibold ${getPnLColorClass(position.totalPnL)}`}>
+          {formatCurrency(position.totalPnL)}
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <div className="text-slate-400 mb-1">Entry Price</div>
-          <div className="text-cyan-200 font-medium">{formatCurrency(position.entryPrice)}</div>
+        <div className={`text-xs ${getPnLColorClass(position.totalPnL)}`}>
+          {formatPercentage(position.pnLPercentage)}
         </div>
-        <div>
-          <div className="text-slate-400 mb-1">Quantity</div>
-          <div className="text-cyan-200 font-medium">
-            {position.quantity > 0 ? position.quantity.toFixed(8) : 'N/A'}
-          </div>
-        </div>
-        <div>
-          <div className="text-slate-400 mb-1">Entry Value</div>
-          <div className="text-cyan-200 font-medium">
-            {position.entryValue > 0 ? formatCurrency(position.entryValue) : 'N/A'}
-          </div>
-        </div>
-        <div>
-          <div className="text-slate-400 mb-1">Duration</div>
-          <div className="text-cyan-200 font-medium">{formatDuration(position.duration)}</div>
-        </div>
-        <div>
-          <div className="text-slate-400 mb-1">Entry Time</div>
-          <div className="text-cyan-200 font-medium text-xs">{formatDateTime(position.entryTime)}</div>
-        </div>
+      </td>
+      <td className="px-3 py-3 text-right">
+        {position.stopLoss ? (
+          <span className="text-red-400 text-sm">{formatCurrency(position.stopLoss)}</span>
+        ) : (
+          <span className="text-slate-500 text-sm">-</span>
+        )}
+      </td>
+      <td className="px-3 py-3 text-right">
+        {position.takeProfit ? (
+          <span className="text-green-400 text-sm">{formatCurrency(position.takeProfit)}</span>
+        ) : (
+          <span className="text-slate-500 text-sm">-</span>
+        )}
+      </td>
+      <td className="px-3 py-3 text-center text-cyan-200 text-sm">
+        {formatDuration(position.duration)}
+      </td>
+      <td className="px-3 py-3 text-cyan-200 text-xs">
+        <div>{formatDateTime(position.entryTime)}</div>
         {position.exitTime && (
-          <div>
-            <div className="text-slate-400 mb-1">Exit Time</div>
-            <div className="text-cyan-200 font-medium text-xs">{formatDateTime(position.exitTime)}</div>
-          </div>
+          <div className="text-slate-400 mt-1">{formatDateTime(position.exitTime)}</div>
         )}
-        {position.exitPrice && (
-          <div>
-            <div className="text-slate-400 mb-1">Exit Price</div>
-            <div className="text-cyan-200 font-medium">{formatCurrency(position.exitPrice)}</div>
-          </div>
-        )}
-        {position.stopLoss && (
-          <div>
-            <div className="text-slate-400 mb-1">Stop Loss</div>
-            <div className="text-red-400 font-medium">{formatCurrency(position.stopLoss)}</div>
-          </div>
-        )}
-        {position.takeProfit && (
-          <div>
-            <div className="text-slate-400 mb-1">Take Profit</div>
-            <div className="text-green-400 font-medium">{formatCurrency(position.takeProfit)}</div>
-          </div>
-        )}
-      </div>
-
-      {position.strategyId && (
-        <div className="mt-3 pt-3 border-t border-slate-600/30">
-          <div className="text-slate-400 text-sm">Strategy ID</div>
-          <div className="text-cyan-200 font-mono text-xs">{position.strategyId}</div>
-        </div>
+      </td>
+      {activeSubTab === 'active' && (
+        <td className="px-3 py-3 text-center">
+          {position.isOpen && (
+            <button
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
+                  closePosition(position.symbol, position.positionId);
+                }
+              }}
+              disabled={closingPositions.has(position.positionId)}
+              className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 ${
+                closingPositions.has(position.positionId)
+                  ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                  : 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 hover:text-red-200'
+              }`}
+            >
+              {closingPositions.has(position.positionId) ? '⏳' : '🔴 Close'}
+            </button>
+          )}
+        </td>
       )}
-
-      {position.isOpen && (
-        <div className="mt-3 pt-3 border-t border-slate-600/30">
-          <button
-            onClick={() => {
-              if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
-                closePosition(position.symbol, position.positionId);
-              }
-            }}
-            disabled={closingPositions.has(position.positionId)}
-            className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              closingPositions.has(position.positionId)
-                ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
-                : 'bg-gradient-to-r from-red-500/20 to-orange-500/20 text-red-300 border border-red-500/30 hover:from-red-500/30 hover:to-orange-500/30 hover:text-red-200 hover:border-red-400/50 hover:shadow-md hover:shadow-red-500/10'
-            }`}
-          >
-            {closingPositions.has(position.positionId) ? '⏳ Closing...' : '🔴 Close Position'}
-          </button>
-        </div>
-      )}
-
-
-    </div>
+    </tr>
   );
 
   return (
@@ -467,7 +456,7 @@ export function PositionsTab() {
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-auto">
         {loading && (
           <div className="flex items-center justify-center h-32">
             <div className="text-cyan-400 text-lg">Loading positions...</div>
@@ -483,7 +472,7 @@ export function PositionsTab() {
         {!loading && !error && (
           <>
             {activeSubTab === 'active' && (
-              <div className="space-y-4">
+              <>
                 {openPositions.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-4xl mb-4">📊</div>
@@ -491,13 +480,34 @@ export function PositionsTab() {
                     <div className="text-slate-500 text-sm">Active trading positions will appear here</div>
                   </div>
                 ) : (
-                  openPositions.map(renderPosition)
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-slate-800/50 sticky top-0 z-10">
+                      <tr className="border-b border-cyan-500/30">
+                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Symbol</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Side</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Status</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Quantity</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Entry Price</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Exit Price</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Amount</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">P&L</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Stop Loss</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Take Profit</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Duration</th>
+                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Time</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openPositions.map(renderPositionRow)}
+                    </tbody>
+                  </table>
                 )}
-              </div>
+              </>
             )}
 
             {activeSubTab === 'history' && (
-              <div className="space-y-4">
+              <>
                 {historicalPositions.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-4xl mb-4">📈</div>
@@ -505,9 +515,29 @@ export function PositionsTab() {
                     <div className="text-slate-500 text-sm">Completed trades will appear here</div>
                   </div>
                 ) : (
-                  historicalPositions.map(renderPosition)
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-slate-800/50 sticky top-0 z-10">
+                      <tr className="border-b border-cyan-500/30">
+                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Symbol</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Side</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Status</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Quantity</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Entry Price</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Exit Price</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Amount</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">P&L</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Stop Loss</th>
+                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Take Profit</th>
+                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Duration</th>
+                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalPositions.map(renderPositionRow)}
+                    </tbody>
+                  </table>
                 )}
-              </div>
+              </>
             )}
           </>
         )}
