@@ -9,6 +9,7 @@ export function PositionsTab() {
   const [wsConnection, setWsConnection] = useState(null);
   const [wsStatus, setWsStatus] = useState('disconnected'); // disconnected, connecting, connected, error
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [closingPositions, setClosingPositions] = useState(new Set());
 
   // Fetch open positions
   const fetchOpenPositions = async () => {
@@ -70,6 +71,50 @@ export function PositionsTab() {
         action: 'getPositions', 
         accountId: 'paper-main' 
       }));
+    }
+  };
+
+  // Close position by symbol
+  const closePosition = async (symbol, positionId) => {
+    try {
+      setClosingPositions(prev => new Set([...prev, positionId]));
+      
+      const response = await fetch('http://localhost:8080/api/positions/close', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': '*/*'
+        },
+        body: JSON.stringify({ symbol })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Position closed:', result);
+        
+        // Refresh positions
+        if (wsStatus === 'connected') {
+          requestPositionsViaWS();
+        } else {
+          fetchOpenPositions();
+        }
+        
+        // Show success message (you could add a toast notification here)
+        alert(`Successfully closed ${result.closedPositions} position(s) for ${symbol}\nOrder ID: ${result.orderId}\nQuantity: ${result.totalQuantity}`);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to close position:', response.status, errorText);
+        alert(`Failed to close position: ${errorText || response.statusText}`);
+      }
+    } catch (error) {
+      console.error('Error closing position:', error);
+      alert(`Error closing position: ${error.message}`);
+    } finally {
+      setClosingPositions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(positionId);
+        return newSet;
+      });
     }
   };
 
@@ -232,7 +277,7 @@ export function PositionsTab() {
           }`}>
             {position.side}
           </span>
-          {position.open ? (
+          {position.isOpen ? (
             <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
               OPEN
             </span>
@@ -305,6 +350,28 @@ export function PositionsTab() {
           <div className="text-cyan-200 font-mono text-xs">{position.strategyId}</div>
         </div>
       )}
+
+      {position.isOpen && (
+        <div className="mt-3 pt-3 border-t border-slate-600/30">
+          <button
+            onClick={() => {
+              if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
+                closePosition(position.symbol, position.positionId);
+              }
+            }}
+            disabled={closingPositions.has(position.positionId)}
+            className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+              closingPositions.has(position.positionId)
+                ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                : 'bg-gradient-to-r from-red-500/20 to-orange-500/20 text-red-300 border border-red-500/30 hover:from-red-500/30 hover:to-orange-500/30 hover:text-red-200 hover:border-red-400/50 hover:shadow-md hover:shadow-red-500/10'
+            }`}
+          >
+            {closingPositions.has(position.positionId) ? '⏳ Closing...' : '🔴 Close Position'}
+          </button>
+        </div>
+      )}
+
+
     </div>
   );
 
