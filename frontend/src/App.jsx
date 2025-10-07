@@ -11,6 +11,7 @@ import { IndicatorsTab } from "./IndicatorsTab";
 import { IndicatorConfigModal } from "./IndicatorConfigModal";
 import { ReplayTab } from "./ReplayTab";
 import { ManualTradingTab } from "./ManualTradingTab";
+import SVGLogo from "./logo.jsx";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -352,7 +353,7 @@ export default function App() {
             <div className="px-4 py-3">
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
-                  BreakTheMatrix 
+                   <SVGLogo /> 
                 </div>
 
                 {/* Main View Tabs */}

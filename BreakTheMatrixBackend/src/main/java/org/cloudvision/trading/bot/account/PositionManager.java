@@ -69,7 +69,7 @@ public class PositionManager {
         // Atomic-like swap by clearing then putting all; openPositions is a concurrent map
         openPositions.clear();
         openPositions.putAll(merged);
-        System.out.println("🔄 Applied exchange snapshot (merged): openPositions=" + openPositions.size());
+//        System.out.println("🔄 Applied exchange snapshot (merged): openPositions=" + openPositions.size());
 
         // Recalculate unrealized PnL using the last known prices but DO NOT trigger SL/TP closes here
         if (!lastKnownPrices.isEmpty()) {
