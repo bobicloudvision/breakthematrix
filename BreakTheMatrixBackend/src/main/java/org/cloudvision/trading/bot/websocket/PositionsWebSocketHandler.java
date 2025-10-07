@@ -227,7 +227,7 @@ public class PositionsWebSocketHandler extends TextWebSocketHandler {
                 continue;
             }
             
-            for (Position position : account.getOpenPositions()) {
+            for (Position position : account.getPositionManager().getOpenPositions()) {
                 Map<String, Object> positionData = new HashMap<>();
                 positionData.put("positionId", position.getPositionId());
                 positionData.put("accountId", account.getAccountId());
