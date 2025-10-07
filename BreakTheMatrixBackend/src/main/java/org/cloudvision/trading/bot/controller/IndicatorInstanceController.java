@@ -199,10 +199,11 @@ public class IndicatorInstanceController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            e.printStackTrace(); // Log the full stack trace for debugging
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
     

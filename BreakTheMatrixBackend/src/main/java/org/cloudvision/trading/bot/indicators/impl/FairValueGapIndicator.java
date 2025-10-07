@@ -85,7 +85,8 @@ public class FairValueGapIndicator extends AbstractIndicator {
         public int bearMitigated = 0;
         
         // For threshold calculation
-        public BigDecimal cumulativeDelta = BigDecimal.ZERO;
+        public BigDecimal cumulativeRange = BigDecimal.ZERO; // cum((high-low)/low)
+        public long thresholdBars = 0L; // number of bars accumulated into threshold average
         public int barIndex = 0;
         
         // Track last FVG time to avoid duplicates
@@ -94,6 +95,9 @@ public class FairValueGapIndicator extends AbstractIndicator {
         
         // Track candle duration for box width calculation
         public long averageCandleDuration = 0;
+
+        // Lines to draw when FVGs are mitigated (dashed), cleared each candle
+        public List<LineShape> mitigationLines = new ArrayList<>();
     }
     
     public FairValueGapIndicator() {
@@ -186,6 +190,15 @@ public class FairValueGapIndicator extends AbstractIndicator {
             .defaultValue(false)
             .required(false)
             .build());
+
+        // Optional timeframe parameter for future multi-timeframe support
+        params.put("timeframe", IndicatorParameter.builder("timeframe")
+            .displayName("Timeframe")
+            .description("Optional alternate timeframe for detection (not yet implemented)")
+            .type(IndicatorParameter.ParameterType.STRING)
+            .defaultValue("")
+            .required(false)
+            .build());
         
         return params;
     }
@@ -209,6 +222,9 @@ public class FairValueGapIndicator extends AbstractIndicator {
             state = new FVGState();
         }
         
+        // Clear mitigation lines from previous candle
+        state.mitigationLines.clear();
+
         // Calculate average candle duration for box width
         if (state.candleBuffer.size() > 0) {
             CandlestickData lastCandle = state.candleBuffer.get(state.candleBuffer.size() - 1);
@@ -274,12 +290,12 @@ public class FairValueGapIndicator extends AbstractIndicator {
             
             if (gapSize.compareTo(threshold) > 0) {
                 // Don't create duplicate if same timestamp
-                if (state.lastBullFvgTime == null || !middle.getCloseTime().equals(state.lastBullFvgTime)) {
+                if (state.lastBullFvgTime == null || !current.getCloseTime().equals(state.lastBullFvgTime)) {
                     // In original PineScript: box starts at n-2 (2 bars ago where gap begins)
-                    FVG fvg = new FVG(currentLow, oldHigh, true, middle.getCloseTime(), old.getCloseTime(), state.barIndex);
+                    FVG fvg = new FVG(currentLow, oldHigh, true, current.getCloseTime(), old.getCloseTime(), state.barIndex);
                     state.fvgRecords.add(0, fvg); // Add to beginning
                     state.bullCount++;
-                    state.lastBullFvgTime = middle.getCloseTime();
+                    state.lastBullFvgTime = current.getCloseTime();
                     
                     // Update dynamic levels
                     boolean dynamic = getBooleanParameter(params, "dynamic", false);
@@ -302,12 +318,12 @@ public class FairValueGapIndicator extends AbstractIndicator {
             
             if (gapSize.compareTo(threshold) > 0) {
                 // Don't create duplicate if same timestamp
-                if (state.lastBearFvgTime == null || !middle.getCloseTime().equals(state.lastBearFvgTime)) {
+                if (state.lastBearFvgTime == null || !current.getCloseTime().equals(state.lastBearFvgTime)) {
                     // In original PineScript: box starts at n-2 (2 bars ago where gap begins)
-                    FVG fvg = new FVG(oldLow, currentHigh, false, middle.getCloseTime(), old.getCloseTime(), state.barIndex);
+                    FVG fvg = new FVG(oldLow, currentHigh, false, current.getCloseTime(), old.getCloseTime(), state.barIndex);
                     state.fvgRecords.add(0, fvg); // Add to beginning
                     state.bearCount++;
-                    state.lastBearFvgTime = middle.getCloseTime();
+                    state.lastBearFvgTime = current.getCloseTime();
                     
                     // Update dynamic levels
                     boolean dynamic = getBooleanParameter(params, "dynamic", false);
@@ -347,21 +363,23 @@ public class FairValueGapIndicator extends AbstractIndicator {
         boolean auto = getBooleanParameter(params, "autoThreshold", false);
         
         if (auto) {
-            // Auto threshold: cumulative average of (high - low) / low
+            // Auto threshold per Pine:
             // threshold = ta.cum((high - low) / low) / bar_index
             BigDecimal high = candle.getHigh();
             BigDecimal low = candle.getLow();
-            
+
+            // Only accumulate when low > 0 to avoid division by zero
             if (low.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal barRange = high.subtract(low).divide(low, 8, RoundingMode.HALF_UP);
-                state.cumulativeDelta = state.cumulativeDelta.add(barRange);
+                state.cumulativeRange = state.cumulativeRange.add(barRange);
+                state.thresholdBars++;
             }
-            
-            if (state.barIndex > 0) {
-                return state.cumulativeDelta.divide(
-                    new BigDecimal(state.barIndex), 8, RoundingMode.HALF_UP);
+
+            if (state.thresholdBars > 0) {
+                return state.cumulativeRange.divide(new BigDecimal(state.thresholdBars), 8, RoundingMode.HALF_UP);
+            } else {
+                return BigDecimal.ZERO;
             }
-            return BigDecimal.ZERO;
         } else {
             // Manual threshold: convert percentage to decimal
             double thresholdPercent = getDoubleParameter(params, "thresholdPercent", 0.0);
@@ -388,12 +406,48 @@ public class FairValueGapIndicator extends AbstractIndicator {
             if (fvg.isBullish && close.compareTo(fvg.min) < 0) {
                 fvg.mitigated = true;
                 state.bullMitigated++;
+
+                // Display dashed mitigation line if enabled
+                boolean mitigationLevels = getBooleanParameter(params, "mitigationLevels", false);
+                if (mitigationLevels) {
+                    String bullishColor = getStringParameter(params, "bullishColor", "#089981");
+                    LineShape line = LineShape.builder()
+                        .time1(fvg.boxStartTime.getEpochSecond())
+                        .price1(fvg.min)
+                        .time2(candle.getCloseTime().getEpochSecond())
+                        .price2(fvg.min)
+                        .color(bullishColor)
+                        .lineWidth(2)
+                        .lineStyle("dashed")
+                        .label("Bull FVG Mitigated")
+                        .build();
+                    state.mitigationLines.add(line);
+                }
+
                 iterator.remove();
             }
             // Bearish FVG is mitigated when close > max (price comes back up into gap)
             else if (!fvg.isBullish && close.compareTo(fvg.max) > 0) {
                 fvg.mitigated = true;
                 state.bearMitigated++;
+
+                // Display dashed mitigation line if enabled
+                boolean mitigationLevels = getBooleanParameter(params, "mitigationLevels", false);
+                if (mitigationLevels) {
+                    String bearishColor = getStringParameter(params, "bearishColor", "#f23645");
+                    LineShape line = LineShape.builder()
+                        .time1(fvg.boxStartTime.getEpochSecond())
+                        .price1(fvg.max)
+                        .time2(candle.getCloseTime().getEpochSecond())
+                        .price2(fvg.max)
+                        .color(bearishColor)
+                        .lineWidth(2)
+                        .lineStyle("dashed")
+                        .label("Bear FVG Mitigated")
+                        .build();
+                    state.mitigationLines.add(line);
+                }
+
                 iterator.remove();
             }
         }
@@ -529,13 +583,12 @@ public class FairValueGapIndicator extends AbstractIndicator {
             result.put("lines", lineMaps);
         }
         
-        // Add mitigation lines
-        boolean mitigationLevels = getBooleanParameter(params, "mitigationLevels", false);
-        if (mitigationLevels) {
-            // Note: In a real implementation, we'd need to track mitigated FVGs separately
-            // to show their mitigation lines. This would require modifying the state.
-            // For now, we'll add this as a TODO comment.
-            // TODO: Track mitigated FVG history to display mitigation lines
+        // Add mitigation lines if any
+        if (!state.mitigationLines.isEmpty()) {
+            List<Map<String, Object>> mitigationLineMaps = state.mitigationLines.stream()
+                .map(LineShape::toMap)
+                .collect(Collectors.toList());
+            result.put("lines", mitigationLineMaps);
         }
         
         // Add dashboard data

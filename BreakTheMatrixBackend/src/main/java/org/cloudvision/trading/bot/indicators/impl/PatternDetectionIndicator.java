@@ -170,14 +170,7 @@ public class PatternDetectionIndicator extends AbstractIndicator {
             
         params.put("showLabels", IndicatorParameter.builder("showLabels")
             .displayName("Show Labels")
-            .description("Display pattern names and targets")
-            .type(IndicatorParameter.ParameterType.BOOLEAN)
-            .defaultValue(true)
-            .build());
-            
-        params.put("showProjections", IndicatorParameter.builder("showProjections")
-            .displayName("Show Projections")
-            .description("Show projected targets and breakout levels")
+            .description("Display pattern names and confirmation status")
             .type(IndicatorParameter.ParameterType.BOOLEAN)
             .defaultValue(true)
             .build());
@@ -283,7 +276,10 @@ public class PatternDetectionIndicator extends AbstractIndicator {
         
         result.put("values", values);
         result.put("state", state);
-        result.put("shapes", state.shapes.toList());
+        
+        // Add shapes organized by type (lines, markers, etc.)
+        // This matches the pattern used by other indicators like SRLevelsBreaksIndicator
+        result.putAll(state.shapes.toMap());
         
         // Add pattern details
         List<Map<String, Object>> patternDetails = new ArrayList<>();
@@ -1111,30 +1107,29 @@ public class PatternDetectionIndicator extends AbstractIndicator {
         state.shapes = new ShapeCollection();
         
         boolean showLabels = getBooleanParameter(params, "showLabels", true);
-        boolean showProjections = getBooleanParameter(params, "showProjections", true);
         
         // Draw active patterns
         for (Pattern pattern : state.activePatterns) {
-            drawPattern(state, pattern, showLabels, showProjections);
+            drawPattern(state, pattern, showLabels);
         }
         
         // Draw recently confirmed patterns (last 5)
         int confirmCount = Math.min(5, state.confirmedPatterns.size());
         for (int i = state.confirmedPatterns.size() - confirmCount; i < state.confirmedPatterns.size(); i++) {
             Pattern pattern = state.confirmedPatterns.get(i);
-            drawPattern(state, pattern, showLabels, showProjections);
+            drawPattern(state, pattern, showLabels);
         }
     }
     
     /**
      * Draw a single pattern with proper trendlines
      */
-    private void drawPattern(PatternState state, Pattern pattern, boolean showLabels, boolean showProjections) {
+    private void drawPattern(PatternState state, Pattern pattern, boolean showLabels) {
         if (pattern.pivots.isEmpty()) return;
         
         String color = getPatternColor(pattern);
         String lineStyle = pattern.confirmed ? "solid" : "dashed";
-        int lineWidth = pattern.confirmed ? 2 : 2;
+        int lineWidth = 2;
         
         // Draw pattern-specific trendlines
         switch (pattern.type) {
@@ -1215,23 +1210,6 @@ public class PatternDetectionIndicator extends AbstractIndicator {
                 .position("above")
                 .text(pattern.type + (pattern.confirmed ? " ✓" : ""))
                 .size(8)
-                .build());
-        }
-        
-        // Draw target projection
-        if (showProjections && pattern.targetPrice != null) {
-            Pivot lastPivot = pattern.pivots.get(pattern.pivots.size() - 1);
-            long futureTime = lastPivot.time.getEpochSecond() + 86400; // +1 day
-            
-            state.shapes.addLine(LineShape.builder()
-                .time1(lastPivot.time.getEpochSecond())
-                .price1(lastPivot.price)
-                .time2(futureTime)
-                .price2(pattern.targetPrice)
-                .color(color)
-                .lineWidth(1)
-                .lineStyle("dotted")
-                .label("TP: " + pattern.targetPrice.setScale(2, RoundingMode.HALF_UP))
                 .build());
         }
     }
