@@ -110,6 +110,26 @@ public class AccountController {
             "message", "Live trading account created (disabled by default)"
         );
     }
+
+    @Operation(summary = "Create Alphadex Trading Account", description = "Create a new Alphadex account (disabled by default)")
+    @PostMapping("/alphadex")
+    public Map<String, Object> createAlphadexAccount(
+            @RequestParam String accountName,
+            @RequestParam String apiKey,
+            @RequestParam String apiSecret,
+            @RequestParam(defaultValue = "https://api.alphadex.exchange") String baseURL) {
+
+        TradingAccount account = accountManager.createAlphadexAccount(accountName, apiKey, apiSecret, baseURL);
+
+        return Map.of(
+            "success", true,
+            "accountId", account.getAccountId(),
+            "accountName", account.getAccountName(),
+            "accountType", account.getAccountType(),
+            "baseURL", baseURL,
+            "message", "Alphadex trading account created (disabled by default)"
+        );
+    }
     
     @Operation(summary = "Set Active Account", description = "Set which account the bot will use for trading")
     @PostMapping("/{accountId}/activate")

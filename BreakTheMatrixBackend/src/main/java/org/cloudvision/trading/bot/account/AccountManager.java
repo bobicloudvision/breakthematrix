@@ -23,20 +23,32 @@ public class AccountManager {
 //        PaperTradingAccount defaultAccount = new PaperTradingAccount();
 //        registerAccount(defaultAccount);
 //        setActiveAccount(defaultAccount.getAccountId());
-        
+//
 //        System.out.println("💼 Account Manager initialized with default paper trading account");
 
         // Connect AlpacaTradingAccount
-        AlpacaTradingAccount alpacaAccount = new AlpacaTradingAccount(
-            "live-alpaca-001",
-            "Alpaca Live Account",
-            "PKXPLINRD5ABM788429X",
-            "T0lMfFzkeHcnrnJdnTmy6BXLNFmqsehTPOEWBlas",
-            "https://paper-api.alpaca.markets/v2"
+//        AlpacaTradingAccount alpacaAccount = new AlpacaTradingAccount(
+//            "live-alpaca-001",
+//            "Alpaca Live Account",
+//            "PKXPLINRD5ABM788429X",
+//            "T0lMfFzkeHcnrnJdnTmy6BXLNFmqsehTPOEWBlas",
+//            "https://paper-api.alpaca.markets/v2"
+//        );
+//        registerAccount(alpacaAccount);
+//        setActiveAccount(alpacaAccount.getAccountId());
+//        System.out.println("💼 Account Manager initialized with Alpaca live trading account");
+
+
+        // Connect AlphadexTradingAccount
+        AlphadexTradingAccount alphadexAccount = new AlphadexTradingAccount(
+            "slav4ou",
+            "slav4ou",
+            "your-alphadex-api-key",
+            "your-alphadex-api-secret",
+            "http://localhost:4991"
         );
-        registerAccount(alpacaAccount);
-        setActiveAccount(alpacaAccount.getAccountId());
-        System.out.println("💼 Account Manager initialized with Alpaca live trading account");
+        registerAccount(alphadexAccount);
+        setActiveAccount(alphadexAccount.getAccountId());
 
     }
     
@@ -126,6 +138,21 @@ public class AccountManager {
         return accounts.values().stream()
             .filter(a -> a.getAccountType() == AccountType.LIVE_TRADING)
             .toList();
+    }
+    
+    /**
+     * Create a new Alphadex trading account
+     */
+    public TradingAccount createAlphadexAccount(String accountName,
+                                                String apiKey,
+                                                String apiSecret,
+                                                String baseURL) {
+        String accountId = "live-alphadex-" + System.currentTimeMillis();
+        AlphadexTradingAccount account = new AlphadexTradingAccount(
+            accountId, accountName, apiKey, apiSecret, baseURL
+        );
+        registerAccount(account);
+        return account;
     }
     
     /**
