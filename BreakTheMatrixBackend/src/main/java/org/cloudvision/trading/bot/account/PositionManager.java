@@ -176,9 +176,9 @@ public class PositionManager {
                     }
                 }
 
-                System.out.println("📈 Updated " + position.getSymbol() +
-                    " | Current Price: " + currentPrice +
-                    " | Unrealized P&L: " + position.getUnrealizedPnL());
+//                System.out.println("📈 Updated " + position.getSymbol() +
+//                    " | Current Price: " + currentPrice +
+//                    " | Unrealized P&L: " + position.getUnrealizedPnL());
             }
         }
     }

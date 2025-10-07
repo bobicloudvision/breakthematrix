@@ -79,8 +79,8 @@ export function PositionsTab() {
     }
   };
 
-  // Close position by symbol
-  const closePosition = async (symbol, positionId) => {
+  // Close position by symbol and side
+  const closePosition = async (symbol, positionSide, positionId) => {
     try {
       setClosingPositions(prev => new Set([...prev, positionId]));
       
@@ -90,7 +90,10 @@ export function PositionsTab() {
           'Content-Type': 'application/json',
           'accept': '*/*'
         },
-        body: JSON.stringify({ symbol })
+        body: JSON.stringify({ 
+          symbol,
+          positionSide 
+        })
       });
 
       if (response.ok) {
@@ -105,7 +108,7 @@ export function PositionsTab() {
         }
         
         // Show success message (you could add a toast notification here)
-        alert(`Successfully closed ${result.closedPositions} position(s) for ${symbol}\nOrder ID: ${result.orderId}\nQuantity: ${result.totalQuantity}`);
+        alert(`Successfully closed ${result.closedPositions} position(s) for ${symbol} ${positionSide}\nOrder ID: ${result.orderId}\nQuantity: ${result.totalQuantity}`);
       } else {
         const errorText = await response.text();
         console.error('Failed to close position:', response.status, errorText);
@@ -468,7 +471,7 @@ export function PositionsTab() {
               <button
                 onClick={() => {
                   if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
-                    closePosition(position.symbol, position.positionId);
+                    closePosition(position.symbol, position.side, position.positionId);
                   }
                 }}
                 disabled={closingPositions.has(position.positionId)}

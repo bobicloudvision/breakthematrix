@@ -244,6 +244,12 @@ public class PositionsWebSocketHandler extends TextWebSocketHandler {
                 positionData.put("pnLPercentage", position.getPnLPercentage());
                 positionData.put("stopLoss", position.getStopLoss());
                 positionData.put("takeProfit", position.getTakeProfit());
+                
+                // Debug logging to verify SL/TP values
+                if (position.getStopLoss() != null || position.getTakeProfit() != null) {
+                    System.out.println("📊 Position " + position.getPositionId() + " has SL: " + 
+                        position.getStopLoss() + ", TP: " + position.getTakeProfit());
+                }
                 positionData.put("strategyId", position.getStrategyId());
                 positionData.put("isOpen", position.isOpen());
                 positionData.put("durationSeconds", position.getDuration().getSeconds());
