@@ -311,10 +311,10 @@ export function ReplayTab({ provider, symbol, interval }) {
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent mb-2">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-zinc-400 to-zinc-500 bg-clip-text text-transparent mb-2">
             Replay Session
           </h2>
-          <p className="text-slate-400 text-sm">
+          <p className="text-zinc-400 text-sm">
             Create a replay session to simulate historical market data
           </p>
         </div>
@@ -447,20 +447,20 @@ export function ReplayTab({ provider, symbol, interval }) {
 
         {/* Current Settings Display - Only show if no active session */}
         {!activeSession && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
-            <h3 className="text-sm font-medium text-cyan-300 mb-3">Current Settings</h3>
+          <div className="mb-6 p-4 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-lg border border-zinc-500/30">
+            <h3 className="text-sm font-medium text-zinc-300 mb-3">Current Settings</h3>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="text-slate-400">Provider:</span>
-                <span className="ml-2 text-cyan-200 font-medium">{provider || 'Not selected'}</span>
+                <span className="ml-2 text-zinc-200 font-medium">{provider || 'Not selected'}</span>
               </div>
               <div>
                 <span className="text-slate-400">Symbol:</span>
-                <span className="ml-2 text-cyan-200 font-medium">{symbol || 'Not selected'}</span>
+                <span className="ml-2 text-zinc-200 font-medium">{symbol || 'Not selected'}</span>
               </div>
               <div>
                 <span className="text-slate-400">Interval:</span>
-                <span className="ml-2 text-cyan-200 font-medium">{interval || 'Not selected'}</span>
+                <span className="ml-2 text-zinc-200 font-medium">{interval || 'Not selected'}</span>
               </div>
             </div>
           </div>
@@ -471,8 +471,8 @@ export function ReplayTab({ provider, symbol, interval }) {
           <>
             {/* Available Data Display */}
             {loadingAvailableData ? (
-          <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
-            <div className="flex items-center justify-center gap-2 text-cyan-300">
+          <div className="mb-6 p-4 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-lg border border-zinc-500/30">
+            <div className="flex items-center justify-center gap-2 text-zinc-300">
               <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -481,8 +481,8 @@ export function ReplayTab({ provider, symbol, interval }) {
             </div>
           </div>
         ) : availableData && availableData.data && availableData.data.length > 0 ? (
-          <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
-            <h3 className="text-sm font-medium text-cyan-300 mb-3">Available Data ({availableData.totalDataSets} dataset{availableData.totalDataSets !== 1 ? 's' : ''})</h3>
+          <div className="mb-6 p-4 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 rounded-lg border border-zinc-500/30">
+            <h3 className="text-sm font-medium text-zinc-300 mb-3">Available Data ({availableData.totalDataSets} dataset{availableData.totalDataSets !== 1 ? 's' : ''})</h3>
             <div className="space-y-3">
               {availableData.data.map((dataset) => {
                 const isMatchingDataset = dataset.provider === provider && dataset.symbol === symbol && dataset.interval === interval;
@@ -491,32 +491,32 @@ export function ReplayTab({ provider, symbol, interval }) {
                     key={dataset.key}
                     className={`p-3 rounded-lg border ${
                       isMatchingDataset
-                        ? 'bg-cyan-500/10 border-cyan-400/50'
-                        : 'bg-slate-900/30 border-slate-600/30'
+                        ? 'bg-zinc-500/10 border-zinc-400/50'
+                        : 'bg-zinc-900/30 border-zinc-600/30'
                     }`}
                   >
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                       <div>
                         <span className="text-slate-400 block">Provider / Symbol</span>
-                        <span className={`font-medium ${isMatchingDataset ? 'text-cyan-200' : 'text-slate-300'}`}>
+                        <span className={`font-medium ${isMatchingDataset ? 'text-zinc-200' : 'text-zinc-300'}`}>
                           {dataset.provider} / {dataset.symbol}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block">Interval</span>
-                        <span className={`font-medium ${isMatchingDataset ? 'text-cyan-200' : 'text-slate-300'}`}>
+                        <span className={`font-medium ${isMatchingDataset ? 'text-zinc-200' : 'text-zinc-300'}`}>
                           {dataset.interval}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block">Duration / Candles</span>
-                        <span className={`font-medium ${isMatchingDataset ? 'text-cyan-200' : 'text-slate-300'}`}>
+                        <span className={`font-medium ${isMatchingDataset ? 'text-zinc-200' : 'text-zinc-300'}`}>
                           {dataset.duration} / {dataset.candleCount}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block">Time Range</span>
-                        <span className={`font-medium ${isMatchingDataset ? 'text-cyan-200' : 'text-slate-300'}`}>
+                        <span className={`font-medium ${isMatchingDataset ? 'text-zinc-200' : 'text-zinc-300'}`}>
                           {new Date(dataset.startTime).toLocaleString('en-US', { 
                             month: 'short', 
                             day: 'numeric', 
@@ -532,7 +532,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                       </div>
                     </div>
                     {isMatchingDataset && (
-                      <div className="mt-2 text-xs text-cyan-300 flex items-center gap-1">
+                      <div className="mt-2 text-xs text-zinc-300 flex items-center gap-1">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
@@ -548,7 +548,7 @@ export function ReplayTab({ provider, symbol, interval }) {
 
         {/* Time Range Selection */}
         <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
-          <h3 className="text-sm font-medium text-cyan-300 mb-4">Time Range</h3>
+          <h3 className="text-sm font-medium text-zinc-300 mb-4">Time Range</h3>
           
           {/* Quick Time Range Buttons */}
           <div className="mb-4">
@@ -558,7 +558,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                 <button
                   key={hours}
                   onClick={() => setQuickTimeRange(hours)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-slate-700/60 to-slate-600/60 text-slate-300 border border-slate-600/40 hover:from-cyan-500/20 hover:to-blue-500/20 hover:text-cyan-200 hover:border-cyan-500/40 transition-all duration-200"
+                  className="px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-zinc-700/60 to-zinc-600/60 text-zinc-300 border border-zinc-600/40 hover:from-zinc-500/20 hover:to-zinc-600/20 hover:text-zinc-200 hover:border-zinc-500/40 transition-all duration-200"
                 >
                   Last {hours}h
                 </button>
@@ -573,7 +573,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400/50 transition-all duration-200"
+                className="w-full px-3 py-2 bg-zinc-900/50 text-zinc-200 rounded-lg border border-zinc-500/30 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 focus:border-zinc-400/50 transition-all duration-200"
               />
             </div>
             <div>
@@ -582,7 +582,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                 type="datetime-local"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400/50 transition-all duration-200"
+                className="w-full px-3 py-2 bg-zinc-900/50 text-zinc-200 rounded-lg border border-zinc-500/30 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 focus:border-zinc-400/50 transition-all duration-200"
               />
             </div>
           </div>
@@ -590,7 +590,7 @@ export function ReplayTab({ provider, symbol, interval }) {
 
         {/* Speed Control */}
         <div className="mb-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-lg border border-cyan-500/30">
-          <h3 className="text-sm font-medium text-cyan-300 mb-4">Playback Speed</h3>
+          <h3 className="text-sm font-medium text-zinc-300 mb-4">Playback Speed</h3>
           <div className="flex items-center gap-4">
             <input
               type="range"
@@ -599,13 +599,13 @@ export function ReplayTab({ provider, symbol, interval }) {
               step="0.5"
               value={speed}
               onChange={(e) => setSpeed(e.target.value)}
-              className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+              className="flex-1 h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-zinc-500"
             />
-            <div className="min-w-[80px] px-3 py-2 bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 text-center font-mono">
+            <div className="min-w-[80px] px-3 py-2 bg-zinc-900/50 text-zinc-200 rounded-lg border border-zinc-500/30 text-center font-mono">
               {speed}x
             </div>
           </div>
-          <div className="flex justify-between text-xs text-slate-500 mt-2">
+          <div className="flex justify-between text-xs text-zinc-500 mt-2">
             <span>Paused (0x)</span>
             <span>Normal (1x)</span>
             <span>Fast (10x)</span>
@@ -619,8 +619,8 @@ export function ReplayTab({ provider, symbol, interval }) {
             disabled={isLoading || !provider || !symbol || !interval}
             className={`w-full px-6 py-3 text-base font-medium rounded-lg transition-all duration-200 ${
               isLoading || !provider || !symbol || !interval
-                ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
-                : 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20 hover:from-cyan-500/40 hover:to-blue-500/40 hover:shadow-xl hover:shadow-cyan-500/30'
+                ? 'bg-zinc-700/50 text-zinc-500 border border-zinc-600/30 cursor-not-allowed'
+                : 'bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100 border border-zinc-400/50 shadow-lg shadow-zinc-500/20 hover:from-zinc-500/40 hover:to-zinc-600/40 hover:shadow-xl hover:shadow-zinc-500/30'
             }`}
           >
             {isLoading ? (
