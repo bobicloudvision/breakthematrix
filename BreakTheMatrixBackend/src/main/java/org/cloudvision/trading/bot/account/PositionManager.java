@@ -14,6 +14,12 @@ public class PositionManager {
     private final Map<String, Position> openPositions = new ConcurrentHashMap<>();
     private final List<Position> positionHistory = Collections.synchronizedList(new ArrayList<>());
     private PositionCloseListener closeListener;
+    // Stores the most recent prices seen via updatePrices so we can recompute after snapshots
+    private final Map<String, BigDecimal> lastKnownPrices = new ConcurrentHashMap<>();
+    
+    private static String buildKey(String symbol, PositionSide side) {
+        return (symbol == null ? "" : symbol.toUpperCase()) + ":" + (side == null ? "" : side.name());
+    }
     
     /**
      * Replace local open positions with an authoritative snapshot from exchange.
@@ -21,16 +27,54 @@ public class PositionManager {
      */
     public void applyExchangeSnapshot(List<Position> remoteOpenPositions) {
         if (remoteOpenPositions == null) return;
-        Map<String, Position> replacement = new ConcurrentHashMap<>();
-        for (Position p : remoteOpenPositions) {
-            if (p != null && p.isOpen()) {
-                replacement.put(p.getPositionId(), p);
+
+        // Build lookup by (symbol + side) for current local positions to preserve local objects/state
+        Map<String, Position> localByKey = new HashMap<>();
+        for (Position lp : openPositions.values()) {
+            localByKey.put(buildKey(lp.getSymbol(), lp.getSide()), lp);
+        }
+
+        // Track which local positions are seen in remote snapshot
+        Set<String> localIdsToKeep = new HashSet<>();
+
+        Map<String, Position> merged = new ConcurrentHashMap<>();
+
+        // Merge or create positions based on remote snapshot
+        for (Position remote : remoteOpenPositions) {
+            if (remote == null || !remote.isOpen()) continue;
+            String key = buildKey(remote.getSymbol(), remote.getSide());
+            Position local = localByKey.get(key);
+            if (local != null) {
+                // Prefer authoritative remote snapshot for open position state
+                merged.put(remote.getPositionId(), remote);
+                localIdsToKeep.add(local.getPositionId());
+            } else {
+                // No local match: adopt remote as new local open position
+                merged.put(remote.getPositionId(), remote);
             }
         }
+
+        // Any local positions not present in remote snapshot should be force-closed and moved to history
+        for (Position lp : openPositions.values()) {
+            if (localIdsToKeep.contains(lp.getPositionId())) continue;
+            String key = buildKey(lp.getSymbol(), lp.getSide());
+            boolean presentRemotely = remoteOpenPositions.stream()
+                .anyMatch(r -> r != null && r.isOpen() && buildKey(r.getSymbol(), r.getSide()).equals(key));
+            if (!presentRemotely) {
+                // Move local-only open positions into history (treat as closed externally)
+                positionHistory.add(lp);
+            }
+        }
+
         // Atomic-like swap by clearing then putting all; openPositions is a concurrent map
         openPositions.clear();
-        openPositions.putAll(replacement);
-        System.out.println("🔄 Applied exchange snapshot: openPositions=" + openPositions.size());
+        openPositions.putAll(merged);
+        System.out.println("🔄 Applied exchange snapshot (merged): openPositions=" + openPositions.size());
+
+        // Recalculate unrealized PnL using the last known prices but DO NOT trigger SL/TP closes here
+        if (!lastKnownPrices.isEmpty()) {
+            updatePricesInternal(lastKnownPrices, false);
+        }
     }
     
     /**
@@ -91,9 +135,23 @@ public class PositionManager {
      * Update unrealized P&L for all open positions
      */
     public void updatePrices(Map<String, BigDecimal> currentPrices) {
+        updatePricesInternal(currentPrices, true);
+    }
 
+    private void updatePricesInternal(Map<String, BigDecimal> currentPrices, boolean triggerStopsAndTargets) {
+        // Normalize incoming prices to uppercase symbols to avoid casing mismatches
+        Map<String, BigDecimal> normalizedPrices = new HashMap<>();
+        if (currentPrices != null) {
+            for (Map.Entry<String, BigDecimal> e : currentPrices.entrySet()) {
+                if (e.getKey() != null && e.getValue() != null) {
+                    normalizedPrices.put(e.getKey().toUpperCase(), e.getValue());
+                }
+            }
+            lastKnownPrices.clear();
+            lastKnownPrices.putAll(normalizedPrices);
+        }
         for (Position position : openPositions.values()) {
-            BigDecimal currentPrice = currentPrices.get(position.getSymbol());
+            BigDecimal currentPrice = normalizedPrices.get(position.getSymbol());
 
             if (currentPrice != null) {
                 // Update dynamic stop loss and take profit first
@@ -102,20 +160,25 @@ public class PositionManager {
                 // Update unrealized P&L
                 position.updateUnrealizedPnL(currentPrice);
                 
-                // Check stop loss / take profit
-                if (position.isStopLossHit(currentPrice)) {
-                    System.out.println("⛔ Stop Loss hit for " + position.getSymbol() + 
-                        " @ " + currentPrice + " (SL: " + position.getStopLoss() + ")");
-                    closePosition(position.getPositionId(), currentPrice, position.getQuantity());
-                } else if (position.isTakeProfitHit(currentPrice)) {
-                    System.out.println("🎯 Take Profit hit for " + position.getSymbol() + 
-                        " @ " + currentPrice + " (TP: " + position.getTakeProfit() + ")");
-                    closePosition(position.getPositionId(), currentPrice, position.getQuantity());
-                } else {
-                    System.out.println("📈 Updated " + position.getSymbol() +
-                        " | Current Price: " + currentPrice +
-                        " | Unrealized P&L: " + position.getUnrealizedPnL());
+                if (triggerStopsAndTargets) {
+                    // Check stop loss / take profit
+                    if (position.isStopLossHit(currentPrice)) {
+                        System.out.println("⛔ Stop Loss hit for " + position.getSymbol() + 
+                            " @ " + currentPrice + " (SL: " + position.getStopLoss() + ")");
+                        closePosition(position.getPositionId(), currentPrice, position.getQuantity());
+                        continue;
+                    }
+                    if (position.isTakeProfitHit(currentPrice)) {
+                        System.out.println("🎯 Take Profit hit for " + position.getSymbol() + 
+                            " @ " + currentPrice + " (TP: " + position.getTakeProfit() + ")");
+                        closePosition(position.getPositionId(), currentPrice, position.getQuantity());
+                        continue;
+                    }
                 }
+
+                System.out.println("📈 Updated " + position.getSymbol() +
+                    " | Current Price: " + currentPrice +
+                    " | Unrealized P&L: " + position.getUnrealizedPnL());
             }
         }
     }

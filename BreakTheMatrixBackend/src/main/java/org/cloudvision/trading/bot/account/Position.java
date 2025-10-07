@@ -62,8 +62,14 @@ public class Position {
         BigDecimal priceDiff = side == PositionSide.LONG 
             ? currentPrice.subtract(entryPrice)
             : entryPrice.subtract(currentPrice);
+
+        System.out.println("Current price: " + currentPrice);
+        System.out.println("Entry price: " + entryPrice);
+        System.out.println("Price diff: " + priceDiff + ", Quantity: " + quantity);
             
         this.unrealizedPnL = priceDiff.multiply(quantity).setScale(8, RoundingMode.HALF_UP);
+
+        System.out.println("Unrealized PnL updated: " + this.unrealizedPnL);
 
     }
     

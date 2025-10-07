@@ -247,7 +247,11 @@ public class PositionsWebSocketHandler extends TextWebSocketHandler {
                 positionData.put("strategyId", position.getStrategyId());
                 positionData.put("isOpen", position.isOpen());
                 positionData.put("durationSeconds", position.getDuration().getSeconds());
-                
+
+//                System.out.println("   - Position: " + position.getPositionId() + " | Symbol: " + position.getSymbol() +
+//                    " | Side: " + position.getSide() + " | Qty: " + position.getQuantity() +
+//                    " | Entry: " + position.getEntryPrice() + " | Unrealized PnL: " + position.getUnrealizedPnL());
+//
                 positionDataList.add(positionData);
             }
         }
@@ -269,6 +273,8 @@ public class PositionsWebSocketHandler extends TextWebSocketHandler {
         ));
         
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(message)));
+
+//        System.out.println("📤 Sent positions update to session " + session.getId() + " (positions: " + positionDataList.size() + ")");
     }
     
     /**
