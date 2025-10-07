@@ -43,12 +43,12 @@ export const Button = ({
   // Variant styles
   const variantStyles = {
     primary: disabled
-      ? 'bg-slate-700/40 text-slate-500 border-slate-600/40 cursor-not-allowed'
-      : 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border-cyan-400/50 shadow-lg shadow-cyan-500/20 hover:from-cyan-500/40 hover:to-blue-500/40 hover:border-cyan-400/70 hover:shadow-xl hover:shadow-cyan-500/30 active:from-cyan-500/50 active:to-blue-500/50 focus:ring-cyan-500/50',
+      ? 'bg-zinc-700/40 text-zinc-500 border-zinc-600/40 cursor-not-allowed'
+      : 'bg-gradient-to-r from-zinc-800 to-zinc-700 text-zinc-100 border-zinc-600/50 shadow-lg shadow-zinc-900/20 hover:from-zinc-700 hover:to-zinc-600 hover:border-zinc-500/70 hover:shadow-xl hover:shadow-zinc-800/30 active:from-zinc-600 active:to-zinc-500 focus:ring-zinc-500/50',
     
     secondary: disabled
-      ? 'bg-slate-700/40 text-slate-500 border-slate-600/40 cursor-not-allowed'
-      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border-slate-600/40 shadow-md shadow-slate-900/20 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 active:from-slate-700/80 active:to-slate-600/80 focus:ring-slate-500/50',
+      ? 'bg-zinc-700/40 text-zinc-500 border-zinc-600/40 cursor-not-allowed'
+      : 'bg-gradient-to-r from-zinc-900/60 to-zinc-800/60 text-zinc-300 border-zinc-700/40 shadow-md shadow-zinc-950/20 hover:from-zinc-800/80 hover:to-zinc-700/80 hover:text-zinc-200 hover:border-zinc-600/50 hover:shadow-lg hover:shadow-zinc-900/30 active:from-zinc-800 active:to-zinc-700 focus:ring-zinc-500/50',
     
     success: disabled
       ? 'bg-slate-700/40 text-slate-500 border-slate-600/40 cursor-not-allowed'

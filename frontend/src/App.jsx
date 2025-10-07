@@ -350,7 +350,7 @@ export default function App() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top Bar */}
-          <header className="sticky top-0 z-20 w-full border-b border-cyan-500/20 bg-gradient-to-r from-slate-900/90 via-gray-900/90 to-slate-900/90 backdrop-blur-xl shadow-2xl shadow-cyan-500/10">
+          <header className="sticky top-0 z-20 w-full border-b border-zinc-500/20 backdrop-blur-xl shadow-2xl shadow-zinc-500/10">
             <div className="px-4 py-3">
               <div className="flex items-center gap-4">
                 <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
