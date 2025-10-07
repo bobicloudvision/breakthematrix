@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Paper Trading Account
  * Simulates order execution with virtual money
  */
-@Component
+//@Component
 public class PaperTradingAccount implements TradingAccount {
     
     private final String accountId;

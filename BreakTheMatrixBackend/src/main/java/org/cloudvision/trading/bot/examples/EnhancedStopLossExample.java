@@ -21,24 +21,24 @@ public class EnhancedStopLossExample {
     
     public static void main(String[] args) {
         // Create paper trading account
-        PaperTradingAccount account = new PaperTradingAccount();
-        
-        System.out.println("=== Enhanced Stop Loss and Take Profit Example ===\n");
-        
-        // Example 1: Basic fixed stop loss and take profit
-        demonstrateFixedStopLoss(account);
-        
-        // Example 2: Trailing stop loss
-        demonstrateTrailingStopLoss(account);
-        
-        // Example 3: Breakeven stop loss
-        demonstrateBreakevenStopLoss(account);
-        
-        // Example 4: ATR-based stop loss and take profit
-        demonstrateATRBasedStops(account);
-        
-        // Example 5: Dynamic stop loss management
-        demonstrateDynamicStopLossManagement(account);
+//        PaperTradingAccount account = new PaperTradingAccount();
+//
+//        System.out.println("=== Enhanced Stop Loss and Take Profit Example ===\n");
+//
+//        // Example 1: Basic fixed stop loss and take profit
+//        demonstrateFixedStopLoss(account);
+//
+//        // Example 2: Trailing stop loss
+//        demonstrateTrailingStopLoss(account);
+//
+//        // Example 3: Breakeven stop loss
+//        demonstrateBreakevenStopLoss(account);
+//
+//        // Example 4: ATR-based stop loss and take profit
+//        demonstrateATRBasedStops(account);
+//
+//        // Example 5: Dynamic stop loss management
+//        demonstrateDynamicStopLossManagement(account);
     }
     
     /**

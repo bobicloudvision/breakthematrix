@@ -20,11 +20,24 @@ public class AccountManager {
     
     public AccountManager() {
         // Create default paper trading account
-        PaperTradingAccount defaultAccount = new PaperTradingAccount();
-        registerAccount(defaultAccount);
-        setActiveAccount(defaultAccount.getAccountId());
+//        PaperTradingAccount defaultAccount = new PaperTradingAccount();
+//        registerAccount(defaultAccount);
+//        setActiveAccount(defaultAccount.getAccountId());
         
-        System.out.println("💼 Account Manager initialized with default paper trading account");
+//        System.out.println("💼 Account Manager initialized with default paper trading account");
+
+        // Connect AlpacaTradingAccount
+        AlpacaTradingAccount alpacaAccount = new AlpacaTradingAccount(
+            "live-alpaca-001",
+            "Alpaca Live Account",
+            System.getenv("ALPACA_API_KEY"),
+            System.getenv("ALPACA_API_SECRET"),
+            "https://paper-api.alpaca.markets"
+        );
+        registerAccount(alpacaAccount);
+        setActiveAccount(alpacaAccount.getAccountId());
+        System.out.println("💼 Account Manager initialized with Alpaca live trading account");
+
     }
     
     /**
