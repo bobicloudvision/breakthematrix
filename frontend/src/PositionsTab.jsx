@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export function PositionsTab() {
   const [activeSubTab, setActiveSubTab] = useState('active');
@@ -10,6 +11,10 @@ export function PositionsTab() {
   const [wsStatus, setWsStatus] = useState('disconnected'); // disconnected, connecting, connected, error
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [closingPositions, setClosingPositions] = useState(new Set());
+  const [editingPosition, setEditingPosition] = useState(null);
+  const [editStopLoss, setEditStopLoss] = useState('');
+  const [editTakeProfit, setEditTakeProfit] = useState('');
+  const [savingLevels, setSavingLevels] = useState(false);
 
   // Fetch open positions
   const fetchOpenPositions = async () => {
@@ -115,6 +120,106 @@ export function PositionsTab() {
         newSet.delete(positionId);
         return newSet;
       });
+    }
+  };
+
+  // Open edit modal for stop-loss and take-profit
+  const openEditModal = (position) => {
+    setEditingPosition(position);
+    setEditStopLoss(position.stopLoss || '');
+    setEditTakeProfit(position.takeProfit || '');
+  };
+
+  // Close edit modal
+  const closeEditModal = () => {
+    setEditingPosition(null);
+    setEditStopLoss('');
+    setEditTakeProfit('');
+  };
+
+  // Update stop-loss
+  const updateStopLoss = async (positionId, stopLoss) => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/positions/${positionId}/stop-loss?stopLoss=${stopLoss}`, {
+        method: 'POST',
+        headers: {
+          'accept': '*/*'
+        }
+      });
+
+      if (response.ok) {
+        console.log('Stop-loss updated successfully');
+        return true;
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to update stop-loss:', response.status, errorText);
+        throw new Error(errorText || response.statusText);
+      }
+    } catch (error) {
+      console.error('Error updating stop-loss:', error);
+      throw error;
+    }
+  };
+
+  // Update take-profit
+  const updateTakeProfit = async (positionId, takeProfit) => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/positions/${positionId}/take-profit?takeProfit=${takeProfit}`, {
+        method: 'POST',
+        headers: {
+          'accept': '*/*'
+        }
+      });
+
+      if (response.ok) {
+        console.log('Take-profit updated successfully');
+        return true;
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to update take-profit:', response.status, errorText);
+        throw new Error(errorText || response.statusText);
+      }
+    } catch (error) {
+      console.error('Error updating take-profit:', error);
+      throw error;
+    }
+  };
+
+  // Save stop-loss and take-profit levels
+  const saveLevels = async () => {
+    if (!editingPosition) return;
+
+    try {
+      setSavingLevels(true);
+      const promises = [];
+
+      if (editStopLoss && editStopLoss !== editingPosition.stopLoss) {
+        promises.push(updateStopLoss(editingPosition.positionId, parseFloat(editStopLoss)));
+      }
+
+      if (editTakeProfit && editTakeProfit !== editingPosition.takeProfit) {
+        promises.push(updateTakeProfit(editingPosition.positionId, parseFloat(editTakeProfit)));
+      }
+
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        
+        // Refresh positions
+        if (wsStatus === 'connected') {
+          requestPositionsViaWS();
+        } else {
+          fetchOpenPositions();
+        }
+
+        alert('Stop-loss and take-profit updated successfully!');
+        closeEditModal();
+      } else {
+        closeEditModal();
+      }
+    } catch (error) {
+      alert(`Error updating levels: ${error.message}`);
+    } finally {
+      setSavingLevels(false);
     }
   };
 
@@ -352,21 +457,30 @@ export function PositionsTab() {
       {activeSubTab === 'active' && (
         <td className="px-3 py-3 text-center">
           {position.isOpen && (
-            <button
-              onClick={() => {
-                if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
-                  closePosition(position.symbol, position.positionId);
-                }
-              }}
-              disabled={closingPositions.has(position.positionId)}
-              className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 ${
-                closingPositions.has(position.positionId)
-                  ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
-                  : 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 hover:text-red-200'
-              }`}
-            >
-              {closingPositions.has(position.positionId) ? '⏳' : '🔴 Close'}
-            </button>
+            <div className="flex items-center gap-2 justify-center">
+              <button
+                onClick={() => openEditModal(position)}
+                className="px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 hover:text-cyan-200"
+                title="Edit SL/TP"
+              >
+                ⚙️ Edit
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm(`Are you sure you want to close the ${position.symbol} ${position.side} position?\n\nEntry Price: ${formatCurrency(position.entryPrice)}\nQuantity: ${position.quantity}\nCurrent P&L: ${formatCurrency(position.totalPnL)}`)) {
+                    closePosition(position.symbol, position.positionId);
+                  }
+                }}
+                disabled={closingPositions.has(position.positionId)}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 ${
+                  closingPositions.has(position.positionId)
+                    ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                    : 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 hover:text-red-200'
+                }`}
+              >
+                {closingPositions.has(position.positionId) ? '⏳' : '🔴 Close'}
+              </button>
+            </div>
           )}
         </td>
       )}
@@ -551,6 +665,89 @@ export function PositionsTab() {
           </>
         )}
       </div>
+
+      {/* Edit SL/TP Modal */}
+      {editingPosition && createPortal(
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={closeEditModal}>
+          <div className="bg-slate-800 rounded-lg border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-cyan-300">Edit Stop-Loss & Take-Profit</h3>
+              <button
+                onClick={closeEditModal}
+                className="text-slate-400 hover:text-cyan-300 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <div className="text-sm text-slate-400 mb-2">Position</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-cyan-300 font-semibold text-lg">{editingPosition.symbol}</span>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    editingPosition.side === 'LONG' 
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {editingPosition.side}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-slate-400 mb-2">Entry Price</div>
+                <div className="text-cyan-200 font-medium">{formatCurrency(editingPosition.entryPrice)}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Stop Loss</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editStopLoss}
+                  onChange={(e) => setEditStopLoss(e.target.value)}
+                  placeholder="Enter stop loss price"
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg text-cyan-200 placeholder-slate-500 focus:border-red-500/50 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Take Profit</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editTakeProfit}
+                  onChange={(e) => setEditTakeProfit(e.target.value)}
+                  placeholder="Enter take profit price"
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg text-cyan-200 placeholder-slate-500 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={closeEditModal}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-700 hover:text-cyan-200 transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveLevels}
+                disabled={savingLevels}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  savingLevels
+                    ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 hover:shadow-lg hover:shadow-cyan-500/20'
+                }`}
+              >
+                {savingLevels ? '⏳ Saving...' : '💾 Save'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
