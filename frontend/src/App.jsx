@@ -10,6 +10,7 @@ import { PositionsTab } from "./PositionsTab";
 import { IndicatorsTab } from "./IndicatorsTab";
 import { IndicatorConfigModal } from "./IndicatorConfigModal";
 import { ReplayTab } from "./ReplayTab";
+import { ManualTradingTab } from "./ManualTradingTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
@@ -22,13 +23,16 @@ export default function App() {
   const [enabledIndicators, setEnabledIndicators] = useState([]);
   const [bottomBarHeight, setBottomBarHeight] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(380);
   const [isResizingRightSidebar, setIsResizingRightSidebar] = useState(false);
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartWidth, setResizeStartWidth] = useState(0);
   
   // Indicator config in sidebar state
   const [sidebarIndicatorConfig, setSidebarIndicatorConfig] = useState(null);
+  
+  // Right sidebar view state: 'bot' or 'manual'
+  const [rightSidebarView, setRightSidebarView] = useState('bot');
 
   // Load from localStorage on component mount
   useEffect(() => {
@@ -184,8 +188,8 @@ export default function App() {
       const newWidth = resizeStartWidth + deltaX;
       
       // Set min and max width constraints
-      const minWidth = 280;
-      const maxWidth = 800;
+      const minWidth = 320;
+      const maxWidth = 900;
       
       if (newWidth >= minWidth && newWidth <= maxWidth) {
         setRightSidebarWidth(newWidth);
@@ -601,7 +605,40 @@ export default function App() {
               isSidebar={true}
             />
           ) : (
-            <BotControl interval={interval} historicalLimit={1000} />
+            <div className="flex flex-col h-full">
+              {/* Right Sidebar Tabs */}
+              <div className="flex border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 px-4 py-3">
+                <button
+                  onClick={() => setRightSidebarView('bot')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    rightSidebarView === 'bot'
+                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                  }`}
+                >
+                  Bot Control
+                </button>
+                <button
+                  onClick={() => setRightSidebarView('manual')}
+                  className={`flex-1 ml-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    rightSidebarView === 'manual'
+                      ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                      : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+                  }`}
+                >
+                  Manual Trading
+                </button>
+              </div>
+
+              {/* Right Sidebar Content */}
+              <div className="flex-1 overflow-hidden">
+                {rightSidebarView === 'bot' ? (
+                  <BotControl interval={interval} historicalLimit={1000} />
+                ) : (
+                  <ManualTradingTab />
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
