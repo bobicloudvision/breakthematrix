@@ -462,11 +462,49 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public List<Position> getOpenPositions() {
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/positions";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<List<Map<String, Object>>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            List<Map<String, Object>> body = resp.getBody();
+            if (body != null) {
+                return mapRemotePositionsList(body, null);
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch positions: " + e.getMessage());
+        }
         return positionManager.getOpenPositions();
     }
 
     @Override
     public List<Position> getOpenPositionsBySymbol(String symbol) {
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/positions";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<List<Map<String, Object>>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            List<Map<String, Object>> body = resp.getBody();
+            if (body != null) {
+                return mapRemotePositionsList(body, symbol);
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] Failed to fetch positions by symbol: " + e.getMessage());
+        }
         return positionManager.getOpenPositionsBySymbol(symbol);
     }
 
@@ -532,6 +570,27 @@ public class AlphadexTradingAccount implements TradingAccount {
             case BUY -> "LONG";
             case SELL -> "SHORT";
         };
+    }
+
+    private List<Position> mapRemotePositionsList(List<Map<String, Object>> list, String filterSymbol) {
+        List<Position> result = new ArrayList<>();
+        for (Map<String, Object> m : list) {
+            try {
+                boolean closed = m.get("closed") != null && Boolean.parseBoolean(String.valueOf(m.get("closed")));
+                if (closed) continue;
+                String symbol = m.get("symbol") != null ? String.valueOf(m.get("symbol")) : "";
+                if (filterSymbol != null && !filterSymbol.equalsIgnoreCase(symbol)) continue;
+                String sideStr = m.get("side") != null ? String.valueOf(m.get("side")) : "LONG";
+                BigDecimal qty = m.get("quantity") != null ? new BigDecimal(String.valueOf(m.get("quantity"))) : BigDecimal.ZERO;
+                BigDecimal entryPrice = m.get("entryPrice") != null ? new BigDecimal(String.valueOf(m.get("entryPrice"))) : BigDecimal.ZERO;
+
+                PositionSide side = "SHORT".equalsIgnoreCase(sideStr) ? PositionSide.SHORT : PositionSide.LONG;
+                Position p = new Position(symbol, side, entryPrice, qty);
+                result.add(p);
+            } catch (Exception ignored) {
+            }
+        }
+        return result;
     }
 }
 
