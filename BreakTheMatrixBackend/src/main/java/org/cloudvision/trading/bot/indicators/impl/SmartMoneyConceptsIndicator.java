@@ -204,8 +204,8 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
             .required(false)
             .build());
         
-        params.put("swingLength", IndicatorParameter.builder("swingLength")
-            .displayName("Swing Length")
+        params.put("swingsLength", IndicatorParameter.builder("swingsLength")
+            .displayName("Swings Length")
             .description("Lookback period for swing point detection")
             .type(IndicatorParameter.ParameterType.INTEGER)
             .defaultValue(50)
@@ -504,7 +504,7 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
         SMCState state = new SMCState();
         
         if (historicalCandles != null && !historicalCandles.isEmpty()) {
-            int swingLength = getIntParameter(params, "swingLength", 50);
+            int swingsLength = getIntParameter(params, "swingsLength", 50);
             
             // Process each historical candle
             for (CandlestickData candle : historicalCandles) {
@@ -525,12 +525,12 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
                 state.barIndex++;
                 
                 // Detect structures once we have enough data
-                if (state.candleBuffer.size() >= swingLength * 2 + 1) {
+                if (state.candleBuffer.size() >= swingsLength * 2 + 1) {
                     processStructures(state, candle, params);
                 }
                 
                 // Trim buffer to prevent unlimited growth
-                trimBuffers(state, swingLength * 3);
+                trimBuffers(state, swingsLength * 3);
             }
         }
         
@@ -566,8 +566,8 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
         checkOrderBlockMitigation(state, candle, params);
         
         // Trim buffers
-        int swingLength = getIntParameter(params, "swingLength", 50);
-        trimBuffers(state, swingLength * 3);
+        int swingsLength = getIntParameter(params, "swingsLength", 50);
+        trimBuffers(state, swingsLength * 3);
         
         // Build output
         Map<String, Object> output = new HashMap<>();
@@ -638,11 +638,11 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
      * Process market structures (pivots, BOS/CHoCH, order blocks)
      */
     private void processStructures(SMCState state, CandlestickData candle, Map<String, Object> params) {
-        int swingLength = getIntParameter(params, "swingLength", 50);
+        int swingsLength = getIntParameter(params, "swingsLength", 50);
         int equalLength = getIntParameter(params, "equalHighsLowsLength", 3);
         
         // Detect swing structure
-        detectPivots(state, swingLength, false);
+        detectPivots(state, swingsLength, false);
         
         // Detect internal structure (5-bar pivots)
         detectPivots(state, 5, true);
@@ -826,121 +826,176 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
         Pivot low = internal ? state.internalLow : state.swingLow;
         
         BigDecimal close = candle.getClose();
+        BigDecimal open = candle.getOpen();
+        BigDecimal highPrice = candle.getHigh();
+        BigDecimal lowPrice = candle.getLow();
+        
+        // Calculate candle structure for optional filtering (from Pine Script)
+        boolean bullishBar = true;
+        boolean bearishBar = true;
+        
+        if (internal && getBooleanParameter(params, "internalFilterConfluence", false)) {
+            // bullishBar = high - max(close, open) > min(close, open) - low
+            // This checks if lower wick is bigger than upper wick
+            BigDecimal upperWick = highPrice.subtract(close.max(open));
+            BigDecimal lowerWick = close.min(open).subtract(lowPrice);
+            bullishBar = lowerWick.compareTo(upperWick) > 0;
+            
+            // bearishBar = high - max(close, open) < min(close, open) - low
+            // This checks if upper wick is bigger than lower wick
+            bearishBar = upperWick.compareTo(lowerWick) > 0;
+        }
         
         // Check for bullish break (close crosses above pivot high)
         if (high.currentLevel != null && !high.crossed && close.compareTo(high.currentLevel) > 0) {
-            high.crossed = true;
-            
-            // Update trend (BOS if trend continues, CHoCH if trend changes)
+            // Extra condition for internal: ALWAYS check confluence, optionally check candle structure
+            boolean extraCondition = true;
             if (internal) {
-                state.internalTrend = BULLISH;
-            } else {
-                state.swingTrend = BULLISH;
+                // ALWAYS check: Don't create internal OB if internal pivot is same as swing pivot (confluence)
+                // This is the key filter to prevent duplicate order blocks
+                boolean notConfluent = (state.swingHigh.currentLevel == null || 
+                    state.internalHigh.currentLevel == null ||
+                    !state.internalHigh.currentLevel.equals(state.swingHigh.currentLevel));
+                
+                // Apply candle structure filter only if parameter is enabled
+                if (getBooleanParameter(params, "internalFilterConfluence", false)) {
+                    extraCondition = notConfluent && bullishBar;
+                } else {
+                    extraCondition = notConfluent;
+                }
             }
             
-            // Store order block if enabled
-            if ((internal && getBooleanParameter(params, "showInternalOrderBlocks", true)) ||
-                (!internal && getBooleanParameter(params, "showSwingOrderBlocks", false))) {
-                storeOrderBlock(state, high, BULLISH, internal, params);
+            if (extraCondition) {
+                high.crossed = true;
+                
+                // Update trend (BOS if trend continues, CHoCH if trend changes)
+                if (internal) {
+                    state.internalTrend = BULLISH;
+                } else {
+                    state.swingTrend = BULLISH;
+                }
+                
+                // Store order block if enabled
+                if ((internal && getBooleanParameter(params, "showInternalOrderBlocks", true)) ||
+                    (!internal && getBooleanParameter(params, "showSwingOrderBlocks", false))) {
+                    storeOrderBlock(state, high, BULLISH, internal, params);
+                }
             }
         }
         
         // Check for bearish break (close crosses below pivot low)
         if (low.currentLevel != null && !low.crossed && close.compareTo(low.currentLevel) < 0) {
-            low.crossed = true;
-            
-            // Update trend (BOS if trend continues, CHoCH if trend changes)
+            // Extra condition for internal: ALWAYS check confluence, optionally check candle structure
+            boolean extraCondition = true;
             if (internal) {
-                state.internalTrend = BEARISH;
-            } else {
-                state.swingTrend = BEARISH;
+                // ALWAYS check: Don't create internal OB if internal pivot is same as swing pivot (confluence)
+                // This is the key filter to prevent duplicate order blocks
+                boolean notConfluent = (state.swingLow.currentLevel == null || 
+                    state.internalLow.currentLevel == null ||
+                    !state.internalLow.currentLevel.equals(state.swingLow.currentLevel));
+                
+                // Apply candle structure filter only if parameter is enabled
+                if (getBooleanParameter(params, "internalFilterConfluence", false)) {
+                    extraCondition = notConfluent && bearishBar;
+                } else {
+                    extraCondition = notConfluent;
+                }
             }
             
-            // Store order block if enabled
-            if ((internal && getBooleanParameter(params, "showInternalOrderBlocks", true)) ||
-                (!internal && getBooleanParameter(params, "showSwingOrderBlocks", false))) {
-                storeOrderBlock(state, low, BEARISH, internal, params);
+            if (extraCondition) {
+                low.crossed = true;
+                
+                // Update trend (BOS if trend continues, CHoCH if trend changes)
+                if (internal) {
+                    state.internalTrend = BEARISH;
+                } else {
+                    state.swingTrend = BEARISH;
+                }
+                
+                // Store order block if enabled
+                if ((internal && getBooleanParameter(params, "showInternalOrderBlocks", true)) ||
+                    (!internal && getBooleanParameter(params, "showSwingOrderBlocks", false))) {
+                    storeOrderBlock(state, low, BEARISH, internal, params);
+                }
             }
         }
     }
     
     /**
      * Store order block when structure breaks
+     * Matches Pine Script logic: finds extreme between pivot and current bar
      */
     private void storeOrderBlock(SMCState state, Pivot pivot, int bias, boolean internal, Map<String, Object> params) {
-        // Need to find the extreme candle between the pivot and current position
-        // The pivot.barIndex is relative to when pivot was detected (length bars ago)
+        // In Pine Script: they slice parsedHighs/parsedLows from pivot.barIndex to bar_index
+        // and find the max/min in that range
         
-        // Calculate actual indices in the buffer
-        int currentBufferIdx = state.candleBuffer.size() - 1;
+        // Since we trim our arrays, we need to work with buffer-relative indices
+        // The pivot occurred at pivot.barIndex (absolute), current is state.barIndex (absolute)
         
-        // Get swing length to calculate pivot position
-        int swingLength = internal ? 5 : getIntParameter(params, "swingLength", 50);
+        // Calculate how many bars back the pivot was (from current bar index to pivot bar index)
+        int barsBack = state.barIndex - pivot.barIndex;
         
-        // The pivot candle is at buffer index: current - swingLength (since pivot is detected length bars ago)
-        int pivotBufferIdx = Math.max(0, currentBufferIdx - swingLength);
+        // The pivot should be somewhere in our parsedHighs/parsedLows buffer
+        // Since arrays may have been trimmed, calculate position from the end
+        int pivotIdxInBuffer = state.parsedHighs.size() - barsBack - 1;
+        int currentIdxInBuffer = state.parsedHighs.size() - 1;
         
-        // Search range: from pivot to current (exclusive)
-        int startIdx = pivotBufferIdx;
-        int endIdx = currentBufferIdx;
-        
-        if (startIdx >= endIdx || startIdx < 0 || endIdx >= state.candleBuffer.size()) {
+        // Validate indices
+        if (pivotIdxInBuffer < 0 || pivotIdxInBuffer >= state.parsedHighs.size() ||
+            currentIdxInBuffer < 0 || currentIdxInBuffer >= state.parsedHighs.size() ||
+            pivotIdxInBuffer >= currentIdxInBuffer) {
             return;
         }
         
-        // Find the extreme candle in the range
-        int extremeIdx = startIdx;
+        // Find the extreme index in the range [pivotIdx, currentIdx)
+        int extremeIdx = pivotIdxInBuffer;
+        
         if (bias == BEARISH) {
-            // For bearish OB, find the highest high in the range
-            BigDecimal maxHigh = state.candleBuffer.get(startIdx).getHigh();
-            for (int i = startIdx + 1; i < endIdx; i++) {
-                BigDecimal currentHigh = state.candleBuffer.get(i).getHigh();
-                if (currentHigh.compareTo(maxHigh) > 0) {
-                    maxHigh = currentHigh;
+            // Find highest parsed high in range
+            BigDecimal maxHigh = state.parsedHighs.get(pivotIdxInBuffer);
+            for (int i = pivotIdxInBuffer + 1; i < currentIdxInBuffer; i++) {
+                if (state.parsedHighs.get(i).compareTo(maxHigh) > 0) {
+                    maxHigh = state.parsedHighs.get(i);
                     extremeIdx = i;
                 }
             }
         } else {
-            // For bullish OB, find the lowest low in the range
-            BigDecimal minLow = state.candleBuffer.get(startIdx).getLow();
-            for (int i = startIdx + 1; i < endIdx; i++) {
-                BigDecimal currentLow = state.candleBuffer.get(i).getLow();
-                if (currentLow.compareTo(minLow) < 0) {
-                    minLow = currentLow;
+            // Find lowest parsed low in range
+            BigDecimal minLow = state.parsedLows.get(pivotIdxInBuffer);
+            for (int i = pivotIdxInBuffer + 1; i < currentIdxInBuffer; i++) {
+                if (state.parsedLows.get(i).compareTo(minLow) < 0) {
+                    minLow = state.parsedLows.get(i);
                     extremeIdx = i;
                 }
             }
         }
         
-        // Get the candle at extreme index
-        CandlestickData extremeCandle = state.candleBuffer.get(extremeIdx);
-        
-        // Use parsed highs/lows if available (filters out high volatility bars)
-        BigDecimal obHigh = extremeCandle.getHigh();
-        BigDecimal obLow = extremeCandle.getLow();
-        
-        // Apply parsed values if we have them and they're different
-        int parsedIdx = extremeIdx - (state.candleBuffer.size() - state.parsedHighs.size());
-        if (parsedIdx >= 0 && parsedIdx < state.parsedHighs.size()) {
-            obHigh = state.parsedHighs.get(parsedIdx);
-            obLow = state.parsedLows.get(parsedIdx);
-        }
-        
+        // Create order block using the extreme point
         OrderBlock ob = new OrderBlock(
-            obHigh,
-            obLow,
-            extremeCandle.getCloseTime(),
+            state.parsedHighs.get(extremeIdx),
+            state.parsedLows.get(extremeIdx),
+            state.times.get(extremeIdx),
             bias
         );
         
         List<OrderBlock> blocks = internal ? state.internalOrderBlocks : state.swingOrderBlocks;
-        blocks.add(0, ob); // Add to front
         
-        // Limit size to prevent unlimited growth
-        int maxSize = internal ? 
-            getIntParameter(params, "internalOrderBlocksSize", 5) * 3 :
-            getIntParameter(params, "swingOrderBlocksSize", 5) * 3;
-        while (blocks.size() > maxSize) {
+        // Only add if we don't already have a very similar order block
+        boolean isDuplicate = false;
+        for (OrderBlock existing : blocks) {
+            if (existing.high.subtract(ob.high).abs().compareTo(new BigDecimal("0.0001")) < 0 &&
+                existing.low.subtract(ob.low).abs().compareTo(new BigDecimal("0.0001")) < 0) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (!isDuplicate) {
+            blocks.add(0, ob); // Add to front
+        }
+        
+        // Limit size - keep max 100 like in Pine Script
+        while (blocks.size() > 100) {
             blocks.remove(blocks.size() - 1);
         }
     }
@@ -1261,8 +1316,8 @@ public class SmartMoneyConceptsIndicator extends AbstractIndicator {
     @Override
     public int getMinRequiredCandles(Map<String, Object> params) {
         params = mergeWithDefaults(params);
-        int swingLength = getIntParameter(params, "swingLength", 50);
-        return swingLength * 2 + 100; // Need enough for structure + ATR calculation
+        int swingsLength = getIntParameter(params, "swingsLength", 50);
+        return swingsLength * 2 + 100; // Need enough for structure + ATR calculation
     }
 }
 
