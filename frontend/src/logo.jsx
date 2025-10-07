@@ -24,8 +24,8 @@ const SVGLogo = (props) => (
         y2={49.5}
         gradientUnits="userSpaceOnUse"
       >
-        <stop stopColor="#8877DF" />
-        <stop offset={1} stopColor="#1B1243" />
+        <stop stopColor="#1f8bab" />
+        <stop offset={1} stopColor="#1f8bab" />
       </linearGradient>
       <linearGradient
         id="paint1_linear_1_2"
