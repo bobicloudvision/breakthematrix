@@ -311,7 +311,7 @@ export function ReplayTab({ provider, symbol, interval }) {
     <div className="h-full overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-zinc-400 to-zinc-500 bg-clip-text text-transparent mb-2">
+          <h2 className="text-2xl font-bold text-zinc-300 mb-2">
             Replay Session
           </h2>
           <p className="text-zinc-400 text-sm">
@@ -321,7 +321,7 @@ export function ReplayTab({ provider, symbol, interval }) {
 
         {/* Active Session Controls */}
         {activeSession && sessionStatus && (
-          <div className="mb-6 p-6 bg-gradient-to-r from-zinc-900/30 to-blue-900/30 rounded-lg border border-zinc-500/10 shadow-lg shadow-zinc-500/20">
+          <div className="mb-6 p-6 bg-gradient-to-r from-zinc-900/30 to-blue-900/30 rounded-xl shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
