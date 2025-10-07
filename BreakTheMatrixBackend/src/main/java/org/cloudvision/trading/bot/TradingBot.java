@@ -413,6 +413,9 @@ public class TradingBot {
      * This updates unrealized P&L for open positions
      */
     private void updateAccountPrices(TradingData data) {
+
+//        System.out.println("🔄 Updating account prices for " + data.getSymbol());
+
         // Extract current price from the data
         java.math.BigDecimal currentPrice = null;
         String symbol = data.getSymbol();
@@ -427,10 +430,12 @@ public class TradingBot {
                 }
                 break;
             default:
+                System.err.println("Unknown trading type " + data.getType());
                 return; // Unknown data type
         }
         
         if (currentPrice == null) {
+            System.err.println("Current price is null");
             return;
         }
         

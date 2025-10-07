@@ -54,6 +54,31 @@ public class AlphadexTradingAccount implements TradingAccount {
         System.out.println("🔗 Alphadex Trading Account created: " + accountName +
                 " (Base URL: " + baseURL + ")");
         System.out.println("⚠️ LIVE/PAPER TRADING - VERIFY KEYS AND SETTINGS BEFORE ENABLING");
+
+        // Wire local risk-manager triggered closes to exchange close orders
+        this.positionManager.setPositionCloseListener((position, realizedPnL, closePrice, closedQuantity) -> {
+            try {
+                // Build a market order to close the position on the exchange
+                org.cloudvision.trading.bot.model.OrderSide side =
+                        position.getSide() == PositionSide.LONG
+                                ? org.cloudvision.trading.bot.model.OrderSide.SELL
+                                : org.cloudvision.trading.bot.model.OrderSide.BUY;
+                org.cloudvision.trading.bot.model.Order closeOrder = new org.cloudvision.trading.bot.model.Order(
+                        java.util.UUID.randomUUID().toString(),
+                        position.getSymbol(),
+                        org.cloudvision.trading.bot.model.OrderType.MARKET,
+                        side,
+                        closedQuantity,
+                        null,
+                        "risk-manager"
+                );
+                // Associate futures side for clarity
+                closeOrder.setPositionSide(position.getSide());
+                executeOrder(closeOrder);
+            } catch (Exception e) {
+                System.err.println("⚠️ [ALPHADEX] Failed to submit close order for risk event: " + e.getMessage());
+            }
+        });
     }
 
     @Override
@@ -117,6 +142,8 @@ public class AlphadexTradingAccount implements TradingAccount {
                 }
             }
 
+            // Read-after-write sync to reconcile local cache with exchange
+            try { syncFromExchange(); } catch (Exception ignored) {}
             return order;
         } catch (Exception e) {
             System.err.println("❌ [ALPHADEX] Order error: " + e.getMessage());
@@ -139,6 +166,8 @@ public class AlphadexTradingAccount implements TradingAccount {
                 o.setStatus(OrderStatus.CANCELLED);
             }
             System.out.println("✅ [ALPHADEX] Cancelled order: " + orderId);
+            // Read-after-write sync to reconcile local cache with exchange
+            try { syncFromExchange(); } catch (Exception ignored) {}
             return true;
         } catch (Exception e) {
             System.err.println("❌ [ALPHADEX] Cancel order error: " + e.getMessage());
@@ -375,6 +404,9 @@ public class AlphadexTradingAccount implements TradingAccount {
                     return equity.subtract(balance);
                 }
             }
+
+            System.out.println("⚠️ [ALPHADEX] getTotalPnL: unable to compute PnL from summary");
+
             return BigDecimal.ZERO;
         } catch (Exception e) {
             System.err.println("⚠️ [ALPHADEX] Failed to fetch total PnL: " + e.getMessage());
@@ -525,7 +557,36 @@ public class AlphadexTradingAccount implements TradingAccount {
 
     @Override
     public void updateCurrentPrices(Map<String, BigDecimal> currentPrices) {
+
+//        System.out.println("AlphadexTradingAccount.updateCurrentPrices called with prices: " + currentPrices);
+
         positionManager.updatePrices(currentPrices);
+    }
+
+    /**
+     * Fetch open positions from Alphadex and atomically apply as authoritative snapshot.
+     */
+    public void syncFromExchange() {
+        try {
+            String url = normalizeBaseUrl(baseURL) + "/api/accounts/" + accountId + "/positions";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-API-KEY", apiKey);
+            headers.set("X-API-SECRET", apiSecret);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<List<Map<String, Object>>> resp = http.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            List<Map<String, Object>> body = resp.getBody();
+            if (body != null) {
+                List<Position> remote = mapRemotePositionsList(body, null);
+                positionManager.applyExchangeSnapshot(remote);
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ [ALPHADEX] syncFromExchange failed: " + e.getMessage());
+        }
     }
 
     private static String normalizeBaseUrl(String url) {

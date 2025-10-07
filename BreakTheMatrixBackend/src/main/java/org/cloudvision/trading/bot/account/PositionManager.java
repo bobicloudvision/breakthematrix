@@ -16,6 +16,24 @@ public class PositionManager {
     private PositionCloseListener closeListener;
     
     /**
+     * Replace local open positions with an authoritative snapshot from exchange.
+     * This is an atomic copy-and-swap to minimize race conditions.
+     */
+    public void applyExchangeSnapshot(List<Position> remoteOpenPositions) {
+        if (remoteOpenPositions == null) return;
+        Map<String, Position> replacement = new ConcurrentHashMap<>();
+        for (Position p : remoteOpenPositions) {
+            if (p != null && p.isOpen()) {
+                replacement.put(p.getPositionId(), p);
+            }
+        }
+        // Atomic-like swap by clearing then putting all; openPositions is a concurrent map
+        openPositions.clear();
+        openPositions.putAll(replacement);
+        System.out.println("🔄 Applied exchange snapshot: openPositions=" + openPositions.size());
+    }
+    
+    /**
      * Open a new position
      */
     public Position openPosition(String symbol, PositionSide side, BigDecimal entryPrice, BigDecimal quantity) {
@@ -73,8 +91,10 @@ public class PositionManager {
      * Update unrealized P&L for all open positions
      */
     public void updatePrices(Map<String, BigDecimal> currentPrices) {
+
         for (Position position : openPositions.values()) {
             BigDecimal currentPrice = currentPrices.get(position.getSymbol());
+
             if (currentPrice != null) {
                 // Update dynamic stop loss and take profit first
                 position.updateStopLossAndTakeProfit(currentPrice);
@@ -91,6 +111,10 @@ public class PositionManager {
                     System.out.println("🎯 Take Profit hit for " + position.getSymbol() + 
                         " @ " + currentPrice + " (TP: " + position.getTakeProfit() + ")");
                     closePosition(position.getPositionId(), currentPrice, position.getQuantity());
+                } else {
+                    System.out.println("📈 Updated " + position.getSymbol() +
+                        " | Current Price: " + currentPrice +
+                        " | Unrealized P&L: " + position.getUnrealizedPnL());
                 }
             }
         }

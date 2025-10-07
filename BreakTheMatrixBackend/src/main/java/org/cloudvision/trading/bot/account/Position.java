@@ -64,6 +64,7 @@ public class Position {
             : entryPrice.subtract(currentPrice);
             
         this.unrealizedPnL = priceDiff.multiply(quantity).setScale(8, RoundingMode.HALF_UP);
+
     }
     
     /**
@@ -361,7 +362,7 @@ public class Position {
     }
     
     public String getSymbol() {
-        return symbol;
+        return symbol.toUpperCase();
     }
     
     public PositionSide getSide() {
