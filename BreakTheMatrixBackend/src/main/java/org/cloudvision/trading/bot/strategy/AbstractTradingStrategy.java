@@ -6,8 +6,6 @@ import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.model.OrderSide;
 import org.cloudvision.trading.bot.model.OrderType;
 import org.cloudvision.trading.model.CandlestickData;
-import org.cloudvision.trading.model.TradingData;
-import org.cloudvision.trading.model.TradingDataType;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
@@ -18,6 +16,11 @@ import java.util.*;
 /**
  * Abstract base class for trading strategies
  * Provides common functionality like price extraction, history management, and order creation
+ * 
+ * Uses event-driven architecture matching the Indicator pattern:
+ * - onInit() initializes strategy state with historical data
+ * - onNewCandle() processes each closed candle
+ * - onNewTick() handles real-time price updates (optional)
  */
 public abstract class AbstractTradingStrategy implements TradingStrategy {
     
@@ -43,76 +46,190 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     
     // Timestamp of last data point for each symbol
     protected final Map<String, Instant> lastUpdateTime = new HashMap<>();
-
+    
+    // Event-driven state management - tracks state per symbol
+    protected final Map<String, Object> strategyStateBySymbol = new HashMap<>();
+    
+    // Strategy parameters (from config)
+    protected Map<String, Object> strategyParams = new HashMap<>();
+    
+    // ============================================================
+    // EVENT-DRIVEN LIFECYCLE METHODS
+    // ============================================================
+    
     @Override
-    public final List<Order> analyze(TradingData data) {
-        if (!enabled) {
-            return Collections.emptyList();
-        }
-
-        // Extract price and validate data
-        PriceData priceData = extractPriceData(data);
-        if (priceData == null || priceData.price == null) {
-            // Data filtered (likely unclosed candle) - this is normal
-            return Collections.emptyList();
-        }
-
-        // Track provider and interval for this symbol (for reading from history service)
-        if (data.getCandlestickData() != null) {
-            symbolProviders.put(priceData.symbol, data.getProvider());
-            symbolIntervals.put(priceData.symbol, data.getCandlestickData().getInterval());
-        }
-        
-        lastUpdateTime.put(priceData.symbol, priceData.timestamp);
-
-        // Call strategy-specific analysis
-        return analyzePrice(priceData);
-    }
-
-    /**
-     * Strategy-specific analysis logic
-     * Subclasses implement this to define their trading logic
-     */
-    protected abstract List<Order> analyzePrice(PriceData priceData);
-
-    /**
-     * Extract price data from TradingData
-     * Handles both TICKER and KLINE data types
-     */
-    protected PriceData extractPriceData(TradingData data) {
-        String symbol = data.getSymbol();
-        BigDecimal price = null;
-        Instant timestamp = data.getTimestamp();
-        boolean isClosed = true;
-
-        switch (data.getType()) {
-            case TICKER:
-                price = data.getPrice();
-                break;
-            case KLINE:
-                if (data.getCandlestickData() != null) {
-                    CandlestickData candle = data.getCandlestickData();
-                    price = candle.getClose();
-                    timestamp = candle.getCloseTime();
-                    isClosed = candle.isClosed();
-                    
-                    // Only process closed candles for strategy decisions
-                    // This is intentional - strategies should only act on confirmed candle closes
-                    if (!isClosed) {
-                        return null; // Silently skip unclosed candles
-                    }
-                }
-                break;
-            default:
-                return null;
-        }
-
-        if (price == null) {
+    public Object onInit(List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        if (historicalCandles == null || historicalCandles.isEmpty()) {
+            System.out.println("⚠️ No historical data provided for onInit() in " + getStrategyName());
             return null;
         }
-
-        return new PriceData(symbol, price, timestamp, data.getType(), data);
+        
+        System.out.println("🔄 onInit() called for " + getStrategyName() + " with " + 
+                         historicalCandles.size() + " historical candles");
+        
+        // Merge params with config parameters (params take precedence)
+        this.strategyParams = new HashMap<>();
+        if (config != null && config.getParameters() != null) {
+            this.strategyParams.putAll(config.getParameters());
+        }
+        if (params != null) {
+            this.strategyParams.putAll(params);
+        }
+        
+        // Group data by symbol
+        Map<String, List<CandlestickData>> dataBySymbol = new HashMap<>();
+        for (CandlestickData candle : historicalCandles) {
+            dataBySymbol.computeIfAbsent(candle.getSymbol(), k -> new ArrayList<>()).add(candle);
+        }
+        
+        // Initialize state for each symbol
+        for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            List<CandlestickData> candles = entry.getValue();
+            
+            // Sort by openTime
+            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
+            
+            // Track provider and interval
+            if (!candles.isEmpty()) {
+                CandlestickData firstCandle = candles.get(0);
+                symbolProviders.put(symbol, firstCandle.getProvider());
+                symbolIntervals.put(symbol, firstCandle.getInterval());
+            }
+            
+            // Call strategy-specific initialization for this symbol
+            Object initialState = onSymbolInit(symbol, candles, params);
+            strategyStateBySymbol.put(symbol, initialState);
+            
+            System.out.println("✅ Initialized state for " + symbol + " with " + candles.size() + " candles");
+        }
+        
+        // For strategies that need a single global state, they can override this
+        // Most strategies will use per-symbol state
+        return null;
     }
+    
+    @Override
+    public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+        if (!enabled) {
+            return Map.of(
+                "orders", Collections.emptyList(),
+                "state", state
+            );
+        }
+        
+        String symbol = candle.getSymbol();
+        
+        // Only process closed candles
+        if (!candle.isClosed()) {
+            return Map.of(
+                "orders", Collections.emptyList(),
+                "state", strategyStateBySymbol.getOrDefault(symbol, state)
+            );
+        }
+        
+        // Track provider and interval
+        symbolProviders.put(symbol, candle.getProvider());
+        symbolIntervals.put(symbol, candle.getInterval());
+        lastUpdateTime.put(symbol, candle.getCloseTime());
+        
+        // Get current state for this symbol
+        Object currentState = strategyStateBySymbol.getOrDefault(symbol, state);
+        
+        // Call strategy-specific candle processing
+        Map<String, Object> result = onCandleClosed(symbol, candle, params, currentState);
+        
+        // Update state for this symbol
+        Object newState = result.getOrDefault("state", currentState);
+        strategyStateBySymbol.put(symbol, newState);
+        
+        // Ensure orders key exists
+        if (!result.containsKey("orders")) {
+            result.put("orders", Collections.emptyList());
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> onNewTick(String symbol, BigDecimal price, Map<String, Object> params, Object state) {
+        if (!enabled) {
+            return Map.of(
+                "orders", Collections.emptyList(),
+                "state", state
+            );
+        }
+        
+        // Get current state for this symbol
+        Object currentState = strategyStateBySymbol.getOrDefault(symbol, state);
+        
+        // Call strategy-specific tick processing (most strategies won't override this)
+        Map<String, Object> result = onTickUpdate(symbol, price, params, currentState);
+        
+        // Update state if changed
+        Object newState = result.getOrDefault("state", currentState);
+        strategyStateBySymbol.put(symbol, newState);
+        
+        // Ensure orders key exists
+        if (!result.containsKey("orders")) {
+            result.put("orders", Collections.emptyList());
+        }
+        
+        return result;
+    }
+    
+    // ============================================================
+    // STRATEGY-SPECIFIC ABSTRACT METHODS (Subclasses implement these)
+    // ============================================================
+    
+    /**
+     * Initialize state for a specific symbol with historical data
+     * Subclasses override this to set up indicator buffers, calculate initial values, etc.
+     * 
+     * @param symbol The trading symbol
+     * @param historicalCandles Historical candles for this symbol (sorted chronologically)
+     * @param params Strategy configuration parameters
+     * @return Initial state object for this symbol (can be null)
+     */
+    protected abstract Object onSymbolInit(String symbol, List<CandlestickData> historicalCandles, Map<String, Object> params);
+    
+    /**
+     * Process a closed candle and generate trading orders
+     * This is the core strategy logic that subclasses must implement
+     * 
+     * @param symbol Trading symbol
+     * @param candle Closed candlestick data
+     * @param params Strategy configuration parameters
+     * @param state Current state for this symbol
+     * @return Map containing:
+     *   - "orders": List<Order> - Orders to execute (required)
+     *   - "state": Updated state for next call (optional)
+     *   - "indicators": Map<String, BigDecimal> - Indicator values for charts (optional)
+     *   - "signals": Map<String, Object> - Additional signal data (optional)
+     */
+    protected abstract Map<String, Object> onCandleClosed(String symbol, CandlestickData candle, Map<String, Object> params, Object state);
+    
+    /**
+     * Process a price tick (optional - override if needed for intra-candle updates)
+     * Default implementation returns empty orders
+     * 
+     * @param symbol Trading symbol
+     * @param price Current tick price
+     * @param params Strategy configuration parameters
+     * @param state Current state for this symbol
+     * @return Map containing orders and updated state
+     */
+    protected Map<String, Object> onTickUpdate(String symbol, BigDecimal price, Map<String, Object> params, Object state) {
+        // Default: do nothing on ticks
+        return Map.of(
+            "orders", Collections.emptyList(),
+            "state", state
+        );
+    }
+    
+    // ============================================================
+    // UTILITY METHODS FOR STRATEGY IMPLEMENTATIONS
+    // ============================================================
 
     /**
      * Get price history for a symbol from centralized storage
@@ -142,10 +259,10 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
     
     /**
-     * Get price history for a symbol (uses default max history size)
+     * Get price history for a symbol (uses minimum required candles)
      */
     protected List<BigDecimal> getPriceHistory(String symbol) {
-        return getPriceHistory(symbol, getMaxHistorySize());
+        return getPriceHistory(symbol, getMinRequiredCandles());
     }
     
     /**
@@ -341,63 +458,12 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         return symbol;
     }
 
+    
     @Override
-    public void bootstrapWithHistoricalData(List<CandlestickData> historicalData) {
-        if (historicalData == null || historicalData.isEmpty()) {
-            System.out.println("⚠️ No historical data provided for bootstrapping " + getStrategyName());
-            return;
-        }
-        
-        System.out.println("🔄 Bootstrapping " + getStrategyName() + " with " + 
-                         historicalData.size() + " historical candles...");
-        
-        // Group data by symbol
-        Map<String, List<CandlestickData>> dataBySymbol = new HashMap<>();
-        for (CandlestickData candle : historicalData) {
-            dataBySymbol.computeIfAbsent(candle.getSymbol(), k -> new ArrayList<>()).add(candle);
-        }
-        
-        // Process each symbol's historical data
-        for (Map.Entry<String, List<CandlestickData>> entry : dataBySymbol.entrySet()) {
-            String symbol = entry.getKey();
-            List<CandlestickData> candles = entry.getValue();
-            
-            // Sort by openTime to match CandlestickHistoryService storage order
-            candles.sort(Comparator.comparing(CandlestickData::getOpenTime));
-            
-            // Track provider and interval for this symbol
-            if (!candles.isEmpty()) {
-                CandlestickData firstCandle = candles.get(0);
-                symbolProviders.put(symbol, firstCandle.getProvider());
-                symbolIntervals.put(symbol, firstCandle.getInterval());
-                System.out.println("✅ " + symbol + " tracked with provider=" + firstCandle.getProvider() + 
-                                 ", interval=" + firstCandle.getInterval() + 
-                                 " (" + candles.size() + " historical candles available in centralized storage)");
-            }
-        }
-        
-        // Allow strategy-specific bootstrap logic
-        onBootstrapComplete(dataBySymbol);
-        
-        bootstrapped = true;
-        System.out.println("✅ " + getStrategyName() + " bootstrapping complete!");
-    }
-
-    /**
-     * Called after bootstrap is complete
-     * Subclasses can override to perform additional initialization
-     */
-    protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
-        // Default implementation does nothing
-        // Subclasses can override to calculate initial indicators
-    }
-
-    /**
-     * Get the maximum size of price history to maintain
-     * Subclasses can override to specify their requirements
-     */
-    protected int getMaxHistorySize() {
-        return 200; // Default: keep last 200 prices
+    public int getMinRequiredCandles() {
+        // Default: require 200 candles for initialization
+        // Subclasses should override to specify their actual requirements
+        return 200;
     }
 
     @Override
@@ -411,10 +477,17 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     }
 
     @Override
-    public void initialize(StrategyConfig config) {
+    public void setConfig(StrategyConfig config) {
         this.config = config;
-        this.stats = new StrategyStats();
-        System.out.println("Initialized " + getStrategyName());
+        if (this.stats == null) {
+            this.stats = new StrategyStats();
+        }
+        System.out.println("📝 Config set for " + getStrategyName());
+    }
+    
+    @Override
+    public StrategyConfig getConfig() {
+        return config;
     }
 
     @Override
@@ -430,96 +503,6 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     @Override
     public StrategyStats getStats() {
         return stats;
-    }
-
-    /**
-     * Inner class to hold extracted price data
-     */
-    protected static class PriceData {
-        public final String symbol;
-        public final BigDecimal price;
-        public final Instant timestamp;
-        public final TradingDataType dataType;
-        public final TradingData rawData;
-
-        public PriceData(String symbol, BigDecimal price, Instant timestamp, 
-                        TradingDataType dataType, TradingData rawData) {
-            this.symbol = symbol;
-            this.price = price;
-            this.timestamp = timestamp;
-            this.dataType = dataType;
-            this.rawData = rawData;
-        }
-    }
-    
-    /**
-     * Extract volume and open price from PriceData (if available)
-     * Returns a map with "volume" and "openPrice" keys (may be null)
-     */
-    protected Map<String, BigDecimal> extractVolumeAndOpen(PriceData priceData) {
-        Map<String, BigDecimal> result = new HashMap<>();
-        
-        if (priceData.rawData != null && priceData.rawData.getCandlestickData() != null) {
-            CandlestickData candle = priceData.rawData.getCandlestickData();
-            result.put("volume", candle.getVolume());
-            result.put("openPrice", candle.getOpen());
-        } else {
-            result.put("volume", null);
-            result.put("openPrice", null);
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Get standard volume indicator metadata for visualization
-     * Returns volume as a histogram in a separate pane
-     * 
-     * @param paneOrder The pane order for the volume indicator (default: 1)
-     */
-    protected IndicatorMetadata getVolumeIndicatorMetadata(int paneOrder) {
-        return IndicatorMetadata.builder("volume")
-            .displayName("Volume")
-            .asHistogram("#26a69a")
-            .addConfig("priceFormat", Map.of("type", "volume"))
-            .addConfig("priceScaleId", "volume")
-            .separatePane(true)
-            .paneOrder(paneOrder)
-            .build();
-    }
-    
-    /**
-     * Get standard volume indicator metadata (with default pane order = 1)
-     */
-    protected IndicatorMetadata getVolumeIndicatorMetadata() {
-        return getVolumeIndicatorMetadata(1);
-    }
-    
-    /**
-     * Add volume to indicators map with proper coloring based on candle direction
-     * Green for bullish candles (close >= open), red for bearish
-     * 
-     * @param indicators The indicators map to add volume to
-     * @param signals The signals map to add volume color information to
-     * @param volume The volume value
-     * @param currentPrice The closing price
-     * @param openPrice The opening price
-     */
-    protected void addVolumeIndicator(Map<String, BigDecimal> indicators, 
-                                     Map<String, Object> signals,
-                                     BigDecimal volume, 
-                                     BigDecimal currentPrice, 
-                                     BigDecimal openPrice) {
-        if (volume != null) {
-            indicators.put("volume", volume);
-            
-            // Add volume color information (for coloring volume bars)
-            if (openPrice != null) {
-                // Green for bullish candles (close >= open), red for bearish (close < open)
-                String volumeColor = currentPrice.compareTo(openPrice) >= 0 ? "#26a69a" : "#ef5350";
-                signals.put("volumeColor", volumeColor);
-            }
-        }
     }
 
     @Override
@@ -542,6 +525,10 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
         symbolIntervals.clear();
         lastSignal.clear();
         lastUpdateTime.clear();
+        
+        // Clear event-driven state management
+        strategyStateBySymbol.clear();
+        strategyParams.clear();
         
         // Reset bootstrapped flag
         bootstrapped = false;

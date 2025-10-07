@@ -91,11 +91,15 @@ public class TradingBot {
             return;
         }
 
-        // Process data through all enabled strategies
+        // Process data through all enabled strategies using event-driven methods
         for (TradingStrategy strategy : strategies) {
             if (strategy.isEnabled() && strategyStatus.getOrDefault(strategy.getStrategyId(), true)) {
                 try {
-                    List<Order> orders = strategy.analyze(data);
+                    // Call appropriate event-driven method based on data type
+                    Map<String, Object> result = processStrategyEvent(strategy, data);
+                    
+                    // Extract orders from result
+                    List<Order> orders = extractOrders(result);
                     
                     // Log when strategy generates orders
                     if (!orders.isEmpty()) {
@@ -138,6 +142,63 @@ public class TradingBot {
         }
     }
 
+    /**
+     * Process a strategy event by calling the appropriate event-driven method
+     */
+    private Map<String, Object> processStrategyEvent(TradingStrategy strategy, TradingData data) {
+        String symbol = data.getSymbol();
+        
+        switch (data.getType()) {
+            case KLINE:
+                if (data.getCandlestickData() != null) {
+                    CandlestickData candle = data.getCandlestickData();
+                    // Get strategy params (empty map if not available)
+                    Map<String, Object> params = new java.util.HashMap<>();
+                    return strategy.onNewCandle(candle, params, null);
+                }
+                break;
+                
+            case TICKER:
+                if (data.getPrice() != null) {
+                    // Get strategy params (empty map if not available)
+                    Map<String, Object> params = new java.util.HashMap<>();
+                    return strategy.onNewTick(symbol, data.getPrice(), params, null);
+                }
+                break;
+                
+            default:
+                // Other data types not yet supported for trading
+                break;
+        }
+        
+        // Return empty result if no event was processed
+        return Map.of("orders", List.of());
+    }
+    
+    /**
+     * Extract orders from strategy result with safe type checking
+     */
+    private List<Order> extractOrders(Map<String, Object> result) {
+        if (result == null) {
+            return List.of();
+        }
+        
+        Object ordersObj = result.get("orders");
+        if (ordersObj instanceof List<?>) {
+            List<?> ordersList = (List<?>) ordersObj;
+            if (ordersList.isEmpty()) {
+                return List.of();
+            }
+            if (ordersList.get(0) instanceof Order) {
+                @SuppressWarnings("unchecked")
+                List<Order> orders = (List<Order>) ordersObj;
+                return orders;
+            }
+        }
+        
+        return List.of();
+    }
+    
     /**
      * Add a trading strategy to the bot
      * Strategies are registered but DISABLED by default for safety
@@ -228,10 +289,13 @@ public class TradingBot {
                 }
             }
             
-            // Bootstrap strategy with all historical data
+            // Initialize strategy with historical data using event-driven onInit()
             if (!allHistoricalData.isEmpty()) {
-                strategy.bootstrapWithHistoricalData(allHistoricalData);
-                System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped with " + allHistoricalData.size() + " candles");
+                // Prepare params map (empty for now, could be from strategy config later)
+                Map<String, Object> params = new java.util.HashMap<>();
+                
+                strategy.onInit(allHistoricalData, params);
+                System.out.println("✅ Strategy " + strategy.getStrategyName() + " initialized with " + allHistoricalData.size() + " candles");
                 
                 // Generate historical visualization data
                 try {
@@ -282,10 +346,13 @@ public class TradingBot {
                 }
             }
             
-            // Bootstrap strategy with all historical data
+            // Initialize strategy with historical data using event-driven onInit()
             if (!allHistoricalData.isEmpty()) {
-                strategy.bootstrapWithHistoricalData(allHistoricalData);
-                System.out.println("✅ Strategy " + strategy.getStrategyName() + " bootstrapped with " + allHistoricalData.size() + " candles");
+                // Prepare params map (empty for now, could be from strategy config later)
+                Map<String, Object> params = new java.util.HashMap<>();
+                
+                strategy.onInit(allHistoricalData, params);
+                System.out.println("✅ Strategy " + strategy.getStrategyName() + " initialized with " + allHistoricalData.size() + " candles");
                 
                 // Generate historical visualization data
                 try {
