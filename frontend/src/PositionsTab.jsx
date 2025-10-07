@@ -265,6 +265,15 @@ export function PositionsTab() {
     return 'text-slate-400';
   };
 
+  // Sort positions by entry time (newest first)
+  const sortPositionsByDate = (positions) => {
+    return [...positions].sort((a, b) => {
+      const dateA = new Date(a.entryTime);
+      const dateB = new Date(b.entryTime);
+      return dateB - dateA; // Descending order (newest first)
+    });
+  };
+
   const renderPositionRow = (position) => (
     <tr key={position.positionId} className="border-b border-slate-600/30 hover:bg-slate-700/30 transition-all duration-200">
       <td className="px-3 py-3">
@@ -499,7 +508,7 @@ export function PositionsTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {openPositions.map(renderPositionRow)}
+                      {sortPositionsByDate(openPositions).map(renderPositionRow)}
                     </tbody>
                   </table>
                 )}
@@ -533,7 +542,7 @@ export function PositionsTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {historicalPositions.map(renderPositionRow)}
+                      {sortPositionsByDate(historicalPositions).map(renderPositionRow)}
                     </tbody>
                   </table>
                 )}
