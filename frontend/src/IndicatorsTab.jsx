@@ -223,7 +223,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
         </div>
         <button
           onClick={() => setShowBrowseModal(true)}
-          className="px-3 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 transition-all"
+          className="px-3 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100 border border-zinc-400/50 hover:from-zinc-500/40 hover:to-zinc-600/40 transition-all"
         >
           + Add New Indicator
         </button>
@@ -237,7 +237,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
               <div className="mb-2">No indicators active</div>
               <button
                 onClick={() => setShowBrowseModal(true)}
-                className="text-cyan-400 hover:text-cyan-300 text-sm"
+                className="text-zinc-400 hover:text-zinc-300 text-sm"
               >
                 Click "Add New Indicator" to get started
               </button>
@@ -256,7 +256,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                 return (
                   <div 
                     key={instance.instanceKey}
-                    className="bg-black/30 rounded border border-white/10 hover:border-cyan-500/30 transition-all p-2"
+                    className="bg-black/30 rounded border border-white/10 hover:border-zinc-500/30 transition-all p-2"
                   >
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-start justify-between gap-1">
@@ -276,7 +276,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                       <div className="flex items-center gap-1 mt-1">
                         <button
                           onClick={() => handleOpenConfig(indicator, instance)}
-                          className="flex-1 px-2 py-1 text-xs rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 hover:bg-cyan-500/30 transition-all"
+                          className="flex-1 px-2 py-1 text-xs rounded bg-zinc-500/20 text-zinc-300 border border-zinc-400/30 hover:bg-zinc-500/30 transition-all"
                         >
                           Edit
                         </button>
@@ -307,9 +307,9 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-500/5 to-blue-500/5">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-zinc-500/5 to-zinc-600/5">
               <div>
-                <h2 className="text-white text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                <h2 className="text-white text-xl font-bold bg-gradient-to-r from-zinc-400 to-zinc-500 bg-clip-text text-transparent">
                   Browse Indicators
                 </h2>
                 <p className="text-white/50 text-xs mt-0.5">
@@ -341,7 +341,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                   placeholder="Search indicators by name, category, or description..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 text-sm focus:outline-none focus:border-cyan-400/50 focus:bg-white/10 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 text-sm focus:outline-none focus:border-zinc-400/50 focus:bg-white/10 transition-all"
                   autoFocus
                 />
                 {searchQuery && (
@@ -370,7 +370,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
             {loading && (
               <div className="px-6 py-8 text-center">
                 <div className="inline-flex items-center gap-3 text-white/50">
-                  <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-5 h-5 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin"></div>
                   <span>Loading indicators...</span>
                 </div>
               </div>
@@ -388,7 +388,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                   <div className="mb-3 text-lg">No indicators found</div>
                   <button
                     onClick={fetchIndicators}
-                    className="text-cyan-400 hover:text-cyan-300 text-sm font-medium"
+                    className="text-zinc-400 hover:text-zinc-300 text-sm font-medium"
                   >
                     Try refreshing
                   </button>
@@ -408,15 +408,15 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                   {filteredIndicators.map((indicator) => (
                     <div 
                       key={indicator.id}
-                      className="group relative bg-gradient-to-br from-black/40 to-black/20 rounded-lg border border-white/10 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/10 transition-all duration-200 p-3 overflow-hidden"
+                      className="group relative bg-gradient-to-br from-black/40 to-black/20 rounded-lg border border-white/10 hover:border-zinc-500/40 hover:shadow-lg hover:shadow-zinc-500/10 transition-all duration-200 p-3 overflow-hidden"
                     >
                       {/* Gradient overlay on hover */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-blue-500/0 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-200 rounded-lg pointer-events-none"></div>
+                      <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/0 to-zinc-600/0 group-hover:from-zinc-500/5 group-hover:to-zinc-600/5 transition-all duration-200 rounded-lg pointer-events-none"></div>
                       
                       <div className="relative flex flex-col gap-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-white font-semibold text-sm mb-0.5 group-hover:text-cyan-300 transition-colors truncate">
+                            <h3 className="text-white font-semibold text-sm mb-0.5 group-hover:text-zinc-300 transition-colors truncate">
                               {indicator.name}
                             </h3>
                             <span className="text-xs text-white/30 font-mono truncate block">
@@ -436,7 +436,7 @@ export function IndicatorsTab({ onOpenConfigInSidebar }) {
                               e.stopPropagation();
                               applyIndicatorInstantly(indicator);
                             }}
-                            className="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-100 border border-cyan-400/40 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all flex items-center justify-center gap-1"
+                            className="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gradient-to-r from-zinc-500/20 to-zinc-600/20 text-zinc-100 border border-zinc-400/40 hover:from-zinc-500/30 hover:to-zinc-600/30 transition-all flex items-center justify-center gap-1"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

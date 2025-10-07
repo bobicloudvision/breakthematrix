@@ -389,11 +389,11 @@ export default function App() {
                   <div className="relative">
                     <button
                       onClick={() => setIsSymbolOpen(!isSymbolOpen)}
-                      className="px-4 py-2 h-10 bg-gradient-to-r from-slate-800/50 to-slate-700/50 text-cyan-300 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:from-slate-700/60 hover:to-slate-600/60 hover:border-cyan-400/50 flex items-center justify-between min-w-[120px] transition-all duration-200 shadow-lg shadow-cyan-500/10"
+                      className="px-4 py-2 h-10 bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 text-zinc-300 rounded-lg border border-zinc-500/30 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 hover:from-zinc-700/60 hover:to-zinc-600/60 hover:border-zinc-400/50 flex items-center justify-between min-w-[120px] transition-all duration-200 shadow-lg shadow-zinc-500/10"
                     >
-                      <span className="text-cyan-200 font-medium">{symbol}</span>
+                      <span className="text-zinc-200 font-medium">{symbol}</span>
                       <svg 
-                        className={`w-4 h-4 text-cyan-400 transition-transform duration-200 ${isSymbolOpen ? 'rotate-180' : ''}`} 
+                        className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isSymbolOpen ? 'rotate-180' : ''}`} 
                         fill="none" 
                         stroke="currentColor" 
                         viewBox="0 0 24 24"
@@ -403,13 +403,13 @@ export default function App() {
                     </button>
 
                     {isSymbolOpen && (
-                      <div className="absolute z-50 w-full mt-2 bg-gradient-to-b from-slate-800/95 to-slate-900/95 backdrop-blur-xl border border-cyan-500/30 rounded-lg shadow-2xl shadow-cyan-500/20 max-h-60 overflow-auto">
+                      <div className="absolute z-50 w-full mt-2 bg-gradient-to-b from-zinc-800/95 to-zinc-900/95 backdrop-blur-xl border border-zinc-500/30 rounded-lg shadow-2xl shadow-zinc-500/20 max-h-60 overflow-auto">
                         {symbolOptions.map((option) => (
                           <button
                             key={option}
                             onClick={() => handleSymbolSelect(option)}
-                            className={`w-full px-4 py-3 text-left text-cyan-200 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 focus:outline-none focus:bg-gradient-to-r focus:from-cyan-500/20 focus:to-blue-500/20 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
-                              symbol === option ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100' : ''
+                            className={`w-full px-4 py-3 text-left text-zinc-200 hover:bg-gradient-to-r hover:from-zinc-500/20 hover:to-zinc-600/20 focus:outline-none focus:bg-gradient-to-r focus:from-zinc-500/20 focus:to-zinc-600/20 first:rounded-t-lg last:rounded-b-lg transition-all duration-150 ${
+                              symbol === option ? 'bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100' : ''
                             }`}
                           >
                             {option}
@@ -460,14 +460,14 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl">
+                <div className="flex items-center justify-center h-full w-full bg-gradient-to-br from-zinc-900/40 via-gray-900/30 to-zinc-900/40 backdrop-blur-xl">
                   <div className="text-center max-w-md mx-auto px-4">
                     <div className="text-6xl mb-4">📊</div>
-                    <p className="text-cyan-300 text-xl font-medium mb-2">Select a Trading Provider</p>
-                    <p className="text-slate-400 mb-4">Choose a provider from the dropdown above to start trading</p>
-                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600/30">
-                      <p className="text-slate-300 text-sm mb-2">Available providers:</p>
-                      <ul className="text-slate-400 text-xs text-left space-y-1">
+                    <p className="text-zinc-300 text-xl font-medium mb-2">Select a Trading Provider</p>
+                    <p className="text-zinc-400 mb-4">Choose a provider from the dropdown above to start trading</p>
+                    <div className="bg-zinc-800/50 rounded-lg p-4 border border-zinc-600/30">
+                      <p className="text-zinc-300 text-sm mb-2">Available providers:</p>
+                      <ul className="text-zinc-400 text-xs text-left space-y-1">
                         <li>• Binance (Live trading)</li>
                         <li>• Mock Provider (Testing)</li>
                         <li>• More providers coming soon...</li>
@@ -480,17 +480,17 @@ export default function App() {
             {/* Bottom Tabs */}
             <div 
               style={{ height: `${bottomBarHeight}px` }}
-              className="border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5"
+              className="border-t border-zinc-500/20 bg-gradient-to-br from-zinc-900/40 via-gray-900/30 to-zinc-900/40 backdrop-blur-xl shadow-2xl shadow-zinc-500/5"
             >
               {/* Resize Handle */}
               <div
                 onMouseDown={() => setIsResizing(true)}
-                className="h-1 w-full cursor-ns-resize hover:bg-cyan-500/50 active:bg-cyan-500/70 transition-colors duration-150 group"
+                className="h-1 w-full cursor-ns-resize hover:bg-zinc-500/50 active:bg-zinc-500/70 transition-colors duration-150 group"
               >
-                <div className="h-0.5 w-20 mx-auto mt-0.5 bg-slate-600/50 group-hover:bg-cyan-500/70 rounded-full transition-colors duration-150"></div>
+                <div className="h-0.5 w-20 mx-auto mt-0.5 bg-zinc-600/50 group-hover:bg-zinc-500/70 rounded-full transition-colors duration-150"></div>
               </div>
               
-              <div className="h-12 flex items-center gap-3 px-4 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
+              <div className="h-12 flex items-center gap-3 px-4 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30">
                 <Button
                   variant={activeTab === 'orders' ? 'primary' : 'secondary'}
                   size="md"
@@ -569,9 +569,9 @@ export default function App() {
               setResizeStartWidth(rightSidebarWidth);
               setIsResizingRightSidebar(true);
             }}
-            className="absolute left-0 top-0 w-1 h-full cursor-ew-resize hover:bg-cyan-500/50 active:bg-cyan-500/70 transition-colors duration-150 z-10 group"
+            className="absolute left-0 top-0 w-1 h-full cursor-ew-resize hover:bg-zinc-500/50 active:bg-zinc-500/70 transition-colors duration-150 z-10 group"
           >
-            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-20 w-0.5 bg-slate-600/50 group-hover:bg-cyan-500/70 rounded-full transition-colors duration-150"></div>
+            <div className="absolute left-0.5 top-1/2 -translate-y-1/2 h-20 w-0.5 bg-zinc-600/50 group-hover:bg-zinc-500/70 rounded-full transition-colors duration-150"></div>
           </div>
           
           {sidebarIndicatorConfig ? (
