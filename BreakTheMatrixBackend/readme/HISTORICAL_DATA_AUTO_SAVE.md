@@ -26,7 +26,11 @@ Call 3 (10:00:10): Returns trades from 10:00:00 to 10:00:10  ← Different again
 ```
 
 ### The Solution
-**Auto-save to JSON files** with timestamps, so you have a permanent record of the exact data you fetched.
+**Auto-save to JSON files** with the actual data time range in the filename, so you:
+1. Have a permanent record of the exact data you fetched
+2. Can see the time range directly from the filename
+3. Can identify and avoid duplicate time ranges
+4. Can easily reconstruct historical timelines
 
 ---
 
@@ -42,15 +46,34 @@ All files are saved in: `historical_data/` directory (created automatically)
 
 #### Aggregate Trades Files
 ```
-{SYMBOL}_aggTrades_{YYYYMMDD_HHMMSS}.json
+{SYMBOL}_aggTrades_{START_TIME}_{END_TIME}.json
 ```
-Example: `BTCUSDT_aggTrades_20250106_143052.json`
+Example: `BTCUSDT_aggTrades_20250106_140000_20250106_143000.json`
+
+- `START_TIME`: Timestamp of the first trade in the data
+- `END_TIME`: Timestamp of the last trade in the data
+- **This shows the actual time range of the trades, not when you fetched them**
+
+**Benefits:**
+- ✅ **Know the data range without opening the file**
+- ✅ **Easily identify overlapping or duplicate data**
+- ✅ **Sort files chronologically by data time (not fetch time)**
+- ✅ **Find specific time ranges quickly**
+
+Example filenames showing different time ranges:
+```
+BTCUSDT_aggTrades_20250106_140000_20250106_143000.json  ← 14:00 to 14:30
+BTCUSDT_aggTrades_20250106_143000_20250106_150000.json  ← 14:30 to 15:00
+BTCUSDT_aggTrades_20250106_150000_20250106_153000.json  ← 15:00 to 15:30
+```
 
 #### Order Book Files
 ```
-{SYMBOL}_orderBook_{YYYYMMDD_HHMMSS}.json
+{SYMBOL}_orderBook_{TIMESTAMP}.json
 ```
 Example: `BTCUSDT_orderBook_20250106_143052.json`
+
+- `TIMESTAMP`: The order book snapshot timestamp (when the order book was captured)
 
 ---
 
@@ -69,7 +92,7 @@ List<TradeData> trades = provider.getHistoricalAggregateTrades("BTCUSDT", 1000);
 // Console output:
 // ✅ Fetched 1000 historical aggregate trades for BTCUSDT
 // 💾 Auto-saving to JSON...
-// ✅ Saved 1000 trades to: historical_data/BTCUSDT_aggTrades_20250106_143052.json
+// ✅ Saved 1000 trades to: historical_data/BTCUSDT_aggTrades_20250106_142530_20250106_143052.json
 ```
 
 ### 2. Fetch Order Book Snapshot (Auto-saves by default)
@@ -202,8 +225,8 @@ The JSON file includes **metadata** and the **trades array**:
 ```java
 BinanceTradingProvider provider = new BinanceTradingProvider();
 
-// Load from specific file
-Path filePath = Paths.get("historical_data/BTCUSDT_aggTrades_20250106_143052.json");
+// Load from specific file (with start and end time in filename)
+Path filePath = Paths.get("historical_data/BTCUSDT_aggTrades_20250106_142530_20250106_143052.json");
 List<TradeData> trades = provider.loadAggregateTradesFromJson(filePath);
 
 // Console output:
@@ -245,9 +268,9 @@ for (Path file : files) {
     System.out.println(file);
 }
 // Output:
-// historical_data/BTCUSDT_aggTrades_20250106_143052.json
-// historical_data/BTCUSDT_aggTrades_20250106_143110.json
-// historical_data/BTCUSDT_aggTrades_20250106_143125.json
+// historical_data/BTCUSDT_aggTrades_20250106_142530_20250106_143052.json
+// historical_data/BTCUSDT_aggTrades_20250106_143000_20250106_143110.json
+// historical_data/BTCUSDT_aggTrades_20250106_143100_20250106_143125.json
 // ...
 ```
 
@@ -346,13 +369,14 @@ List<TradeData> trades = provider.getHistoricalAggregateTrades("BTCUSDT", 1000);
 
 ### 3. Organize by Date
 ```java
-// Files are automatically timestamped
+// Files are automatically timestamped with data time range
 // Organize them manually if needed:
 // historical_data/
 //   2025-01-06/
-//     BTCUSDT_aggTrades_20250106_143052.json
+//     BTCUSDT_aggTrades_20250106_142530_20250106_143052.json
+//     BTCUSDT_aggTrades_20250106_150000_20250106_153000.json
 //   2025-01-07/
-//     BTCUSDT_aggTrades_20250107_090015.json
+//     BTCUSDT_aggTrades_20250107_090015_20250107_093000.json
 ```
 
 ### 4. Archive Old Files
