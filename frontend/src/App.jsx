@@ -13,7 +13,7 @@ import { ReplayTab } from "./ReplayTab";
 
 export default function App() {
   const [selectedProvider, setSelectedProvider] = useState(null);
-  const [symbol, setSymbol] = useState('ETHUSDT');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [interval, setInterval] = useState('1m');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
