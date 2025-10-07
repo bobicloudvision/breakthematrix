@@ -321,11 +321,11 @@ export function ReplayTab({ provider, symbol, interval }) {
 
         {/* Active Session Controls */}
         {activeSession && sessionStatus && (
-          <div className="mb-6 p-6 bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-lg border border-purple-500/50 shadow-lg shadow-purple-500/20">
+          <div className="mb-6 p-6 bg-gradient-to-r from-zinc-900/30 to-blue-900/30 rounded-lg border border-zinc-500/10 shadow-lg shadow-zinc-500/20">
             <div className="flex items-center justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-bold text-purple-300">Active Replay Session</h3>
+                  <h3 className="text-lg font-bold text-zinc-300">Active Replay Session</h3>
                   {wsConnected && (
                     <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full border border-green-500/30">
                       <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -333,7 +333,7 @@ export function ReplayTab({ provider, symbol, interval }) {
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-purple-400 font-mono">{activeSession}</p>
+                <p className="text-xs text-zinc-400 font-mono">{activeSession}</p>
               </div>
               <div className={`px-3 py-1 rounded-full text-xs font-medium ${
                 sessionStatus.state === 'PLAYING' 
@@ -354,7 +354,7 @@ export function ReplayTab({ provider, symbol, interval }) {
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
+                  className="h-full bg-gradient-to-r from-zinc-500 to-blue-500 transition-all duration-300"
                   style={{ width: `${sessionStatus.progress}%` }}
                 />
               </div>
@@ -364,7 +364,7 @@ export function ReplayTab({ provider, symbol, interval }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-xs">
               <div className="bg-slate-900/50 p-2 rounded">
                 <span className="text-slate-400 block">Current Time</span>
-                <span className="text-purple-200 font-medium">
+                <span className="text-zinc-200 font-medium">
                   {new Date(sessionStatus.currentTime).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -376,24 +376,24 @@ export function ReplayTab({ provider, symbol, interval }) {
               </div>
               <div className="bg-slate-900/50 p-2 rounded">
                 <span className="text-slate-400 block">Speed</span>
-                <span className="text-purple-200 font-medium">{sessionStatus.speed}x</span>
+                <span className="text-zinc-200 font-medium">{sessionStatus.speed}x</span>
               </div>
               <div className="bg-slate-900/50 p-2 rounded">
                 <span className="text-slate-400 block">Symbol</span>
-                <span className="text-purple-200 font-medium">{sessionStatus.symbol}</span>
+                <span className="text-zinc-200 font-medium">{sessionStatus.symbol}</span>
               </div>
               <div className="bg-slate-900/50 p-2 rounded">
                 <span className="text-slate-400 block">Interval</span>
-                <span className="text-purple-200 font-medium">{sessionStatus.interval}</span>
+                <span className="text-zinc-200 font-medium">{sessionStatus.interval}</span>
               </div>
             </div>
 
             {/* Playback Controls */}
             <div className="flex gap-3">
               <button
-                onClick={handlePlayPause}
+                onClick={handlePlayPause} 
                 disabled={controlLoading}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500/30 to-blue-500/30 text-purple-100 rounded-lg border border-purple-400/50 hover:from-purple-500/40 hover:to-blue-500/40 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-zinc-500/30 to-blue-500/30 text-zinc-100 rounded-lg border border-zinc-400/50 hover:from-zinc-500/40 hover:to-blue-500/40 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {sessionStatus.state === 'PLAYING' ? (
                   <>
@@ -435,9 +435,9 @@ export function ReplayTab({ provider, symbol, interval }) {
                   step="0.5"
                   value={sessionStatus.speed}
                   onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-                  className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-zinc-500"
                 />
-                <div className="min-w-[60px] px-2 py-1 bg-slate-900/50 text-purple-200 rounded text-center font-mono text-sm">
+                <div className="min-w-[60px] px-2 py-1 bg-slate-900/50 text-zinc-200 rounded text-center font-mono text-sm">
                   {sessionStatus.speed}x
                 </div>
               </div>
