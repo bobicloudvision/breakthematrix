@@ -560,7 +560,7 @@ export default function App() {
         {/* Right Sidebar - Bot Dashboard or Indicator Config */}
         <div 
           style={{ width: `${rightSidebarWidth}px` }}
-          className="relative border-l border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl shadow-2xl shadow-cyan-500/5 overflow-y-auto flex-shrink-0"
+          className="relative border-l border-zinc-500/20 bg-gradient-to-br from-zinc-900/40 via-gray-900/30 to-zinc-900/40 backdrop-blur-xl shadow-2xl shadow-zinc-500/5 overflow-y-auto flex-shrink-0"
         >
           {/* Resize Handle */}
           <div
@@ -586,7 +586,7 @@ export default function App() {
           ) : (
             <div className="flex flex-col h-full">
               {/* Right Sidebar Tabs */}
-              <div className="flex gap-2 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30 px-4 py-3">
+              <div className="flex gap-2 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30 px-4 py-3">
                 <Button
                   variant={rightSidebarView === 'bot' ? 'primary' : 'secondary'}
                   size="md"

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from './Button';
 
 export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
   const [formData, setFormData] = useState({
@@ -235,65 +236,57 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
             </div>
 
             {/* Position Side */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">Position Side</label>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => handlePositionSideChange('LONG')}
-                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    formData.positionSide === 'LONG'
-                      ? 'bg-green-500/30 text-green-100 border border-green-400/50 shadow-lg shadow-green-500/20'
-                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-green-500/40'
-                  }`}
+                  variant={formData.positionSide === 'LONG' ? 'success' : 'secondary'}
+                  size="sm"
+                  fullWidth
                 >
                   LONG
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => handlePositionSideChange('SHORT')}
-                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    formData.positionSide === 'SHORT'
-                      ? 'bg-red-500/30 text-red-100 border border-red-400/50 shadow-lg shadow-red-500/20'
-                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-red-500/40'
-                  }`}
+                  variant={formData.positionSide === 'SHORT' ? 'danger' : 'secondary'}
+                  size="sm"
+                  fullWidth
                 >
                   SHORT
-                </button>
+                </Button>
               </div>
             </div>
 
             {/* Order Type */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">Order Type</label>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => handleOrderTypeChange('LIMIT')}
-                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    formData.orderType === 'LIMIT'
-                      ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-cyan-500/40'
-                  }`}
+                  variant={formData.orderType === 'LIMIT' ? 'primary' : 'secondary'}
+                  size="sm"
+                  fullWidth
                 >
                   LIMIT
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => handleOrderTypeChange('MARKET')}
-                  className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    formData.orderType === 'MARKET'
-                      ? 'bg-cyan-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-                      : 'bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:border-cyan-500/40'
-                  }`}
+                  variant={formData.orderType === 'MARKET' ? 'primary' : 'secondary'}
+                  size="sm"
+                  fullWidth
                 >
                   MARKET
-                </button>
+                </Button>
               </div>
             </div>
 
             {/* Price */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Price (USD)
                 {formData.orderType === 'MARKET' && <span className="text-slate-500 text-xs ml-1">(Market)</span>}
@@ -318,7 +311,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
             </div>
 
             {/* Quantity */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">Quantity</label>
               <input
                 type="number"
@@ -333,7 +326,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
             </div>
 
             {/* Stop Loss */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Stop Loss (USD)
                 <span className="text-slate-500 text-xs ml-1">(Optional)</span>
@@ -356,7 +349,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
             </div>
 
             {/* Take Profit */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30">
+            <div>
               <label className="block text-slate-300 text-sm font-medium mb-2">
                 Take Profit (USD)
                 <span className="text-slate-500 text-xs ml-1">(Optional)</span>
@@ -380,29 +373,33 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
 
             {/* Action Buttons */}
             <div className="flex gap-2">
-              <button
+              <Button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-4 py-2.5 text-sm bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 rounded-lg border border-cyan-400/50 shadow-lg shadow-cyan-500/20 hover:from-cyan-500/40 hover:to-blue-500/40 hover:shadow-cyan-500/30 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                loading={loading}
+                variant="primary"
+                size="md"
+                fullWidth
               >
-                {loading ? 'Opening...' : 'Open Position'}
-              </button>
-              <button
+                Open Position
+              </Button>
+              <Button
                 type="button"
                 onClick={handleReset}
                 disabled={loading}
-                className="px-4 py-2.5 text-sm bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 rounded-lg border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 transition-all duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                variant="secondary"
+                size="md"
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </form>
         </div>
       </div>
 
       {/* Response Section */}
-      <div className="border-t border-cyan-500/20 bg-gradient-to-br from-slate-900/40 via-gray-900/30 to-slate-900/40 backdrop-blur-xl p-4">
-        <h3 className="text-sm font-semibold text-cyan-300 mb-3">Response</h3>
+      <div className="border-t border-zinc-500/20 backdrop-blur-xl p-4">
+        <h3 className="text-sm font-semibold text-zinc-300 mb-3">Response</h3>
 
         {!response && !error && (
           <div className="text-center py-8">
