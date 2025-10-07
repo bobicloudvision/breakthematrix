@@ -6,7 +6,8 @@ import org.cloudvision.trading.bot.strategy.TradingStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.MovingAverageStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.OrderBlockStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.OrderFlowStrategy;
- import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
+import org.cloudvision.trading.bot.strategy.impl.InstantStrategy;
+import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -33,7 +34,10 @@ public class TradingBotConfig {
     
     @Autowired
     private RSIStrategy rsiStrategy;
-    
+
+    @Autowired
+    private InstantStrategy instantStrategy;
+
     @Autowired
     private ApplicationContext applicationContext;
     
@@ -48,7 +52,8 @@ public class TradingBotConfig {
         // Option 1: Manual registration (more control)
 //        configureMovingAverageStrategy();
         configureRSIStrategy();
-        
+        configureInstantStrategy();
+
 //        // Configure SuperTrend strategies with different parameters
 //        configureSuperTrendStrategy1(); // Conservative (10, 3)
 //        configureSuperTrendStrategy2(); // Moderate (10, 2)
@@ -119,6 +124,28 @@ public class TradingBotConfig {
         
          rsiStrategy.setConfig(config);
          tradingBot.addStrategy(rsiStrategy);
+
+    }
+
+    /**
+     * Configure Instant Strategy
+     */
+    private void configureInstantStrategy() {
+
+        StrategyConfig config = new StrategyConfig(
+            "instant-strategy",
+            List.of("ETHUSDT")  // Trade only ETH with Instant Strategy
+        );
+
+        // Position sizing and risk parameters
+//        config.setMaxPositionSize(new BigDecimal("3000")); // $3000 per position
+//        config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
+//        config.setTakeProfitPercentage(new BigDecimal("0.05")); // 5%
+
+        instantStrategy.setConfig(config);
+        tradingBot.addStrategy(instantStrategy);
+
+
     }
     
     /**

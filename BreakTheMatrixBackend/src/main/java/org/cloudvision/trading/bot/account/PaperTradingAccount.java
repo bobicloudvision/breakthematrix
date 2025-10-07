@@ -127,12 +127,20 @@ public class PaperTradingAccount implements TradingAccount {
                 
                 // Set stop loss and take profit if suggested by strategy
                 if (order.getSuggestedStopLoss() != null) {
-                    newPosition.setStopLoss(order.getSuggestedStopLoss());
-                    System.out.println("🛡️ Stop loss set at: " + order.getSuggestedStopLoss());
+                    // Use enhanced stop loss setting with type detection
+                    StopLossType slType = determineStopLossType(order);
+                    BigDecimal[] slParams = getStopLossParameters(order);
+                    newPosition.setStopLoss(order.getSuggestedStopLoss(), slType, slParams);
+                    System.out.println("🛡️ Stop loss set at: " + order.getSuggestedStopLoss() + 
+                        " (Type: " + slType + ")");
                 }
                 if (order.getSuggestedTakeProfit() != null) {
-                    newPosition.setTakeProfit(order.getSuggestedTakeProfit());
-                    System.out.println("🎯 Take profit set at: " + order.getSuggestedTakeProfit());
+                    // Use enhanced take profit setting with type detection
+                    TakeProfitType tpType = determineTakeProfitType(order);
+                    BigDecimal[] tpParams = getTakeProfitParameters(order);
+                    newPosition.setTakeProfit(order.getSuggestedTakeProfit(), tpType, tpParams);
+                    System.out.println("🎯 Take profit set at: " + order.getSuggestedTakeProfit() + 
+                        " (Type: " + tpType + ")");
                 }
                 
                 newPosition.setStrategyId(order.getStrategyId());
@@ -498,8 +506,93 @@ public class PaperTradingAccount implements TradingAccount {
     
     @Override
     public void updateCurrentPrices(Map<String, BigDecimal> currentPrices) {
-        // Update unrealized P&L for all open positions
+        // Update unrealized P&L for all open positions with dynamic SL/TP
         positionManager.updatePrices(currentPrices);
+    }
+    
+    // Convenience methods that delegate to PositionManager
+    
+    /**
+     * Set trailing stop loss for a position
+     */
+    public boolean setTrailingStopLoss(String positionId, BigDecimal trailingDistance, BigDecimal currentPrice) {
+        return positionManager.setTrailingStopLoss(positionId, trailingDistance, currentPrice);
+    }
+    
+    /**
+     * Set breakeven stop loss for a position
+     */
+    public boolean setBreakevenStopLoss(String positionId, BigDecimal triggerPrice, boolean includeSmallProfit) {
+        return positionManager.setBreakevenStopLoss(positionId, triggerPrice, includeSmallProfit);
+    }
+    
+    /**
+     * Set ATR-based stop loss for a position
+     */
+    public boolean setATRStopLoss(String positionId, BigDecimal atrMultiplier, BigDecimal atrValue, BigDecimal currentPrice) {
+        return positionManager.setATRStopLoss(positionId, atrMultiplier, atrValue, currentPrice);
+    }
+    
+    /**
+     * Set ATR-based take profit for a position
+     */
+    public boolean setATRTakeProfit(String positionId, BigDecimal atrMultiplier, BigDecimal atrValue, BigDecimal currentPrice) {
+        return positionManager.setATRTakeProfit(positionId, atrMultiplier, atrValue, currentPrice);
+    }
+    
+    /**
+     * Get positions with specific stop loss type
+     */
+    public List<Position> getPositionsByStopLossType(StopLossType type) {
+        return positionManager.getPositionsByStopLossType(type);
+    }
+    
+    /**
+     * Get positions with specific take profit type
+     */
+    public List<Position> getPositionsByTakeProfitType(TakeProfitType type) {
+        return positionManager.getPositionsByTakeProfitType(type);
+    }
+    
+    /**
+     * Update ATR values for all positions
+     */
+    public void updateATRValues(Map<String, BigDecimal> atrValues) {
+        positionManager.updateATRValues(atrValues);
+    }
+    
+    // Helper methods for order execution (kept for backward compatibility)
+    
+    /**
+     * Determine stop loss type from order
+     */
+    private StopLossType determineStopLossType(Order order) {
+        // For now, default to FIXED for backward compatibility
+        return StopLossType.FIXED;
+    }
+    
+    /**
+     * Determine take profit type from order
+     */
+    private TakeProfitType determineTakeProfitType(Order order) {
+        // For now, default to FIXED for backward compatibility
+        return TakeProfitType.FIXED;
+    }
+    
+    /**
+     * Get stop loss parameters from order
+     */
+    private BigDecimal[] getStopLossParameters(Order order) {
+        // For now, return empty array for backward compatibility
+        return new BigDecimal[0];
+    }
+    
+    /**
+     * Get take profit parameters from order
+     */
+    private BigDecimal[] getTakeProfitParameters(Order order) {
+        // For now, return empty array for backward compatibility
+        return new BigDecimal[0];
     }
 }
 

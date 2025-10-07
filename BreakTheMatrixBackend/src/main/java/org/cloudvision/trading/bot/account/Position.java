@@ -28,6 +28,16 @@ public class Position {
     private BigDecimal stopLoss;
     private BigDecimal takeProfit;
     
+    // Advanced stop loss/take profit features
+    private StopLossType stopLossType = StopLossType.FIXED;
+    private TakeProfitType takeProfitType = TakeProfitType.FIXED;
+    private BigDecimal trailingStopDistance; // For trailing stops
+    private BigDecimal breakevenTriggerPrice; // Price at which to move SL to breakeven
+    private boolean breakevenActivated = false;
+    private BigDecimal originalStopLoss; // Store original SL for breakeven reference
+    private BigDecimal atrMultiplier; // For ATR-based stops
+    private BigDecimal atrValue; // Current ATR value
+    
     // Metadata
     private String strategyId;
     private boolean isOpen;
@@ -184,6 +194,164 @@ public class Position {
         return side == PositionSide.LONG 
             ? currentPrice.compareTo(takeProfit) >= 0
             : currentPrice.compareTo(takeProfit) <= 0;
+    }
+    
+    /**
+     * Update stop loss and take profit based on current price and type
+     */
+    public void updateStopLossAndTakeProfit(BigDecimal currentPrice) {
+        updateStopLoss(currentPrice);
+        updateTakeProfit(currentPrice);
+    }
+    
+    /**
+     * Update stop loss based on type
+     */
+    private void updateStopLoss(BigDecimal currentPrice) {
+        if (stopLossType == StopLossType.TRAILING && trailingStopDistance != null) {
+            updateTrailingStopLoss(currentPrice);
+        } else if (stopLossType == StopLossType.ATR_BASED && atrValue != null && atrMultiplier != null) {
+            updateATRStopLoss(currentPrice);
+        } else if (stopLossType == StopLossType.BREAKEVEN || stopLossType == StopLossType.BREAKEVEN_PLUS) {
+            updateBreakevenStopLoss(currentPrice);
+        }
+    }
+    
+    /**
+     * Update take profit based on type
+     */
+    private void updateTakeProfit(BigDecimal currentPrice) {
+        if (takeProfitType == TakeProfitType.ATR_BASED && atrValue != null && atrMultiplier != null) {
+            updateATRTakeProfit(currentPrice);
+        }
+    }
+    
+    /**
+     * Update trailing stop loss
+     */
+    private void updateTrailingStopLoss(BigDecimal currentPrice) {
+        if (side == PositionSide.LONG) {
+            // For long positions, trail stop loss upward
+            BigDecimal newStopLoss = currentPrice.subtract(trailingStopDistance);
+            if (stopLoss == null || newStopLoss.compareTo(stopLoss) > 0) {
+                stopLoss = newStopLoss;
+            }
+        } else {
+            // For short positions, trail stop loss downward
+            BigDecimal newStopLoss = currentPrice.add(trailingStopDistance);
+            if (stopLoss == null || newStopLoss.compareTo(stopLoss) < 0) {
+                stopLoss = newStopLoss;
+            }
+        }
+    }
+    
+    /**
+     * Update ATR-based stop loss
+     */
+    private void updateATRStopLoss(BigDecimal currentPrice) {
+        BigDecimal atrDistance = atrValue.multiply(atrMultiplier);
+        
+        if (side == PositionSide.LONG) {
+            stopLoss = currentPrice.subtract(atrDistance);
+        } else {
+            stopLoss = currentPrice.add(atrDistance);
+        }
+    }
+    
+    /**
+     * Update breakeven stop loss
+     */
+    private void updateBreakevenStopLoss(BigDecimal currentPrice) {
+        if (breakevenTriggerPrice == null || breakevenActivated) {
+            return;
+        }
+        
+        boolean shouldActivate = side == PositionSide.LONG 
+            ? currentPrice.compareTo(breakevenTriggerPrice) >= 0
+            : currentPrice.compareTo(breakevenTriggerPrice) <= 0;
+            
+        if (shouldActivate) {
+            if (stopLossType == StopLossType.BREAKEVEN) {
+                stopLoss = entryPrice; // Move to breakeven
+            } else if (stopLossType == StopLossType.BREAKEVEN_PLUS) {
+                // Move to breakeven + small profit (e.g., 0.1% of entry price)
+                BigDecimal smallProfit = entryPrice.multiply(new BigDecimal("0.001"));
+                stopLoss = side == PositionSide.LONG 
+                    ? entryPrice.add(smallProfit)
+                    : entryPrice.subtract(smallProfit);
+            }
+            breakevenActivated = true;
+        }
+    }
+    
+    /**
+     * Update ATR-based take profit
+     */
+    private void updateATRTakeProfit(BigDecimal currentPrice) {
+        BigDecimal atrDistance = atrValue.multiply(atrMultiplier);
+        
+        if (side == PositionSide.LONG) {
+            takeProfit = currentPrice.add(atrDistance);
+        } else {
+            takeProfit = currentPrice.subtract(atrDistance);
+        }
+    }
+    
+    /**
+     * Set stop loss with type and parameters
+     */
+    public void setStopLoss(BigDecimal stopLoss, StopLossType type, BigDecimal... parameters) {
+        this.stopLoss = stopLoss;
+        this.stopLossType = type;
+        this.originalStopLoss = stopLoss; // Store original for breakeven reference
+        
+        if (type == StopLossType.TRAILING && parameters.length > 0) {
+            this.trailingStopDistance = parameters[0];
+        } else if (type == StopLossType.ATR_BASED && parameters.length > 0) {
+            this.atrMultiplier = parameters[0];
+        } else if ((type == StopLossType.BREAKEVEN || type == StopLossType.BREAKEVEN_PLUS) && parameters.length > 0) {
+            this.breakevenTriggerPrice = parameters[0];
+        }
+    }
+    
+    /**
+     * Set take profit with type and parameters
+     */
+    public void setTakeProfit(BigDecimal takeProfit, TakeProfitType type, BigDecimal... parameters) {
+        this.takeProfit = takeProfit;
+        this.takeProfitType = type;
+        
+        if (type == TakeProfitType.ATR_BASED && parameters.length > 0) {
+            this.atrMultiplier = parameters[0];
+        }
+    }
+    
+    /**
+     * Update ATR value for ATR-based stops
+     */
+    public void updateATRValue(BigDecimal atrValue) {
+        this.atrValue = atrValue;
+    }
+    
+    /**
+     * Get current stop loss type
+     */
+    public StopLossType getStopLossType() {
+        return stopLossType;
+    }
+    
+    /**
+     * Get current take profit type
+     */
+    public TakeProfitType getTakeProfitType() {
+        return takeProfitType;
+    }
+    
+    /**
+     * Check if breakeven has been activated
+     */
+    public boolean isBreakevenActivated() {
+        return breakevenActivated;
     }
     
     // Getters and setters

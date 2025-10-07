@@ -76,18 +76,150 @@ public class PositionManager {
         for (Position position : openPositions.values()) {
             BigDecimal currentPrice = currentPrices.get(position.getSymbol());
             if (currentPrice != null) {
+                // Update dynamic stop loss and take profit first
+                position.updateStopLossAndTakeProfit(currentPrice);
+                
+                // Update unrealized P&L
                 position.updateUnrealizedPnL(currentPrice);
                 
                 // Check stop loss / take profit
                 if (position.isStopLossHit(currentPrice)) {
-                    System.out.println("⛔ Stop Loss hit for " + position.getSymbol());
+                    System.out.println("⛔ Stop Loss hit for " + position.getSymbol() + 
+                        " @ " + currentPrice + " (SL: " + position.getStopLoss() + ")");
                     closePosition(position.getPositionId(), currentPrice, position.getQuantity());
                 } else if (position.isTakeProfitHit(currentPrice)) {
-                    System.out.println("🎯 Take Profit hit for " + position.getSymbol());
+                    System.out.println("🎯 Take Profit hit for " + position.getSymbol() + 
+                        " @ " + currentPrice + " (TP: " + position.getTakeProfit() + ")");
                     closePosition(position.getPositionId(), currentPrice, position.getQuantity());
                 }
             }
         }
+    }
+    
+    /**
+     * Update ATR values for all positions (for ATR-based stops)
+     */
+    public void updateATRValues(Map<String, BigDecimal> atrValues) {
+        for (Position position : openPositions.values()) {
+            BigDecimal atrValue = atrValues.get(position.getSymbol());
+            if (atrValue != null) {
+                position.updateATRValue(atrValue);
+            }
+        }
+    }
+    
+    /**
+     * Set stop loss for a specific position
+     */
+    public boolean setStopLoss(String positionId, BigDecimal stopLoss, StopLossType type, BigDecimal... parameters) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            System.err.println("❌ Position not found or already closed: " + positionId);
+            return false;
+        }
+        
+        position.setStopLoss(stopLoss, type, parameters);
+        System.out.println("🛡️ Stop loss set for " + position.getSymbol() + 
+            " (Type: " + type + ", Value: " + stopLoss + ")");
+        return true;
+    }
+    
+    /**
+     * Set take profit for a specific position
+     */
+    public boolean setTakeProfit(String positionId, BigDecimal takeProfit, TakeProfitType type, BigDecimal... parameters) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            System.err.println("❌ Position not found or already closed: " + positionId);
+            return false;
+        }
+        
+        position.setTakeProfit(takeProfit, type, parameters);
+        System.out.println("🎯 Take profit set for " + position.getSymbol() + 
+            " (Type: " + type + ", Value: " + takeProfit + ")");
+        return true;
+    }
+    
+    /**
+     * Get positions with specific stop loss type
+     */
+    public List<Position> getPositionsByStopLossType(StopLossType type) {
+        return openPositions.values().stream()
+            .filter(p -> p.getStopLossType() == type)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get positions with specific take profit type
+     */
+    public List<Position> getPositionsByTakeProfitType(TakeProfitType type) {
+        return openPositions.values().stream()
+            .filter(p -> p.getTakeProfitType() == type)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Set trailing stop loss for a position
+     */
+    public boolean setTrailingStopLoss(String positionId, BigDecimal trailingDistance, BigDecimal currentPrice) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            return false;
+        }
+        
+        // Calculate initial trailing stop level
+        BigDecimal initialStopLoss = position.getSide() == PositionSide.LONG 
+            ? currentPrice.subtract(trailingDistance)
+            : currentPrice.add(trailingDistance);
+            
+        return setStopLoss(positionId, initialStopLoss, StopLossType.TRAILING, trailingDistance);
+    }
+    
+    /**
+     * Set breakeven stop loss for a position
+     */
+    public boolean setBreakevenStopLoss(String positionId, BigDecimal triggerPrice, boolean includeSmallProfit) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            return false;
+        }
+        
+        StopLossType type = includeSmallProfit ? StopLossType.BREAKEVEN_PLUS : StopLossType.BREAKEVEN;
+        return setStopLoss(positionId, position.getEntryPrice(), type, triggerPrice);
+    }
+    
+    /**
+     * Set ATR-based stop loss for a position
+     */
+    public boolean setATRStopLoss(String positionId, BigDecimal atrMultiplier, BigDecimal atrValue, BigDecimal currentPrice) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            return false;
+        }
+        
+        BigDecimal atrDistance = atrValue.multiply(atrMultiplier);
+        BigDecimal stopLoss = position.getSide() == PositionSide.LONG 
+            ? currentPrice.subtract(atrDistance)
+            : currentPrice.add(atrDistance);
+            
+        return setStopLoss(positionId, stopLoss, StopLossType.ATR_BASED, atrMultiplier);
+    }
+    
+    /**
+     * Set ATR-based take profit for a position
+     */
+    public boolean setATRTakeProfit(String positionId, BigDecimal atrMultiplier, BigDecimal atrValue, BigDecimal currentPrice) {
+        Position position = openPositions.get(positionId);
+        if (position == null || !position.isOpen()) {
+            return false;
+        }
+        
+        BigDecimal atrDistance = atrValue.multiply(atrMultiplier);
+        BigDecimal takeProfit = position.getSide() == PositionSide.LONG 
+            ? currentPrice.add(atrDistance)
+            : currentPrice.subtract(atrDistance);
+            
+        return setTakeProfit(positionId, takeProfit, TakeProfitType.ATR_BASED, atrMultiplier);
     }
     
     /**
