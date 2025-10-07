@@ -218,10 +218,10 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
       <div className="p-4">
         <div>
           <div className="mb-4">
-            <h2 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent mb-1">
+            <h2 className="text-lg font-bold text-zinc-200 mb-1">
               Manual Trading
             </h2>
-            <p className="text-slate-400 text-xs">
+            <p className="text-zinc-400 text-xs">
               Open trading position manually
             </p>
           </div>
@@ -237,7 +237,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
 
             {/* Position Side */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">Position Side</label>
+              <label className="block text-zinc-300 text-sm font-medium mb-2">Position Side</label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -262,7 +262,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
 
             {/* Order Type */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">Order Type</label>
+              <label className="block text-zinc-300 text-sm font-medium mb-2">Order Type</label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -287,11 +287,11 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
 
             {/* Price */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">
+              <label className="block text-zinc-300 text-sm font-medium mb-2">
                 Price (USD)
-                {formData.orderType === 'MARKET' && <span className="text-slate-500 text-xs ml-1">(Market)</span>}
+                {formData.orderType === 'MARKET' && <span className="text-zinc-500 text-xs ml-1">(Market)</span>}
                 {formData.orderType === 'LIMIT' && currentPrice && !isManualPriceEdit && (
-                  <span className="text-cyan-400 text-xs ml-1">🔄 Live</span>
+                  <span className="text-zinc-400 text-xs ml-1">🔄 Live</span>
                 )}
                 {formData.orderType === 'LIMIT' && isManualPriceEdit && (
                   <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
@@ -304,7 +304,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 onChange={handleInputChange}
                 placeholder="45000"
                 step="0.01"
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:border-cyan-400/50 transition-all placeholder-slate-500"
+                className="w-full px-3 py-2 text-sm bg-zinc-900/50 text-zinc-200 rounded-lg border border-zinc-500/30 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 hover:border-zinc-400/50 transition-all placeholder-zinc-500"
                 required={formData.orderType === 'LIMIT'}
                 disabled={formData.orderType === 'MARKET'}
               />
@@ -312,7 +312,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
 
             {/* Quantity */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">Quantity</label>
+              <label className="block text-zinc-300 text-sm font-medium mb-2">Quantity</label>
               <input
                 type="number"
                 name="quantity"
@@ -320,18 +320,18 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 onChange={handleInputChange}
                 placeholder="0.001"
                 step="0.00000001"
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-cyan-200 rounded-lg border border-cyan-500/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 hover:border-cyan-400/50 transition-all placeholder-slate-500"
+                className="w-full px-3 py-2 text-sm bg-zinc-900/50 text-zinc-200 rounded-lg border border-zinc-500/30 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 hover:border-zinc-400/50 transition-all placeholder-zinc-500"
                 required
               />
             </div>
 
             {/* Stop Loss */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">
+              <label className="block text-zinc-300 text-sm font-medium mb-2">
                 Stop Loss (USD)
-                <span className="text-slate-500 text-xs ml-1">(Optional)</span>
+                <span className="text-zinc-500 text-xs ml-1">(Optional)</span>
                 {!isManualStopLossEdit && formData.stopLoss && (
-                  <span className="text-cyan-400 text-xs ml-1">🔄 Auto {STOP_LOSS_PERCENTAGE}%</span>
+                  <span className="text-zinc-400 text-xs ml-1">🔄 Auto {STOP_LOSS_PERCENTAGE}%</span>
                 )}
                 {isManualStopLossEdit && (
                   <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
@@ -344,17 +344,17 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 onChange={handleInputChange}
                 placeholder="44000"
                 step="0.01"
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-red-300 rounded-lg border border-red-500/30 focus:outline-none focus:ring-2 focus:ring-red-500/50 hover:border-red-400/50 transition-all placeholder-slate-500"
+                className="w-full px-3 py-2 text-sm bg-zinc-900/50 text-red-300 rounded-lg border border-red-500/30 focus:outline-none focus:ring-2 focus:ring-red-500/50 hover:border-red-400/50 transition-all placeholder-zinc-500"
               />
             </div>
 
             {/* Take Profit */}
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">
+              <label className="block text-zinc-300 text-sm font-medium mb-2">
                 Take Profit (USD)
-                <span className="text-slate-500 text-xs ml-1">(Optional)</span>
+                <span className="text-zinc-500 text-xs ml-1">(Optional)</span>
                 {!isManualTakeProfitEdit && formData.takeProfit && (
-                  <span className="text-cyan-400 text-xs ml-1">🔄 Auto {TAKE_PROFIT_PERCENTAGE}%</span>
+                  <span className="text-zinc-400 text-xs ml-1">🔄 Auto {TAKE_PROFIT_PERCENTAGE}%</span>
                 )}
                 {isManualTakeProfitEdit && (
                   <span className="text-green-400 text-xs ml-1">✏️ Manual</span>
@@ -367,7 +367,7 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 onChange={handleInputChange}
                 placeholder="47000"
                 step="0.01"
-                className="w-full px-3 py-2 text-sm bg-slate-900/50 text-green-300 rounded-lg border border-green-500/30 focus:outline-none focus:ring-2 focus:ring-green-500/50 hover:border-green-400/50 transition-all placeholder-slate-500"
+                className="w-full px-3 py-2 text-sm bg-zinc-900/50 text-green-300 rounded-lg border border-green-500/30 focus:outline-none focus:ring-2 focus:ring-green-500/50 hover:border-green-400/50 transition-all placeholder-zinc-500"
               />
             </div>
 
@@ -398,13 +398,13 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
       </div>
 
       {/* Response Section */}
-      <div className="border-t border-zinc-500/20 backdrop-blur-xl p-4">
+      <div className="border-t border-zinc-500/20 p-4">
         <h3 className="text-sm font-semibold text-zinc-300 mb-3">Response</h3>
 
         {!response && !error && (
           <div className="text-center py-8">
             <div className="text-3xl mb-2">📋</div>
-            <p className="text-slate-400 text-xs">
+            <p className="text-zinc-400 text-xs">
               Response will appear here
             </p>
           </div>
@@ -438,51 +438,51 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                 </div>
               </div>
               <div className="mt-2 pt-2 border-t border-green-500/20">
-                <div className="text-xs text-slate-400 mb-0.5">Status</div>
+                <div className="text-xs text-zinc-400 mb-0.5">Status</div>
                 <div className="text-green-300 font-medium text-sm">{response.status}</div>
               </div>
             </div>
 
             {/* Position Details */}
-            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30 space-y-2">
-              <div className="text-cyan-300 font-semibold text-sm mb-2">Position Details</div>
+            <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-600/30 space-y-2">
+              <div className="text-zinc-300 font-semibold text-sm mb-2">Position Details</div>
               
               <div>
-                <div className="text-xs text-slate-400 mb-0.5">Position ID</div>
-                <div className="text-cyan-200 font-mono text-xs break-all">{response.positionId}</div>
+                <div className="text-xs text-zinc-400 mb-0.5">Position ID</div>
+                <div className="text-zinc-200 font-mono text-xs break-all">{response.positionId}</div>
               </div>
               
               <div>
-                <div className="text-xs text-slate-400 mb-0.5">Order ID</div>
-                <div className="text-cyan-200 font-mono text-xs break-all">{response.orderId}</div>
+                <div className="text-xs text-zinc-400 mb-0.5">Order ID</div>
+                <div className="text-zinc-200 font-mono text-xs break-all">{response.orderId}</div>
               </div>
               
               {response.executionPrice && (
                 <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Execution Price</div>
-                  <div className="text-cyan-200 font-medium text-sm">{formatCurrency(response.executionPrice)}</div>
+                  <div className="text-xs text-zinc-400 mb-0.5">Execution Price</div>
+                  <div className="text-zinc-200 font-medium text-sm">{formatCurrency(response.executionPrice)}</div>
                 </div>
               )}
               
               <div>
-                <div className="text-xs text-slate-400 mb-0.5">Order Type</div>
-                <div className="text-cyan-200 text-sm">{response.orderType}</div>
+                <div className="text-xs text-zinc-400 mb-0.5">Order Type</div>
+                <div className="text-zinc-200 text-sm">{response.orderType}</div>
               </div>
             </div>
 
             {/* Order Details */}
             {response.order && (
-              <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-600/30 space-y-2">
-                <div className="text-cyan-300 font-semibold text-sm mb-2">Order Details</div>
+              <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-600/30 space-y-2">
+                <div className="text-zinc-300 font-semibold text-sm mb-2">Order Details</div>
                 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <div className="text-xs text-slate-400">Symbol</div>
-                    <div className="text-cyan-200 font-medium text-sm">{response.order.symbol}</div>
+                    <div className="text-xs text-zinc-400">Symbol</div>
+                    <div className="text-zinc-200 font-medium text-sm">{response.order.symbol}</div>
                   </div>
                   
                   <div className="flex justify-between items-center">
-                    <div className="text-xs text-slate-400">Side</div>
+                    <div className="text-xs text-zinc-400">Side</div>
                     <div className={`font-medium text-sm ${
                       response.order.side === 'BUY' ? 'text-green-400' : 'text-red-400'
                     }`}>
@@ -491,36 +491,36 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
                   </div>
                   
                   <div className="flex justify-between items-center">
-                    <div className="text-xs text-slate-400">Quantity</div>
-                    <div className="text-cyan-200 text-sm">{response.order.quantity}</div>
+                    <div className="text-xs text-zinc-400">Quantity</div>
+                    <div className="text-zinc-200 text-sm">{response.order.quantity}</div>
                   </div>
                   
                   {response.order.price && (
                     <div className="flex justify-between items-center">
-                      <div className="text-xs text-slate-400">Price</div>
-                      <div className="text-cyan-200 text-sm">{formatCurrency(response.order.price)}</div>
+                      <div className="text-xs text-zinc-400">Price</div>
+                      <div className="text-zinc-200 text-sm">{formatCurrency(response.order.price)}</div>
                     </div>
                   )}
                   
                   {response.order.suggestedStopLoss && (
                     <div className="flex justify-between items-center">
-                      <div className="text-xs text-slate-400">Stop Loss</div>
+                      <div className="text-xs text-zinc-400">Stop Loss</div>
                       <div className="text-red-400 text-sm">{formatCurrency(response.order.suggestedStopLoss)}</div>
                     </div>
                   )}
                   
                   {response.order.suggestedTakeProfit && (
                     <div className="flex justify-between items-center">
-                      <div className="text-xs text-slate-400">Take Profit</div>
+                      <div className="text-xs text-zinc-400">Take Profit</div>
                       <div className="text-green-400 text-sm">{formatCurrency(response.order.suggestedTakeProfit)}</div>
                     </div>
                   )}
                 </div>
                 
                 {response.order.createdAt && (
-                  <div className="pt-2 border-t border-slate-600/30">
-                    <div className="text-xs text-slate-400 mb-0.5">Created At</div>
-                    <div className="text-cyan-200 text-xs">
+                  <div className="pt-2 border-t border-zinc-600/30">
+                    <div className="text-xs text-zinc-400 mb-0.5">Created At</div>
+                    <div className="text-zinc-200 text-xs">
                       {new Date(response.order.createdAt).toLocaleString()}
                     </div>
                   </div>
@@ -529,12 +529,12 @@ export function ManualTradingTab({ symbol = 'BTCUSDT', currentPrice = null }) {
             )}
 
             {/* Raw Response (Collapsible) */}
-            <details className="bg-slate-800/30 rounded-lg border border-slate-600/30">
-              <summary className="px-3 py-2 cursor-pointer text-slate-300 hover:text-cyan-300 transition-colors text-xs font-medium">
+            <details className="bg-zinc-800/30 rounded-lg border border-zinc-600/30">
+              <summary className="px-3 py-2 cursor-pointer text-zinc-300 hover:text-zinc-200 transition-colors text-xs font-medium">
                 View Raw Response
               </summary>
               <div className="px-3 pb-3">
-                <pre className="text-xs text-slate-400 overflow-auto max-h-48 bg-slate-900/50 rounded p-2 border border-slate-700/30">
+                <pre className="text-xs text-zinc-400 overflow-auto max-h-48 bg-zinc-900/50 rounded p-2 border border-zinc-700/30">
                   {JSON.stringify(response, null, 2)}
                 </pre>
               </div>

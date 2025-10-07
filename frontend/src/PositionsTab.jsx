@@ -383,12 +383,12 @@ export function PositionsTab() {
   };
 
   const renderPositionRow = (position) => (
-    <tr key={position.positionId} className="border-b border-slate-600/30 hover:bg-slate-700/30 transition-all duration-200">
+    <tr key={position.positionId} className="border-b border-zinc-600/30 hover:bg-zinc-700/30 transition-all duration-200">
       <td className="px-3 py-3">
         <div className="flex flex-col gap-1">
-          <span className="text-cyan-300 font-semibold">{position.symbol}</span>
+          <span className="text-zinc-300 font-semibold">{position.symbol}</span>
           {position.strategyId && (
-            <span className="text-slate-500 font-mono text-xs truncate max-w-[100px]" title={position.strategyId}>
+            <span className="text-zinc-500 font-mono text-xs truncate max-w-[100px]" title={position.strategyId}>
               {position.strategyId}
             </span>
           )}
@@ -409,21 +409,21 @@ export function PositionsTab() {
             OPEN
           </span>
         ) : (
-          <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-400 border border-slate-500/30">
+          <span className="px-2 py-1 rounded text-xs font-medium bg-zinc-500/20 text-zinc-400 border border-zinc-500/30">
             CLOSED
           </span>
         )}
       </td>
-      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+      <td className="px-3 py-3 text-right text-zinc-200 font-medium">
         {position.quantity > 0 ? position.quantity.toFixed(8) : 'N/A'}
       </td>
-      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+      <td className="px-3 py-3 text-right text-zinc-200 font-medium">
         {formatCurrency(position.entryPrice)}
       </td>
-      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+      <td className="px-3 py-3 text-right text-zinc-200 font-medium">
         {position.exitPrice ? formatCurrency(position.exitPrice) : '-'}
       </td>
-      <td className="px-3 py-3 text-right text-cyan-200 font-medium">
+      <td className="px-3 py-3 text-right text-zinc-200 font-medium">
         {position.entryValue > 0 ? formatCurrency(position.entryValue) : 'N/A'}
       </td>
       <td className="px-3 py-3 text-right">
@@ -438,23 +438,23 @@ export function PositionsTab() {
         {position.stopLoss ? (
           <span className="text-red-400 text-sm">{formatCurrency(position.stopLoss)}</span>
         ) : (
-          <span className="text-slate-500 text-sm">-</span>
+          <span className="text-zinc-500 text-sm">-</span>
         )}
       </td>
       <td className="px-3 py-3 text-right">
         {position.takeProfit ? (
           <span className="text-green-400 text-sm">{formatCurrency(position.takeProfit)}</span>
         ) : (
-          <span className="text-slate-500 text-sm">-</span>
+          <span className="text-zinc-500 text-sm">-</span>
         )}
       </td>
-      <td className="px-3 py-3 text-center text-cyan-200 text-sm">
+      <td className="px-3 py-3 text-center text-zinc-200 text-sm">
         {formatDuration(position.duration)}
       </td>
-      <td className="px-3 py-3 text-cyan-200 text-xs">
+      <td className="px-3 py-3 text-zinc-200 text-xs">
         <div>{formatDateTime(position.entryTime)}</div>
         {position.exitTime && (
-          <div className="text-slate-400 mt-1">{formatDateTime(position.exitTime)}</div>
+          <div className="text-zinc-400 mt-1">{formatDateTime(position.exitTime)}</div>
         )}
       </td>
       {activeSubTab === 'active' && (
@@ -463,7 +463,7 @@ export function PositionsTab() {
             <div className="flex items-center gap-2 justify-center">
               <button
                 onClick={() => openEditModal(position)}
-                className="px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 hover:text-cyan-200"
+                className="px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 bg-zinc-500/20 text-zinc-300 border border-zinc-500/30 hover:bg-zinc-500/30 hover:text-zinc-200"
                 title="Edit SL/TP"
               >
                 ⚙️ Edit
@@ -477,7 +477,7 @@ export function PositionsTab() {
                 disabled={closingPositions.has(position.positionId)}
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-all duration-200 ${
                   closingPositions.has(position.positionId)
-                    ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                    ? 'bg-zinc-700/50 text-zinc-500 border border-zinc-600/30 cursor-not-allowed'
                     : 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 hover:text-red-200'
                 }`}
               >
@@ -493,13 +493,13 @@ export function PositionsTab() {
   return (
     <div className="h-full flex flex-col">
       {/* Sub-tabs */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-cyan-500/20">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-500/20">
         <button
           onClick={() => setActiveSubTab('active')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
             activeSubTab === 'active'
-              ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-              : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+              ? 'bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100 border border-zinc-400/50 shadow-lg shadow-zinc-500/20'
+              : 'bg-gradient-to-r from-zinc-800/40 to-zinc-700/40 text-zinc-300 border border-zinc-600/40 hover:from-zinc-700/60 hover:to-zinc-600/60 hover:text-zinc-200 hover:border-zinc-500/40 hover:shadow-md hover:shadow-zinc-500/10'
           }`}
         >
           Active ({openPositions.length})
@@ -508,8 +508,8 @@ export function PositionsTab() {
           onClick={() => setActiveSubTab('history')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
             activeSubTab === 'history'
-              ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 shadow-lg shadow-cyan-500/20'
-              : 'bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10'
+              ? 'bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100 border border-zinc-400/50 shadow-lg shadow-zinc-500/20'
+              : 'bg-gradient-to-r from-zinc-800/40 to-zinc-700/40 text-zinc-300 border border-zinc-600/40 hover:from-zinc-700/60 hover:to-zinc-600/60 hover:text-zinc-200 hover:border-zinc-500/40 hover:shadow-md hover:shadow-zinc-500/10'
           }`}
         >
           History ({historicalPositions.length})
@@ -523,7 +523,7 @@ export function PositionsTab() {
               wsStatus === 'error' ? 'bg-red-400' :
               'bg-slate-400'
             }`}></div>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-zinc-400">
               {wsStatus === 'connected' ? 'Live' :
                wsStatus === 'connecting' ? 'Connecting...' :
                wsStatus === 'error' ? 'Error' :
@@ -534,7 +534,7 @@ export function PositionsTab() {
           {wsStatus !== 'connected' && (
             <button
               onClick={reconnectWebSocket}
-              className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/30 hover:from-cyan-500/30 hover:to-blue-500/30 hover:text-cyan-200 hover:border-cyan-400/50 hover:shadow-md hover:shadow-cyan-500/10 transition-all duration-200"
+              className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-zinc-500/20 to-zinc-600/20 text-zinc-300 border border-zinc-500/30 hover:from-zinc-500/30 hover:to-zinc-600/30 hover:text-zinc-200 hover:border-zinc-400/50 hover:shadow-md hover:shadow-zinc-500/10 transition-all duration-200"
             >
               🔌 Reconnect
             </button>
@@ -552,7 +552,7 @@ export function PositionsTab() {
                 fetchHistoricalPositions();
               }
             }}
-            className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-slate-800/40 to-slate-700/40 text-slate-300 border border-slate-600/40 hover:from-slate-700/60 hover:to-slate-600/60 hover:text-cyan-200 hover:border-cyan-500/40 hover:shadow-md hover:shadow-cyan-500/10 transition-all duration-200"
+            className="px-3 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-zinc-800/40 to-zinc-700/40 text-zinc-300 border border-zinc-600/40 hover:from-zinc-700/60 hover:to-zinc-600/60 hover:text-zinc-200 hover:border-zinc-500/40 hover:shadow-md hover:shadow-zinc-500/10 transition-all duration-200"
           >
             🔄 Refresh {wsStatus === 'connected' && activeSubTab === 'active' ? '(WS)' : ''}
           </button>
@@ -561,9 +561,9 @@ export function PositionsTab() {
 
       {/* Summary Stats */}
       {!loading && !error && (
-        <div className="px-4 py-3 border-b border-cyan-500/20 bg-gradient-to-r from-slate-800/30 to-slate-700/30">
+        <div className="px-4 py-3 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30">
           <div className="flex items-center justify-between text-sm">
-            <div className="text-slate-400">
+            <div className="text-zinc-400">
               {activeSubTab === 'active' ? 'Open Positions' : 'Historical Positions'}: {activeSubTab === 'active' ? openPositions.length : historicalPositions.length}
             </div>
             <div className={`font-semibold ${getPnLColorClass(
@@ -585,7 +585,7 @@ export function PositionsTab() {
       <div className="flex-1 overflow-auto">
         {loading && (
           <div className="flex items-center justify-center h-32">
-            <div className="text-cyan-400 text-lg">Loading positions...</div>
+            <div className="text-zinc-400 text-lg">Loading positions...</div>
           </div>
         )}
 
@@ -602,26 +602,26 @@ export function PositionsTab() {
                 {openPositions.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-4xl mb-4">📊</div>
-                    <div className="text-slate-400 text-lg">No open positions</div>
-                    <div className="text-slate-500 text-sm">Active trading positions will appear here</div>
+                    <div className="text-zinc-400 text-lg">No open positions</div>
+                    <div className="text-zinc-500 text-sm">Active trading positions will appear here</div>
                   </div>
                 ) : (
                   <table className="w-full border-collapse text-sm">
-                    <thead className="bg-slate-800/50 sticky top-0 z-10">
-                      <tr className="border-b border-cyan-500/30">
-                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Symbol</th>
-                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Side</th>
-                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Status</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Quantity</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Entry Price</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Exit Price</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Amount</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">P&L</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Stop Loss</th>
-                        <th className="px-3 py-3 text-right text-slate-300 font-semibold">Take Profit</th>
-                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Duration</th>
-                        <th className="px-3 py-3 text-left text-slate-300 font-semibold">Time</th>
-                        <th className="px-3 py-3 text-center text-slate-300 font-semibold">Action</th>
+                    <thead className="bg-zinc-800/50 sticky top-0 z-10">
+                      <tr className="border-b border-zinc-500/30">
+                        <th className="px-3 py-3 text-left text-zinc-300 font-semibold">Symbol</th>
+                        <th className="px-3 py-3 text-center text-zinc-300 font-semibold">Side</th>
+                        <th className="px-3 py-3 text-center text-zinc-300 font-semibold">Status</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Quantity</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Entry Price</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Exit Price</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Amount</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">P&L</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Stop Loss</th>
+                        <th className="px-3 py-3 text-right text-zinc-300 font-semibold">Take Profit</th>
+                        <th className="px-3 py-3 text-center text-zinc-300 font-semibold">Duration</th>
+                        <th className="px-3 py-3 text-left text-zinc-300 font-semibold">Time</th>
+                        <th className="px-3 py-3 text-center text-zinc-300 font-semibold">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -637,13 +637,13 @@ export function PositionsTab() {
                 {historicalPositions.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-4xl mb-4">📈</div>
-                    <div className="text-slate-400 text-lg">No historical positions</div>
-                    <div className="text-slate-500 text-sm">Completed trades will appear here</div>
+                    <div className="text-zinc-400 text-lg">No historical positions</div>
+                    <div className="text-zinc-500 text-sm">Completed trades will appear here</div>
                   </div>
                 ) : (
                   <table className="w-full border-collapse text-sm">
-                    <thead className="bg-slate-800/50 sticky top-0 z-10">
-                      <tr className="border-b border-cyan-500/30">
+                    <thead className="bg-zinc-800/50 sticky top-0 z-10">
+                      <tr className="border-b border-zinc-500/30">
                         <th className="px-3 py-3 text-left text-slate-300 font-semibold">Symbol</th>
                         <th className="px-3 py-3 text-center text-slate-300 font-semibold">Side</th>
                         <th className="px-3 py-3 text-center text-slate-300 font-semibold">Status</th>
@@ -672,12 +672,12 @@ export function PositionsTab() {
       {/* Edit SL/TP Modal */}
       {editingPosition && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={closeEditModal}>
-          <div className="bg-slate-800 rounded-lg border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-zinc-800 rounded-lg border border-zinc-500/30 shadow-2xl shadow-zinc-500/20 p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-cyan-300">Edit Stop-Loss & Take-Profit</h3>
+              <h3 className="text-xl font-semibold text-zinc-300">Edit Stop-Loss & Take-Profit</h3>
               <button
                 onClick={closeEditModal}
-                className="text-slate-400 hover:text-cyan-300 text-2xl leading-none"
+                className="text-zinc-400 hover:text-zinc-300 text-2xl leading-none"
               >
                 ×
               </button>
@@ -685,9 +685,9 @@ export function PositionsTab() {
 
             <div className="space-y-4 mb-6">
               <div>
-                <div className="text-sm text-slate-400 mb-2">Position</div>
+                <div className="text-sm text-zinc-400 mb-2">Position</div>
                 <div className="flex items-center gap-2">
-                  <span className="text-cyan-300 font-semibold text-lg">{editingPosition.symbol}</span>
+                  <span className="text-zinc-300 font-semibold text-lg">{editingPosition.symbol}</span>
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
                     editingPosition.side === 'LONG' 
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
@@ -699,31 +699,31 @@ export function PositionsTab() {
               </div>
 
               <div>
-                <div className="text-sm text-slate-400 mb-2">Entry Price</div>
-                <div className="text-cyan-200 font-medium">{formatCurrency(editingPosition.entryPrice)}</div>
+                <div className="text-sm text-zinc-400 mb-2">Entry Price</div>
+                <div className="text-zinc-200 font-medium">{formatCurrency(editingPosition.entryPrice)}</div>
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Stop Loss</label>
+                <label className="block text-sm text-zinc-400 mb-2">Stop Loss</label>
                 <input
                   type="number"
                   step="0.01"
                   value={editStopLoss}
                   onChange={(e) => setEditStopLoss(e.target.value)}
                   placeholder="Enter stop loss price"
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg text-cyan-200 placeholder-slate-500 focus:border-red-500/50 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                  className="w-full px-4 py-2 bg-zinc-900/50 border border-zinc-600/50 rounded-lg text-zinc-200 placeholder-zinc-500 focus:border-red-500/50 focus:outline-none focus:ring-2 focus:ring-red-500/20"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">Take Profit</label>
+                <label className="block text-sm text-zinc-400 mb-2">Take Profit</label>
                 <input
                   type="number"
                   step="0.01"
                   value={editTakeProfit}
                   onChange={(e) => setEditTakeProfit(e.target.value)}
                   placeholder="Enter take profit price"
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600/50 rounded-lg text-cyan-200 placeholder-slate-500 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full px-4 py-2 bg-zinc-900/50 border border-zinc-600/50 rounded-lg text-zinc-200 placeholder-zinc-500 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
             </div>
@@ -731,7 +731,7 @@ export function PositionsTab() {
             <div className="flex items-center gap-3">
               <button
                 onClick={closeEditModal}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-700 hover:text-cyan-200 transition-all duration-200"
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-700/50 text-zinc-300 border border-zinc-600/50 hover:bg-zinc-700 hover:text-zinc-200 transition-all duration-200"
               >
                 Cancel
               </button>
@@ -740,8 +740,8 @@ export function PositionsTab() {
                 disabled={savingLevels}
                 className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   savingLevels
-                    ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 text-cyan-100 border border-cyan-400/50 hover:from-cyan-500/40 hover:to-blue-500/40 hover:shadow-lg hover:shadow-cyan-500/20'
+                    ? 'bg-zinc-700/50 text-zinc-500 border border-zinc-600/30 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-zinc-500/30 to-zinc-600/30 text-zinc-100 border border-zinc-400/50 hover:from-zinc-500/40 hover:to-zinc-600/40 hover:shadow-lg hover:shadow-zinc-500/20'
                 }`}
               >
                 {savingLevels ? '⏳ Saving...' : '💾 Save'}

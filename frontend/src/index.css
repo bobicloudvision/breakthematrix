@@ -7,7 +7,7 @@ html, body, #root {
   height: 100%;
   color: #fff;
   font-family: 'Raleway', sans-serif;
-  @apply bg-zinc-900;
+  @apply from-zinc-900 to-zinc-800 bg-gradient-to-br;
 }
 
 /* Custom animations */

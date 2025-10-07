@@ -586,7 +586,7 @@ export default function App() {
           ) : (
             <div className="flex flex-col h-full">
               {/* Right Sidebar Tabs */}
-              <div className="flex gap-2 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30 px-4 py-3">
+              <div className="flex gap-2 border-b border-zinc-500/20 bg-gradient-to-r from-zinc-800/30 to-zinc-700/30 px-4 py-2 h-[65px]">
                 <Button
                   variant={rightSidebarView === 'bot' ? 'primary' : 'secondary'}
                   size="md"
