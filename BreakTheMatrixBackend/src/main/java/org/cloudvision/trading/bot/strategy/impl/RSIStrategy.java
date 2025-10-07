@@ -4,7 +4,6 @@ import org.cloudvision.trading.bot.indicators.TechnicalIndicators;
 import org.cloudvision.trading.bot.model.Order;
 import org.cloudvision.trading.bot.strategy.AbstractTradingStrategy;
 import org.cloudvision.trading.bot.strategy.IndicatorMetadata;
-import org.cloudvision.trading.bot.strategy.StrategyConfig;
 import org.cloudvision.trading.model.CandlestickData;
 import org.springframework.stereotype.Component;
 
@@ -12,8 +11,7 @@ import java.math.BigDecimal;
 import java.util.*;
 
 /**
- * RSI (Relative Strength Index) Strategy
- * Simple example showing how easy it is to create new strategies
+ * RSI (Relative Strength Index) Strategy - Event-Driven Architecture
  * 
  * Trading Logic:
  * - RSI < 30 (Oversold) → BUY signal
@@ -22,19 +20,47 @@ import java.util.*;
 @Component
 public class RSIStrategy extends AbstractTradingStrategy {
     
-    // Strategy parameters
+    // Strategy parameters (defaults)
     private int rsiPeriod = 14;
     private int oversoldThreshold = 30;
     private int overboughtThreshold = 70;
+    
+    @Override
+    protected Object onSymbolInit(String symbol, List<CandlestickData> historicalCandles, Map<String, Object> params) {
+        // Extract strategy parameters from params
+        if (params.containsKey("rsiPeriod")) {
+            this.rsiPeriod = (Integer) params.get("rsiPeriod");
+        }
+        if (params.containsKey("oversoldThreshold")) {
+            this.oversoldThreshold = (Integer) params.get("oversoldThreshold");
+        }
+        if (params.containsKey("overboughtThreshold")) {
+            this.overboughtThreshold = (Integer) params.get("overboughtThreshold");
+        }
+        
+        System.out.println("✅ RSI Strategy initialized for " + symbol + 
+                         ": Period=" + rsiPeriod + 
+                         ", Oversold=" + oversoldThreshold + 
+                         ", Overbought=" + overboughtThreshold);
+        
+        // No state needed for RSI strategy
+        return null;
+    }
 
     @Override
-    protected List<Order> analyzePrice(PriceData priceData) {
-        String symbol = priceData.symbol;
-        BigDecimal currentPrice = priceData.price;
-        
+    protected Map<String, Object> onCandleClosed(String symbol, CandlestickData candle, Map<String, Object> params, Object state) {
+
+        BigDecimal currentPrice = candle.getClose();
+
+        System.out.println("📈 RSI Strategy: New candle closed for " + symbol +
+                         " at " + currentPrice + " | Time: " + candle.getCloseTime());
+
         // Need enough data for RSI calculation
         if (!hasEnoughData(symbol, rsiPeriod + 1)) {
-            return Collections.emptyList();
+            Map<String, Object> result = new HashMap<>();
+            result.put("orders", Collections.emptyList());
+            result.put("state", state);
+            return result;
         }
         
         // Calculate RSI using TechnicalIndicators utility
@@ -42,10 +68,19 @@ public class RSIStrategy extends AbstractTradingStrategy {
         BigDecimal rsi = TechnicalIndicators.calculateRSI(prices, rsiPeriod);
         
         if (rsi == null) {
-            return Collections.emptyList();
+            Map<String, Object> result = new HashMap<>();
+            result.put("orders", Collections.emptyList());
+            result.put("state", state);
+            return result;
         }
         
         List<Order> orders = new ArrayList<>();
+        Map<String, BigDecimal> indicators = new HashMap<>();
+        Map<String, Object> signals = new HashMap<>();
+        
+        // Add RSI to indicators for visualization
+        indicators.put("RSI", rsi);
+        
         BigDecimal previousSignal = lastSignal.get(symbol);
         
         // Oversold - BUY signal
@@ -138,7 +173,13 @@ public class RSIStrategy extends AbstractTradingStrategy {
             }
         }
         
-        return orders;
+        // Return event-driven result
+        Map<String, Object> result = new HashMap<>();
+        result.put("orders", orders);
+        result.put("state", state);
+        result.put("indicators", indicators);
+        result.put("signals", signals);
+        return result;
     }
 
     @Override
@@ -150,29 +191,9 @@ public class RSIStrategy extends AbstractTradingStrategy {
     public String getStrategyName() {
         return "RSI Strategy";
     }
-
-    @Override
-    public void initialize(StrategyConfig config) {
-        super.initialize(config);
-        
-        // Get strategy-specific parameters
-        if (config.getParameter("rsiPeriod") != null) {
-            this.rsiPeriod = (Integer) config.getParameter("rsiPeriod");
-        }
-        if (config.getParameter("oversoldThreshold") != null) {
-            this.oversoldThreshold = (Integer) config.getParameter("oversoldThreshold");
-        }
-        if (config.getParameter("overboughtThreshold") != null) {
-            this.overboughtThreshold = (Integer) config.getParameter("overboughtThreshold");
-        }
-        
-        System.out.println("Initialized RSI Strategy: Period=" + rsiPeriod + 
-                         ", Oversold=" + oversoldThreshold + 
-                         ", Overbought=" + overboughtThreshold);
-    }
     
     @Override
-    protected int getMaxHistorySize() {
+    public int getMinRequiredCandles() {
         return rsiPeriod + 50;
     }
     
@@ -235,23 +256,16 @@ public class RSIStrategy extends AbstractTradingStrategy {
                     BigDecimal rsi = TechnicalIndicators.calculateRSI(progressivePrices, rsiPeriod);
                     
                     if (rsi != null) {
-                        // Determine action based on RSI levels
-                        String action = "HOLD";
+                        // Determine action based on RSI levels (for future visualization)
                         if (rsi.compareTo(new BigDecimal(oversoldThreshold)) < 0 && 
                             (previousSignal == null || previousSignal.compareTo(BigDecimal.ZERO) <= 0)) {
-                            action = "BUY";
                             previousSignal = BigDecimal.ONE;
                         } else if (rsi.compareTo(new BigDecimal(overboughtThreshold)) > 0 && 
                                    (previousSignal != null && previousSignal.compareTo(BigDecimal.ZERO) > 0)) {
-                            action = "SELL";
                             previousSignal = BigDecimal.ONE.negate();
                         } else if (previousSignal == null) {
                             previousSignal = BigDecimal.ZERO;
                         }
-                        
-                        // Create visualization data (you'll need to implement this method)
-                        // For now, just showing the structure
-                        // generateVisualizationData(symbol, candle.getClose(), rsi, action, candle.getCloseTime());
                     }
                 }
             }
@@ -259,11 +273,6 @@ public class RSIStrategy extends AbstractTradingStrategy {
             System.out.println("✅ Generated " + (candles.size() - rsiPeriod) + 
                              " visualization points for " + symbol);
         }
-    }
-    
-    @Override
-    protected void onBootstrapComplete(Map<String, List<CandlestickData>> dataBySymbol) {
-        System.out.println("✅ RSI Strategy bootstrapped for " + dataBySymbol.size() + " symbols");
     }
 }
 

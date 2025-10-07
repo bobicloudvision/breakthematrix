@@ -111,21 +111,25 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     
     @Override
     public Map<String, Object> onNewCandle(CandlestickData candle, Map<String, Object> params, Object state) {
+
+        System.out.println("🔔 onNewCandle() received for " + candle.getSymbol() + " at " + candle.getCloseTime() +
+                         " (closed=" + candle.isClosed() + ")");
+
         if (!enabled) {
-            return Map.of(
-                "orders", Collections.emptyList(),
-                "state", state
-            );
+            Map<String, Object> result = new HashMap<>();
+            result.put("orders", Collections.emptyList());
+            result.put("state", state);
+            return result;
         }
         
         String symbol = candle.getSymbol();
         
         // Only process closed candles
         if (!candle.isClosed()) {
-            return Map.of(
-                "orders", Collections.emptyList(),
-                "state", strategyStateBySymbol.getOrDefault(symbol, state)
-            );
+            Map<String, Object> result = new HashMap<>();
+            result.put("orders", Collections.emptyList());
+            result.put("state", strategyStateBySymbol.getOrDefault(symbol, state));
+            return result;
         }
         
         // Track provider and interval
@@ -153,11 +157,14 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
     
     @Override
     public Map<String, Object> onNewTick(String symbol, BigDecimal price, Map<String, Object> params, Object state) {
+
+        System.out.println("🔔 onNewTick() received for " + symbol + " at price " + price);
+
         if (!enabled) {
-            return Map.of(
-                "orders", Collections.emptyList(),
-                "state", state
-            );
+            Map<String, Object> result = new HashMap<>();
+            result.put("orders", Collections.emptyList());
+            result.put("state", state);
+            return result;
         }
         
         // Get current state for this symbol
@@ -221,10 +228,10 @@ public abstract class AbstractTradingStrategy implements TradingStrategy {
      */
     protected Map<String, Object> onTickUpdate(String symbol, BigDecimal price, Map<String, Object> params, Object state) {
         // Default: do nothing on ticks
-        return Map.of(
-            "orders", Collections.emptyList(),
-            "state", state
-        );
+        Map<String, Object> result = new HashMap<>();
+        result.put("orders", Collections.emptyList());
+        result.put("state", state);
+        return result;
     }
     
     // ============================================================

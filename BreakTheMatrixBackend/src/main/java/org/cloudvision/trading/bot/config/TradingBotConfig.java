@@ -6,7 +6,7 @@ import org.cloudvision.trading.bot.strategy.TradingStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.MovingAverageStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.OrderBlockStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.OrderFlowStrategy;
-// import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
+ import org.cloudvision.trading.bot.strategy.impl.RSIStrategy;
 // import org.cloudvision.trading.bot.strategy.impl.SuperTrendStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -31,8 +31,8 @@ public class TradingBotConfig {
     // @Autowired
     // private MovingAverageStrategy movingAverageStrategy;
     
-    // @Autowired
-    // private RSIStrategy rsiStrategy;
+    @Autowired
+    private RSIStrategy rsiStrategy;
     
     @Autowired
     private ApplicationContext applicationContext;
@@ -102,23 +102,23 @@ public class TradingBotConfig {
      * Configure RSI Strategy
      */
     private void configureRSIStrategy() {
-        // StrategyConfig config = new StrategyConfig(
-        //     "rsi-strategy",
-        //     List.of("ETHUSDT")  // Trade only BTC with RSI
-        // );
+         StrategyConfig config = new StrategyConfig(
+             "rsi-strategy",
+             List.of("ETHUSDT")  // Trade only BTC with RSI
+         );
         
-        // // Position sizing and risk parameters
-        // config.setMaxPositionSize(new BigDecimal("3000")); // $3000 per position
-        // config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
-        // config.setTakeProfitPercentage(new BigDecimal("0.05")); // 5% take profit
+         // Position sizing and risk parameters
+         config.setMaxPositionSize(new BigDecimal("3000")); // $3000 per position
+         config.setStopLossPercentage(new BigDecimal("0.02")); // 2% stop loss
+         config.setTakeProfitPercentage(new BigDecimal("0.05")); // 5% take profit
         
-        // // Strategy-specific parameters
-        // config.setParameter("rsiPeriod", 14);           // 14-period RSI
-        // config.setParameter("oversoldThreshold", 30);   // Buy when RSI < 30
-        // config.setParameter("overboughtThreshold", 70); // Sell when RSI > 70
+         // Strategy-specific parameters
+         config.setParameter("rsiPeriod", 14);           // 14-period RSI
+         config.setParameter("oversoldThreshold", 30);   // Buy when RSI < 30
+         config.setParameter("overboughtThreshold", 70); // Sell when RSI > 70
         
-        // rsiStrategy.setConfig(config);
-        // tradingBot.addStrategy(rsiStrategy);
+         rsiStrategy.setConfig(config);
+         tradingBot.addStrategy(rsiStrategy);
     }
     
     /**

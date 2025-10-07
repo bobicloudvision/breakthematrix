@@ -84,10 +84,10 @@ public interface TradingStrategy {
      * Default implementation: Returns empty orders with unchanged state
      */
     default Map<String, Object> onNewTick(String symbol, BigDecimal price, Map<String, Object> params, Object state) {
-        return Map.of(
-            "orders", List.of(),
-            "state", state
-        );
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("orders", List.of());
+        result.put("state", state);
+        return result;
     }
     
     // ============================================================
